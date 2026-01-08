@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "31033003062",
+    "project_id": "thesis-mind-manager",
+    "storage_bucket": "thesis-mind-manager.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:31033003062:android:a4c9f40ed8fe6fb6b5dc97",
+        "android_client_info": {
+          "package_name": "com.example.mind_manager_final"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "31033003062-010qgne1rhuugabtn9i8i7hfu2vaaqpi.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.mind_manager_final",
+            "certificate_hash": "9fd62167ee42a1ac88d564586c12b108b73d21f8"
+          }
+        },
+        {
+          "client_id": "31033003062-13u1eha7qctmf4fris68l42tk61g2uhb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBgn-xmn-gT1xQpqmzwvayeEx0uD5hkczk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "31033003062-13u1eha7qctmf4fris68l42tk61g2uhb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
