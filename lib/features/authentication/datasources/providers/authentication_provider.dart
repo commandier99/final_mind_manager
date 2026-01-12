@@ -103,31 +103,38 @@ class AuthenticationProvider extends ChangeNotifier {
     _error = null;
 
     try {
+      print('🔵 [AuthenticationProvider] Starting Google Sign-In...');
+      // Sign out first to force the account picker to show
+      await _googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
+        print('⚠️ [AuthenticationProvider] Google Sign-In cancelled by user');
         _setLoading(false);
         return;
       }
 
+      print('🔵 [AuthenticationProvider] Getting Google authentication...');
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
+      print('🔵 [AuthenticationProvider] Creating Firebase credential...');
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
+      print('🔵 [AuthenticationProvider] Signing in to Firebase...');
       final userCredential =
           await FirebaseAuth.instance.signInWithCredential(credential);
 
       _user = userCredential.user;
+      print('🔵 [AuthenticationProvider] Firebase sign-in complete. User: ${_user?.email}');
 
       if (_user != null) {
-        // Check if user document exists, if not create it
-        final existingUser = await _userService.getUserById(_user!.uid);
-        if (existingUser == null) {
-          // Create user document for Google sign-in users
+        // Always create/update user document for Google sign-in users
+        print('🔵 [AuthenticationProvider] Creating/updating user document...');
+        try {
           final newUser = UserModel(
             userId: _user!.uid,
             userEmail: _user!.email!,
@@ -144,14 +151,20 @@ class AuthenticationProvider extends ChangeNotifier {
             userTimezone: 'UTC',
           );
           await _userService.saveUser(newUser);
-          print('✅ [AuthenticationProvider] Created user document for Google sign-in');
+          print('✅ [AuthenticationProvider] User document and userStats saved for Google sign-in');
+        } catch (e) {
+          print('❌ [AuthenticationProvider] Error creating user document: $e');
+          _error = 'Failed to create user profile: $e';
+          return;
         }
 
         // Trigger UserProvider to load user data
         onUserAuthenticated?.call(_user!.uid);
         print('✅ [AuthenticationProvider] Google sign-in successful, triggering user data load');
       }
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('❌ [AuthenticationProvider] Google Sign-In error: $e');
+      print('❌ [AuthenticationProvider] Stack trace: $stackTrace');
       _error = _getErrorMessage(e);
     } finally {
       _setLoading(false);

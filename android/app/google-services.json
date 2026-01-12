@@ -1,20 +1,20 @@
 {
   "project_info": {
-    "project_number": "31033003062",
-    "project_id": "thesis-mind-manager",
-    "storage_bucket": "thesis-mind-manager.firebasestorage.app"
+    "project_number": "912208080075",
+    "project_id": "final-mind-manager",
+    "storage_bucket": "final-mind-manager.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:31033003062:android:a4c9f40ed8fe6fb6b5dc97",
+        "mobilesdk_app_id": "1:912208080075:android:0d45c583be4767f373ff4e",
         "android_client_info": {
           "package_name": "com.example.mind_manager_final"
         }
       },
       "oauth_client": [
         {
-          "client_id": "31033003062-010qgne1rhuugabtn9i8i7hfu2vaaqpi.apps.googleusercontent.com",
+          "client_id": "912208080075-d07e56lestkpbe4nt3gdpdjtv1o54hhs.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.mind_manager_final",
@@ -22,21 +22,28 @@
           }
         },
         {
-          "client_id": "31033003062-13u1eha7qctmf4fris68l42tk61g2uhb.apps.googleusercontent.com",
+          "client_id": "912208080075-56jeso876q45n5v6l8quenb2c9116e0j.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyBgn-xmn-gT1xQpqmzwvayeEx0uD5hkczk"
+          "current_key": "AIzaSyBOqvU4u0DajsQQ3JYzCVhrxAMUzPArbuU"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "31033003062-13u1eha7qctmf4fris68l42tk61g2uhb.apps.googleusercontent.com",
+              "client_id": "912208080075-56jeso876q45n5v6l8quenb2c9116e0j.apps.googleusercontent.com",
               "client_type": 3
+            },
+            {
+              "client_id": "912208080075-0dsk65a47ggivballhd6h53es14ojf8h.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.mindManagerFinal"
+              }
             }
           ]
         }

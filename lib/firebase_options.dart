@@ -17,29 +17,17 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return macos;
       case TargetPlatform.windows:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for windows - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return windows;
       case TargetPlatform.linux:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for linux - '
@@ -53,11 +41,49 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBgn-xmn-gT1xQpqmzwvayeEx0uD5hkczk',
-    appId: '1:31033003062:android:a4c9f40ed8fe6fb6b5dc97',
-    messagingSenderId: '31033003062',
-    projectId: 'thesis-mind-manager',
-    storageBucket: 'thesis-mind-manager.firebasestorage.app',
+    apiKey: 'AIzaSyBOqvU4u0DajsQQ3JYzCVhrxAMUzPArbuU',
+    appId: '1:912208080075:android:0d45c583be4767f373ff4e',
+    messagingSenderId: '912208080075',
+    projectId: 'final-mind-manager',
+    storageBucket: 'final-mind-manager.firebasestorage.app',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAYYfPaIaOeRD9YEaL0zOjVFflGxTvCxi4',
+    appId: '1:912208080075:web:e3e8c197cd1aac8873ff4e',
+    messagingSenderId: '912208080075',
+    projectId: 'final-mind-manager',
+    authDomain: 'final-mind-manager.firebaseapp.com',
+    storageBucket: 'final-mind-manager.firebasestorage.app',
+  );
+
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyAAy6kG68QY34Rx6bD4u0xJnVDDD1hzlKY',
+    appId: '1:912208080075:ios:4158581d1e998d4b73ff4e',
+    messagingSenderId: '912208080075',
+    projectId: 'final-mind-manager',
+    storageBucket: 'final-mind-manager.firebasestorage.app',
+    iosClientId: '912208080075-0dsk65a47ggivballhd6h53es14ojf8h.apps.googleusercontent.com',
+    iosBundleId: 'com.example.mindManagerFinal',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyAAy6kG68QY34Rx6bD4u0xJnVDDD1hzlKY',
+    appId: '1:912208080075:ios:4158581d1e998d4b73ff4e',
+    messagingSenderId: '912208080075',
+    projectId: 'final-mind-manager',
+    storageBucket: 'final-mind-manager.firebasestorage.app',
+    iosClientId: '912208080075-0dsk65a47ggivballhd6h53es14ojf8h.apps.googleusercontent.com',
+    iosBundleId: 'com.example.mindManagerFinal',
+  );
+
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyAYYfPaIaOeRD9YEaL0zOjVFflGxTvCxi4',
+    appId: '1:912208080075:web:68c093e0e370912873ff4e',
+    messagingSenderId: '912208080075',
+    projectId: 'final-mind-manager',
+    authDomain: 'final-mind-manager.firebaseapp.com',
+    storageBucket: 'final-mind-manager.firebasestorage.app',
   );
 
 }
