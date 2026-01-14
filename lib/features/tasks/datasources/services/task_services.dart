@@ -189,6 +189,74 @@ class TaskService {
     return streamTasks(boardId: boardId);
   }
 
+  /// Stream tasks by a list of task IDs
+  Stream<List<Task>> streamTasksByIds(List<String> taskIds) {
+    if (taskIds.isEmpty) {
+      return Stream.value([]);
+    }
+
+    // Firestore has a limit of 10 items for "in" queries, so we need to batch them
+    const batchSize = 10;
+    final batches = <List<String>>[];
+    
+    for (var i = 0; i < taskIds.length; i += batchSize) {
+      final end = (i + batchSize < taskIds.length) ? i + batchSize : taskIds.length;
+      batches.add(taskIds.sublist(i, end));
+    }
+
+    // If only one batch, return it directly
+    if (batches.length == 1) {
+      return _tasks
+          .where(FieldPath.documentId, whereIn: batches[0])
+          .where('taskIsDeleted', isEqualTo: false)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs
+            .map((doc) {
+              try {
+                return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+              } catch (e) {
+                print('⚠️ Error parsing task ${doc.id}: $e');
+                return null;
+              }
+            })
+            .whereType<Task>()
+            .toList();
+      });
+    }
+
+    // For multiple batches, combine the streams
+    final streams = batches.map((batch) {
+      return _tasks
+          .where(FieldPath.documentId, whereIn: batch)
+          .where('taskIsDeleted', isEqualTo: false)
+          .snapshots()
+          .map((snapshot) {
+        return snapshot.docs
+            .map((doc) {
+              try {
+                return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+              } catch (e) {
+                print('⚠️ Error parsing task ${doc.id}: $e');
+                return null;
+              }
+            })
+            .whereType<Task>()
+            .toList();
+      });
+    }).toList();
+
+    // Combine all batch streams into one
+    return streams[0].asyncMap((firstBatch) async {
+      final allTasks = <Task>[...firstBatch];
+      for (var i = 1; i < streams.length; i++) {
+        final batch = await streams[i].first;
+        allTasks.addAll(batch);
+      }
+      return allTasks;
+    });
+  }
+
   /// Get a single task by ID
   Future<Task?> getTaskById(String taskId) async {
     try {

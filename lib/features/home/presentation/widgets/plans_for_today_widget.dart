@@ -5,10 +5,13 @@ import '../../../tasks/datasources/models/task_model.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../plans/datasources/models/plans_model.dart';
 import '../../../plans/datasources/providers/plan_provider.dart';
-import '../../../plans/presentation/widgets/cards/plan_card.dart';
+import 'home_plan_card.dart';
+import 'plan_details_section.dart';
   
 class PlansForTodayWidget extends StatelessWidget {
-  const PlansForTodayWidget({super.key});
+  final void Function(Plan)? onPlanTap;
+
+  const PlansForTodayWidget({super.key, this.onPlanTap});
 
   bool _isScheduledForToday(Plan plan) {
     if (plan.planScheduledFor == null || plan.planIsDeleted) return false;
@@ -126,23 +129,9 @@ class PlansForTodayWidget extends StatelessWidget {
               itemCount: plansForToday.length,
               itemBuilder: (context, index) {
                 final plan = plansForToday[index];
-                return PlanCard(
+                return HomePlanCard(
                   plan: plan,
-                  onActivate: () async {
-                    final success = await context.read<PlanProvider>().activatePlan(plan.planId);
-                    if (success && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Plan "${plan.planTitle}" activated!'),
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    }
-                  },
-                  onTap: () {
-                    // TODO: Navigate to plan details page
-                    print('Plan tapped: ${plan.planTitle}');
-                  },
+                  onTap: () => onPlanTap?.call(plan),
                 );
               },
             ),

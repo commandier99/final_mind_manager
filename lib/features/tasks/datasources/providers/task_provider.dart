@@ -148,6 +148,35 @@ class TaskProvider extends ChangeNotifier {
     });
   }
 
+  /// Stream tasks by a list of task IDs (for plans)
+  void streamTasksByIds(List<String> taskIds) {
+    print(
+      '[DEBUG] TaskProvider: streamTasksByIds called for ${taskIds.length} tasks',
+    );
+
+    if (taskIds.isEmpty) {
+      print('[DEBUG] TaskProvider: No task IDs provided, clearing tasks');
+      _updateTasks([]);
+      return;
+    }
+
+    // Cancel previous subscription
+    _taskSubscription?.cancel();
+
+    _currentStreamingMode = 'ids';
+    _currentStreamingId = taskIds.join(',');
+
+    _setLoading(true);
+    _taskStream = _taskService.streamTasksByIds(taskIds);
+    _taskSubscription = _taskStream!.listen((tasks) {
+      print(
+        '[DEBUG] TaskProvider: streamTasksByIds received ${tasks.length} tasks',
+      );
+      _updateTasks(tasks);
+      _setLoading(false);
+    });
+  }
+
   // ------------------------
   // CRUD ACTIONS
   // ------------------------

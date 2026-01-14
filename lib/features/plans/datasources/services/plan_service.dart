@@ -38,10 +38,6 @@ class PlanService {
         planDescription: description,
         planCreatedAt: now,
         planTechnique: technique,
-        estimatedDurationMinutes: estimatedDurationMinutes,
-        plannedFocusIntervals: plannedFocusIntervals,
-        focusIntervalMinutes: focusIntervalMinutes,
-        breakMinutes: breakMinutes,
         planDeadline: deadline,
         planScheduledFor: scheduledFor,
         taskIds: taskIds,
@@ -144,54 +140,6 @@ class PlanService {
     }
   }
 
-  // ============ Plan Execution ============
-
-  /// Activate a plan (start working on it)
-  Future<void> activatePlan(String planId) async {
-    try {
-      await _firestore.collection(_plansCollection).doc(planId).update({
-        'planStatus': 'active',
-        'planStartedAt': Timestamp.now(),
-      });
-    } catch (e) {
-      throw Exception('Error activating plan: $e');
-    }
-  }
-
-  /// Pause an active plan
-  Future<void> pausePlan(String planId) async {
-    try {
-      await _firestore.collection(_plansCollection).doc(planId).update({
-        'planStatus': 'paused',
-      });
-    } catch (e) {
-      throw Exception('Error pausing plan: $e');
-    }
-  }
-
-  /// Resume a paused plan
-  Future<void> resumePlan(String planId) async {
-    try {
-      await _firestore.collection(_plansCollection).doc(planId).update({
-        'planStatus': 'active',
-      });
-    } catch (e) {
-      throw Exception('Error resuming plan: $e');
-    }
-  }
-
-  /// Complete a plan
-  Future<void> completePlan(String planId) async {
-    try {
-      await _firestore.collection(_plansCollection).doc(planId).update({
-        'planStatus': 'completed',
-        'planCompletedAt': Timestamp.now(),
-      });
-    } catch (e) {
-      throw Exception('Error completing plan: $e');
-    }
-  }
-
   // ============ Task Management ============
 
   /// Add a task to a plan
@@ -281,137 +229,9 @@ class PlanService {
     }
   }
 
-  // ============ Focus Session Integration ============
-
-  /// Link a completed focus session to a plan
-  Future<void> addFocusSessionToPlan({
-    required String planId,
-    required String focusSessionId,
-    required int minutesSpent,
-    required double productivityScore,
-  }) async {
-    try {
-      final planDoc = await _firestore.collection(_plansCollection).doc(planId).get();
-      if (!planDoc.exists) throw Exception('Plan not found');
-
-      final plan = Plan.fromMap(planDoc.data() as Map<String, dynamic>, planDoc.id);
-
-      final updatedFocusSessions = [...plan.focusSessionIds, focusSessionId];
-      final newCompletedSessions = plan.actualFocusSessionsCompleted + 1;
-      final newTotalMinutes = plan.actualFocusMinutesSpent + minutesSpent;
-
-      // Calculate new average productivity score
-      final totalScorePoints =
-          (plan.averageProductivityScore * plan.actualFocusSessionsCompleted) +
-              productivityScore;
-      final newAverageScore = totalScorePoints / newCompletedSessions;
-
-      await _firestore.collection(_plansCollection).doc(planId).update({
-        'focusSessionIds': updatedFocusSessions,
-        'actualFocusSessionsCompleted': newCompletedSessions,
-        'actualFocusMinutesSpent': newTotalMinutes,
-        'averageProductivityScore': newAverageScore,
-      });
-    } catch (e) {
-      throw Exception('Error adding focus session to plan: $e');
-    }
-  }
-
-  // ============ Collaboration ============
-
-  /// Share a plan with other users
-  Future<void> sharePlanWithUsers(
-    String planId,
-    List<String> userIds,
-    Map<String, String> userNames,
-  ) async {
-    try {
-      await _firestore.collection(_plansCollection).doc(planId).update({
-        'planIsShared': true,
-        'sharedWithUserIds': userIds,
-        'sharedUserNames': userNames,
-      });
-    } catch (e) {
-      throw Exception('Error sharing plan: $e');
-    }
-  }
-
   /// Get plans shared with a specific user
   Future<List<Plan>> getSharedPlansForUser(String userId) async {
-    try {
-      final query = await _firestore
-          .collection(_plansCollection)
-          .where('sharedWithUserIds', arrayContains: userId)
-          .where('planIsDeleted', isEqualTo: false)
-          .orderBy('planCreatedAt', descending: true)
-          .get();
-
-      return query.docs
-          .map((doc) => Plan.fromMap(doc.data(), doc.id))
-          .toList();
-    } catch (e) {
-      throw Exception('Error fetching shared plans: $e');
-    }
-  }
-
-  // ============ Templates ============
-
-  /// Create a plan template that can be duplicated
-  Future<void> createPlanTemplate(Plan plan, String templateName) async {
-    try {
-      final templatePlan = plan.copyWith(
-        planIsTemplate: true,
-        planTemplateName: templateName,
-      );
-
-      await _firestore
-          .collection(_plansCollection)
-          .doc(plan.planId)
-          .update(templatePlan.toMap());
-    } catch (e) {
-      throw Exception('Error creating plan template: $e');
-    }
-  }
-
-  /// Duplicate a template as a new plan
-  Future<Plan> duplicateTemplateAsPlan({
-    required String templateId,
-    required String userId,
-    required String userName,
-    required String newTitle,
-  }) async {
-    try {
-      final templateDoc =
-          await _firestore.collection(_plansCollection).doc(templateId).get();
-      if (!templateDoc.exists) throw Exception('Template not found');
-
-      final template = Plan.fromMap(templateDoc.data() as Map<String, dynamic>, templateDoc.id);
-      if (!template.planIsTemplate) throw Exception('Plan is not a template');
-
-      final newPlan = Plan(
-        planId: _firestore.collection(_plansCollection).doc().id,
-        planOwnerId: userId,
-        planOwnerName: userName,
-        planTitle: newTitle,
-        planDescription: template.planDescription,
-        planCreatedAt: DateTime.now(),
-        planTechnique: template.planTechnique,
-        estimatedDurationMinutes: template.estimatedDurationMinutes,
-        plannedFocusIntervals: template.plannedFocusIntervals,
-        focusIntervalMinutes: template.focusIntervalMinutes,
-        breakMinutes: template.breakMinutes,
-        taskIds: template.taskIds,
-        totalTasks: template.totalTasks,
-      );
-
-      await _firestore
-          .collection(_plansCollection)
-          .doc(newPlan.planId)
-          .set(newPlan.toMap());
-
-      return newPlan;
-    } catch (e) {
-      throw Exception('Error duplicating template: $e');
-    }
+    // No sharing functionality - return empty list
+    return [];
   }
 }

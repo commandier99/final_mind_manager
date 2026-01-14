@@ -4,12 +4,11 @@ import '/shared/features/users/datasources/providers/user_provider.dart';
 import '../../datasources/providers/plan_provider.dart';
 import '../../datasources/models/plans_model.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
-import '../../../tasks/datasources/models/task_model.dart';
 
 class CreatePlanPage extends StatefulWidget {
   final String initialTechnique;
 
-  const CreatePlanPage({super.key, this.initialTechnique = 'custom'});
+  const CreatePlanPage({super.key, this.initialTechnique = 'quick_todo'});
 
   @override
   State<CreatePlanPage> createState() => _CreatePlanPageState();
@@ -21,8 +20,25 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   late String _selectedTechnique;
   DateTime? _scheduledDate;
   bool _isSaving = false;
-  bool _autoSuggest = false;
   final Set<String> _selectedTaskIds = {};
+  late Set<String> _selectedFilters;
+  
+  // Define available task statuses for filtering
+  static const List<String> taskStatuses = [
+    'TODO',
+    'IN_PROGRESS',
+    'IN_REVIEW',
+    'ON_PAUSE',
+    'UNDER_REVISION',
+  ];
+  
+  static const Map<String, String> statusLabels = {
+    'TODO': 'TO DO',
+    'IN_PROGRESS': 'IN PROGRESS',
+    'IN_REVIEW': 'IN REVIEW',
+    'ON_PAUSE': 'ON PAUSE',
+    'UNDER_REVISION': 'UNDER REVISION',
+  };
 
   @override
   void didChangeDependencies() {
@@ -37,14 +53,11 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   void initState() {
     super.initState();
     _selectedTechnique = widget.initialTechnique;
-    _titleController.addListener(_triggerRefresh);
-    _descriptionController.addListener(_triggerRefresh);
+    _selectedFilters = Set.from(taskStatuses); // Show all by default
   }
 
   @override
   void dispose() {
-    _titleController.removeListener(_triggerRefresh);
-    _descriptionController.removeListener(_triggerRefresh);
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
@@ -95,8 +108,8 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 ),
                 items: const [
                   DropdownMenuItem(
-                    value: 'custom',
-                    child: Text('Custom'),
+                    value: 'quick_todo',
+                    child: Text('Quick To-Do'),
                   ),
                   DropdownMenuItem(
                     value: 'pomodoro',
@@ -106,22 +119,13 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                     value: 'eat_the_frog',
                     child: Text('Eat the Frog'),
                   ),
-                  DropdownMenuItem(
-                    value: 'timeblocking',
-                    child: Text('Time Blocking'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'gtd',
-                    child: Text('GTD (Getting Things Done)'),
-                  ),
                 ],
                 onChanged: (value) {
                   setState(() {
-                    _selectedTechnique = value ?? 'custom';
+                    _selectedTechnique = value ?? 'quick_todo';
                   });
                 },
               ),
-              const SizedBox(height: 16),
               Row(
                 children: [
                   Expanded(
@@ -140,113 +144,126 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 ],
               ),
               const SizedBox(height: 24),
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Let the system suggest tasks'),
-                subtitle: const Text('Uses your title/description to auto-pick tasks'),
-                value: _autoSuggest,
-                onChanged: (value) {
-                  setState(() {
-                    _autoSuggest = value;
-                  });
-                },
+              Text(
+                'Select tasks to include',
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 12),
               Consumer<TaskProvider>(
                 builder: (context, taskProvider, _) {
                   final tasks = taskProvider.tasks;
+                  
                   if (taskProvider.isLoading && tasks.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  if (tasks.isEmpty) {
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'No tasks available to add yet.',
-                        style: TextStyle(color: Colors.grey.shade700),
-                      ),
-                    );
-                  }
-
-                  final suggested = _getSuggestedTasks(tasks);
-                  final suggestedIds = suggested.map((t) => t.taskId).toSet();
-
-                  final visibleList = _autoSuggest
-                      ? ([...tasks]
-                        ..sort((a, b) {
-                          final aSuggested = suggestedIds.contains(a.taskId) ? 1 : 0;
-                          final bSuggested = suggestedIds.contains(b.taskId) ? 1 : 0;
-                          if (aSuggested != bSuggested) return bSuggested - aSuggested;
-                          return a.taskTitle.compareTo(b.taskTitle);
-                        }))
-                      : tasks;
+                  // Filter tasks by status
+                  final filteredTasks = tasks.where((task) => 
+                    _selectedFilters.contains(task.taskStatus) && !task.taskIsDone
+                  ).toList();
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        _autoSuggest
-                            ? 'Suggested tasks for this plan'
-                            : 'Select tasks to include',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                      // Filter chips
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: taskStatuses.map((status) {
+                            final isSelected = _selectedFilters.contains(status);
+                            return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                label: Text(
+                                  statusLabels[status] ?? status,
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                                selected: isSelected,
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _selectedFilters.add(status);
+                                    } else {
+                                      _selectedFilters.remove(status);
+                                    }
+                                  });
+                                },
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                              ),
+                            );
+                          }).toList(),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: visibleList.length,
-                        itemBuilder: (context, index) {
-                          final task = visibleList[index];
-                          final isSuggested = suggestedIds.contains(task.taskId);
-                          final isSelected = _selectedTaskIds.contains(task.taskId);
-
-                          final boardLabel = (task.taskBoardTitle ?? '').isNotEmpty
-                              ? task.taskBoardTitle!
-                              : 'No board';
-
-                          return CheckboxListTile(
-                            value: isSelected,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            title: Text(task.taskTitle),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Board: $boardLabel',
-                                  style: TextStyle(color: Colors.grey.shade700),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  task.taskDescription.isEmpty
-                                      ? 'No description'
-                                      : task.taskDescription,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ],
+                      const SizedBox(height: 12),
+                      
+                      // Task list
+                      if (filteredTasks.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: Center(
+                            child: Text(
+                              'No Tasks',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 14,
+                              ),
                             ),
-                            secondary: isSuggested
-                                ? Chip(
-                                    label: const Text('Suggested'),
-                                    visualDensity: VisualDensity.compact,
-                                  )
-                                : null,
-                            onChanged: (checked) {
-                              setState(() {
-                                if (checked == true) {
-                                  _selectedTaskIds.add(task.taskId);
-                                } else {
-                                  _selectedTaskIds.remove(task.taskId);
-                                }
-                              });
-                            },
-                          );
-                        },
-                      ),
+                          ),
+                        )
+                      else
+                        ListView.builder(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: filteredTasks.length,
+                          itemBuilder: (context, index) {
+                            final task = filteredTasks[index];
+                            final isSelected = _selectedTaskIds.contains(task.taskId);
+                            final boardLabel = (task.taskBoardTitle ?? '').isNotEmpty
+                                ? task.taskBoardTitle!
+                                : 'No board';
+
+                            return CheckboxListTile(
+                              value: isSelected,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(task.taskTitle),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    boardLabel,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  Text(
+                                    task.taskStatus.replaceAll('_', ' '),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.blue.shade600,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              onChanged: (checked) {
+                                setState(() {
+                                  if (checked == true) {
+                                    _selectedTaskIds.add(task.taskId);
+                                  } else {
+                                    _selectedTaskIds.remove(task.taskId);
+                                  }
+                                });
+                              },
+                            );
+                          },
+                        ),
                     ],
                   );
                 },
@@ -262,10 +279,10 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.save),
-                  label: Text(_isSaving ? 'Saving...' : 'Save Plan'),
+                      : const Icon(Icons.check),
+                  label: Text(_isSaving ? 'Saving...' : 'Create Plan'),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    padding: const EdgeInsets.all(16),
                   ),
                 ),
               ),
@@ -276,45 +293,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     );
   }
 
-  void _triggerRefresh() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
-  List<Task> _getSuggestedTasks(List<Task> tasks) {
-    final query = '${_titleController.text} ${_descriptionController.text}'.toLowerCase();
-    if (query.trim().isEmpty) {
-      return tasks.take(5).toList();
-    }
-
-    int score(Task task) {
-      int s = 0;
-      final title = task.taskTitle.toLowerCase();
-      final desc = task.taskDescription.toLowerCase();
-      for (final word in query.split(RegExp(r'\s+')).where((w) => w.length > 2)) {
-        if (title.contains(word)) s += 3;
-        if (desc.contains(word)) s += 2;
-      }
-      if (task.taskDeadline != null) {
-        final days = task.taskDeadline!.difference(DateTime.now()).inDays;
-        if (days <= 0) s += 4;
-        else if (days <= 3) s += 3;
-        else if (days <= 7) s += 2;
-      }
-      if (!task.taskIsDone) s += 1;
-      return s;
-    }
-
-    final sorted = [...tasks]..sort((a, b) => score(b).compareTo(score(a)));
-    return sorted.take(5).toList();
-  }
-
-  List<String> _collectTaskIds(BuildContext context) {
-    if (_autoSuggest) {
-      final tasks = context.read<TaskProvider>().tasks;
-      return _getSuggestedTasks(tasks).map((t) => t.taskId).toList();
-    }
+  List<String> _collectTaskIds() {
     return _selectedTaskIds.toList();
   }
 
@@ -363,7 +342,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           description: _descriptionController.text.trim(),
           technique: _selectedTechnique,
           scheduledFor: _scheduledDate,
-          taskIds: _collectTaskIds(context),
+          taskIds: _collectTaskIds(),
         );
 
     if (!mounted) return;

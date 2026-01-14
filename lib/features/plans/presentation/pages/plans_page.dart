@@ -5,9 +5,13 @@ import '../../datasources/models/plans_model.dart';
 import '../../datasources/providers/plan_provider.dart';
 import '../widgets/cards/plan_card.dart';
 import 'create_plan_page.dart';
+import '../../../home/presentation/widgets/plan_details_section.dart';
 
 class PlansPage extends StatefulWidget {
-  const PlansPage({super.key});
+  final void Function(VoidCallback)? onSearchToggleReady;
+  final void Function(bool, TextEditingController, ValueChanged<String>, VoidCallback)? onSearchStateChanged;
+
+  const PlansPage({super.key, this.onSearchToggleReady, this.onSearchStateChanged});
 
   @override
   State<PlansPage> createState() => _PlansPageState();
@@ -16,6 +20,21 @@ class PlansPage extends StatefulWidget {
 class _PlansPageState extends State<PlansPage> {
   String? _userId;
   bool _initialized = false;
+  bool _isSearchExpanded = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    widget.onSearchToggleReady?.call(_toggleSearch);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
@@ -28,10 +47,52 @@ class _PlansPageState extends State<PlansPage> {
     }
   }
 
+  void _toggleSearch() {
+    setState(() {
+      _isSearchExpanded = !_isSearchExpanded;
+      if (!_isSearchExpanded) {
+        _searchController.clear();
+        _searchQuery = '';
+      }
+      widget.onSearchStateChanged?.call(
+        _isSearchExpanded,
+        _searchController,
+        (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+        },
+        () {
+          setState(() {
+            _searchController.clear();
+            _searchQuery = '';
+          });
+        },
+      );
+    });
+  }
+
+  List<Plan> _filterPlans(List<Plan> plans) {
+    if (_searchQuery.isEmpty) return plans;
+    return plans.where((plan) {
+      final titleMatch = plan.planTitle.toLowerCase().contains(
+        _searchQuery.toLowerCase(),
+      );
+      final descMatch = plan.planDescription.toLowerCase().contains(
+        _searchQuery.toLowerCase(),
+      );
+      final techniqueMatch = plan.planTechnique.toLowerCase().contains(
+        _searchQuery.toLowerCase(),
+      );
+      return titleMatch || descMatch || techniqueMatch;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: 'plans_page_fab',
         onPressed: () async {
           final template = await _showTemplateDialog(context);
           if (template == null) return;
@@ -64,66 +125,99 @@ class _PlansPageState extends State<PlansPage> {
             : Consumer<PlanProvider>(
                 builder: (context, planProvider, _) {
                   final plans = planProvider.userPlans;
+                  final filteredPlans = _filterPlans(plans);
 
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-
                       const SizedBox(height: 16),
 
                       Expanded(
                         child: planProvider.isLoading
                             ? const Center(child: CircularProgressIndicator())
-                            : plans.isEmpty
-                                ? Center(
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 32),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.event_note,
-                                            size: 56,
-                                            color: Colors.grey.shade400,
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Text(
-                                            'No plans yet',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.grey.shade600,
-                                            ),
-                                          ),
-                                        ],
+                            : filteredPlans.isEmpty && _searchQuery.isNotEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 32,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.search_off,
+                                        size: 56,
+                                        color: Colors.grey.shade400,
                                       ),
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    padding: const EdgeInsets.only(bottom: 12),
-                                    itemCount: plans.length,
-                                    itemBuilder: (context, index) {
-                                      final plan = plans[index];
-                                      return PlanCard(
-                                        plan: plan,
-                                        onActivate: () async {
-                                          final success = await context
-                                              .read<PlanProvider>()
-                                              .activatePlan(plan.planId);
-                                          if (success && context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('Plan "${plan.planTitle}" activated!'),
-                                                duration: const Duration(seconds: 2),
-                                              ),
-                                            );
-                                          }
-                                        },
-                                        onTap: () {
-                                          _showPlanDetailsDialog(context, plan);
-                                        },
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'No plans found',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Text(
+                                        'Try a different search term',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : plans.isEmpty
+                            ? Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 32,
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.event_note,
+                                        size: 56,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'No plans yet',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            : ListView.builder(
+                                padding: const EdgeInsets.only(bottom: 12),
+                                itemCount: filteredPlans.length,
+                                itemBuilder: (context, index) {
+                                  final plan = filteredPlans[index];
+                                  return PlanCard(
+                                    plan: plan,
+                                    onTap: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => Scaffold(
+                                            appBar: AppBar(
+                                              title: Text(plan.planTitle),
+                                            ),
+                                            body: PlanDetailsSection(plan: plan),
+                                          ),
+                                        ),
                                       );
                                     },
-                                  ),
+                                  );
+                                },
+                              ),
                       ),
                     ],
                   );
@@ -136,29 +230,19 @@ class _PlansPageState extends State<PlansPage> {
   Future<String?> _showTemplateDialog(BuildContext context) {
     final templates = [
       (
-        'custom',
-        'Custom',
-        'Pick any tasks and structure the plan however you like.',
-      ),
-      (
-        'gtd',
-        'Get Things Done',
-        'Capture tasks, clarify what they are, and order them to execute.',
+        'quick_todo',
+        'Quick To-Do',
+        'Compile tasks you want to do together.',
       ),
       (
         'pomodoro',
         'Pomodoro',
-        'Work in focused intervals with short breaks to finish your tasks.',
+        'Work in focused intervals with short breaks in-between.',
       ),
       (
         'eat_the_frog',
         'Eat the Frog',
-        'Identify the hardest tasks and tackle them first.',
-      ),
-      (
-        'timeblocking',
-        'Time Blocking',
-        'Lay tasks on a timeline to decide when you will do each one.',
+        'Identify the hardest tasks, the Frog/s, and tackle them first.',
       ),
     ];
 
@@ -190,143 +274,5 @@ class _PlansPageState extends State<PlansPage> {
         );
       },
     );
-  }
-
-  void _showPlanDetailsDialog(BuildContext context, Plan plan) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text(plan.planTitle),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Description',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 4),
-                Text(plan.planDescription),
-                const SizedBox(height: 16),
-                Text(
-                  'Status',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(plan.planStatus).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    plan.planStatus.toUpperCase(),
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: _getStatusColor(plan.planStatus),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'Technique: ${plan.planTechnique}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Tasks: ${plan.completedTasks}/${plan.totalTasks}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Focus Sessions: ${plan.actualFocusSessionsCompleted}/${plan.plannedFocusIntervals}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close'),
-            ),
-            if (plan.planStatus == 'draft')
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final success =
-                      await context.read<PlanProvider>().activatePlan(plan.planId);
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    if (success) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Plan "${plan.planTitle}" activated!'),
-                        ),
-                      );
-                    }
-                  }
-                },
-                icon: const Icon(Icons.play_circle, size: 18),
-                label: const Text('Activate'),
-              ),
-            if (plan.planStatus != 'completed')
-              ElevatedButton.icon(
-                onPressed: () async {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Delete Plan'),
-                      content: const Text('Are you sure you want to delete this plan?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                          ),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  );
-
-                  if (confirm == true && context.mounted) {
-                    await context.read<PlanProvider>().deletePlan(plan.planId);
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Plan deleted')),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.delete, size: 18),
-                label: const Text('Delete'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade600,
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status.toLowerCase()) {
-      case 'draft':
-        return Colors.grey;
-      case 'active':
-        return Colors.blue;
-      case 'paused':
-        return Colors.orange;
-      case 'completed':
-        return Colors.green;
-      default:
-        return Colors.grey;
-    }
   }
 }
