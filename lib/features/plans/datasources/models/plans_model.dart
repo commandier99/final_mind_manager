@@ -20,8 +20,8 @@ class Plan {
   final int totalTasks;
   final int completedTasks;
 
-  // Technique/Methodology
-  final String planTechnique; // 'pomodoro', 'timeblocking', 'gtd', 'custom'
+  // Style/Methodology
+  final String planStyle; // 'Pomodoro', 'Timeblocking', 'GTD', 'Checklist'
 
   Plan({
     required this.planId,
@@ -38,7 +38,7 @@ class Plan {
     this.taskOrder = const {},
     this.totalTasks = 0,
     this.completedTasks = 0,
-    this.planTechnique = 'custom',
+    this.planStyle = 'Checklist',
   });
 
   // Computed properties
@@ -68,7 +68,7 @@ class Plan {
       taskOrder: Map<String, int>.from(data['taskOrder'] ?? {}),
       totalTasks: data['totalTasks'] as int? ?? 0,
       completedTasks: data['completedTasks'] as int? ?? 0,
-      planTechnique: data['planTechnique'] as String? ?? 'custom',
+      planStyle: data['planStyle'] as String? ?? 'Checklist',
     );
   }
 
@@ -87,7 +87,7 @@ class Plan {
       'taskOrder': taskOrder,
       'totalTasks': totalTasks,
       'completedTasks': completedTasks,
-      'planTechnique': planTechnique,
+      'planStyle': planStyle,
     };
   }
 
@@ -106,7 +106,7 @@ class Plan {
     Map<String, int>? taskOrder,
     int? totalTasks,
     int? completedTasks,
-    String? planTechnique,
+    String? planStyle,
   }) {
     return Plan(
       planId: planId ?? this.planId,
@@ -123,7 +123,7 @@ class Plan {
       taskOrder: taskOrder ?? this.taskOrder,
       totalTasks: totalTasks ?? this.totalTasks,
       completedTasks: completedTasks ?? this.completedTasks,
-      planTechnique: planTechnique ?? this.planTechnique,
+      planStyle: planStyle ?? this.planStyle,
     );
   }
 

@@ -4,6 +4,8 @@ import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../../tasks/datasources/models/task_model.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import 'dart:async';
+import 'feature_card_widget.dart';
+import '../pages/mind_set_page.dart';
 
 class FeaturesCarouselWidget extends StatefulWidget {
   const FeaturesCarouselWidget({super.key});
@@ -40,6 +42,12 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
       icon: Icons.lightbulb,
       title: 'Get Insights',
       description: 'Analyze your productivity patterns and improve!',
+      isStaticCard: true,
+    ),
+    FeatureCard(
+      icon: Icons.psychology,
+      title: 'Enter Mind:Set',
+      description: 'Set your mind to be productive.',
       isStaticCard: true,
     ),
   ];
@@ -89,7 +97,25 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
         
         // Create dynamic feature list with status cards
         List<FeatureCard> dynamicFeatures = [
-          ...features,
+          ...features.map((feature) {
+            // Add navigation for Mind:Set card
+            if (feature.title == 'Enter Mind:Set') {
+              return FeatureCard(
+                icon: feature.icon,
+                title: feature.title,
+                description: feature.description,
+                isStaticCard: feature.isStaticCard,
+                cardColor: feature.cardColor,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const MindSetPage()),
+                  );
+                },
+              );
+            }
+            return feature;
+          }),
           FeatureCard(
             icon: Icons.warning_amber,
             title: 'Overdue Tasks',
@@ -121,7 +147,7 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
                 itemBuilder: (context, index) {
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: _buildFeatureCard(dynamicFeatures[index]),
+                    child: FeatureCardWidget(feature: dynamicFeatures[index]),
                   );
                 },
               ),
@@ -180,70 +206,6 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
     return tasks.map((task) => task.taskBoardId).toSet().length;
   }
 
-  Widget _buildFeatureCard(FeatureCard feature) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: feature.isStaticCard
-              ? LinearGradient(
-                  colors: [Colors.blue.shade400, Colors.blue.shade600],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                )
-              : LinearGradient(
-                  colors: [feature.cardColor!, feature.cardColor!.withOpacity(0.7)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Row(
-            children: [
-              Icon(
-                feature.icon,
-                size: 64,
-                color: Colors.white,
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      feature.title,
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      feature.description,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.white70,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDotIndicators(int length) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -263,20 +225,4 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
       ),
     );
   }
-}
-
-class FeatureCard {
-  final IconData icon;
-  final String title;
-  final String description;
-  final bool isStaticCard;
-  final Color? cardColor;
-
-  FeatureCard({
-    required this.icon,
-    required this.title,
-    required this.description,
-    this.isStaticCard = true,
-    this.cardColor,
-  });
 }

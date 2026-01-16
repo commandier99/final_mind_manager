@@ -5,7 +5,7 @@ import '../../datasources/models/plans_model.dart';
 import '../../datasources/providers/plan_provider.dart';
 import '../widgets/cards/plan_card.dart';
 import 'create_plan_page.dart';
-import '../../../home/presentation/widgets/plan_details_section.dart';
+import 'plan_details_page.dart';
 
 class PlansPage extends StatefulWidget {
   final void Function(VoidCallback)? onSearchToggleReady;
@@ -81,10 +81,10 @@ class _PlansPageState extends State<PlansPage> {
       final descMatch = plan.planDescription.toLowerCase().contains(
         _searchQuery.toLowerCase(),
       );
-      final techniqueMatch = plan.planTechnique.toLowerCase().contains(
+      final styleMatch = plan.planStyle.toLowerCase().contains(
         _searchQuery.toLowerCase(),
       );
-      return titleMatch || descMatch || techniqueMatch;
+      return titleMatch || descMatch || styleMatch;
     }).toList();
   }
 
@@ -206,11 +206,8 @@ class _PlansPageState extends State<PlansPage> {
                                       Navigator.push(
                                         context,
                                         MaterialPageRoute(
-                                          builder: (context) => Scaffold(
-                                            appBar: AppBar(
-                                              title: Text(plan.planTitle),
-                                            ),
-                                            body: PlanDetailsSection(plan: plan),
+                                          builder: (context) => PlanDetailsPage(
+                                            plan: plan,
                                           ),
                                         ),
                                       );

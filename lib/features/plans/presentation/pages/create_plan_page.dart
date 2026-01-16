@@ -17,7 +17,7 @@ class CreatePlanPage extends StatefulWidget {
 class _CreatePlanPageState extends State<CreatePlanPage> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  late String _selectedTechnique;
+  late String _selectedStyle;
   DateTime? _scheduledDate;
   bool _isSaving = false;
   final Set<String> _selectedTaskIds = {};
@@ -52,7 +52,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   @override
   void initState() {
     super.initState();
-    _selectedTechnique = widget.initialTechnique;
+    _selectedStyle = widget.initialTechnique;
     _selectedFilters = Set.from(taskStatuses); // Show all by default
   }
 
@@ -99,7 +99,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _selectedTechnique,
+                value: _selectedStyle,
                 decoration: InputDecoration(
                   labelText: 'Technique',
                   border: OutlineInputBorder(
@@ -122,7 +122,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 ],
                 onChanged: (value) {
                   setState(() {
-                    _selectedTechnique = value ?? 'quick_todo';
+                    _selectedStyle = value ?? 'quick_todo';
                   });
                 },
               ),
@@ -340,7 +340,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           userName: userName,
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
-          technique: _selectedTechnique,
+          style: _selectedStyle,
           scheduledFor: _scheduledDate,
           taskIds: _collectTaskIds(),
         );

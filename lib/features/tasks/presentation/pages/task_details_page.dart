@@ -21,14 +21,18 @@ class TaskDetailsPage extends StatelessWidget {
     final navigation = context.watch<NavigationProvider>();
 
     return Scaffold(
-      appBar: AppTopBar(title: 'Task Details'),
+      appBar: AppTopBar(
+        title: 'Task Details',
+        showBackButton: true,
+        onBackPressed: () => Navigator.pop(context),
+        showNotificationButton: false,
+      ),
       drawer: AppSideMenu(
         onSelect: (sideMenuIndex) {
           print(
             '[DEBUG] TaskDetailsPage: SideMenu selected index = $sideMenuIndex',
           );
           navigation.selectFromSideMenu(sideMenuIndex + 4);
-          Navigator.pop(context);
         },
       ),
       body: SingleChildScrollView(

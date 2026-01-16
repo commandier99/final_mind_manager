@@ -49,18 +49,19 @@ class BoardCard extends StatelessWidget {
             child: GestureDetector(
               onTap: onTap,
               child: Card(
-                elevation: 6,
+                elevation: 4,
+                shadowColor: Colors.blue.withOpacity(0.2),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.only(
-                    bottomRight: Radius.circular(36),
+                  borderRadius: BorderRadius.zero,
+                  side: BorderSide(
+                    color: Colors.blue.shade400,
+                    width: 1,
                   ),
                 ),
                 child: Container(
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: Colors.blue.shade700, width: 2),
-                    ),
+                    color: Colors.white,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,106 +70,72 @@ class BoardCard extends StatelessWidget {
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 5,
+                          horizontal: 16,
+                          vertical: 10,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade700,
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.grey.shade300,
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    board.boardTitle,
-                                    style: const TextStyle(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "by ${board.boardManagerName}",
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Body with stats
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 16,
-                        ),
+                        color: Colors.blue.shade700,
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Expanded(
+                              child: Text(
+                                board.boardTitle,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.white,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              "by ${board.boardManagerName}",
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.white70,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Body with description, members, and progress
+                      Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            // Left column: Description and Members
+                            Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
+                                  // Description
                                   Text(
-                                    "Goal: ${board.boardGoal}",
+                                    board.boardDescription?.isNotEmpty ?? false
+                                        ? board.boardDescription!
+                                        : "Description: None",
                                     style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 12,
                                       color: Colors.grey[700],
+                                      height: 1.3,
                                     ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 6),
+                                  const SizedBox(height: 8),
+                                  // Members
+                                  _buildMembersRow(board),
                                 ],
                               ),
                             ),
                             const SizedBox(width: 12),
-                            // Circular progress indicator
-                            SizedBox(
-                              width: 60,
-                              height: 60,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  CircularProgressIndicator(
-                                    value: progress,
-                                    strokeWidth: 5,
-                                    backgroundColor: Colors.grey.shade300,
-                                    color:
-                                        progress == 1.0
-                                            ? Colors.green
-                                            : Colors.blue,
-                                  ),
-                                  Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        "$percent%",
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
+                            // Right: Circular progress indicator
+                            _buildProgressIndicator(stats, progress, percent),
                           ],
                         ),
                       ),
@@ -180,6 +147,112 @@ class BoardCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildMembersRow(Board board) {
+    final visibleMembers = board.memberIds.take(3).toList();
+
+    if (visibleMembers.isEmpty) {
+      return Text(
+        'No members',
+        style: TextStyle(
+          fontSize: 11,
+          color: Colors.grey[600],
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: 70,
+      height: 24,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ...visibleMembers.asMap().entries.map((entry) {
+            final index = entry.key;
+            final offset = index * 16.0;
+
+            return Positioned(
+              left: offset,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 1.5,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 10,
+                  backgroundColor: Colors.grey[300],
+                  child: const Icon(
+                    Icons.person,
+                    size: 8,
+                    color: Colors.grey,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+          if (board.memberIds.length > 3)
+            Positioned(
+              left: 3 * 16.0,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Colors.white,
+                    width: 1.5,
+                  ),
+                ),
+                child: CircleAvatar(
+                  radius: 10,
+                  backgroundColor: Colors.blue.shade600,
+                  child: Text(
+                    '+${board.memberIds.length - 3}',
+                    style: const TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProgressIndicator(
+      dynamic stats, double progress, int percent) {
+    return SizedBox(
+      width: 60,
+      height: 60,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 3,
+            backgroundColor: Colors.grey.shade300,
+            color: progress == 1.0 ? Colors.green : Colors.blue,
+          ),
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                "$percent%",
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

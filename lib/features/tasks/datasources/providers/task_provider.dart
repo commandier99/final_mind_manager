@@ -7,7 +7,7 @@ import '../models/task_stats_model.dart'; // Import TaskStats model
 import '../services/task_services.dart';
 import '../../../boards/datasources/services/board_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/user_daily_activity_services.dart';
-import '../../../../shared/services/task_notification_service.dart';
+import '../../../../shared/features/notifications/datasources/services/notification_service.dart';
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService = TaskService();
@@ -48,8 +48,8 @@ class TaskProvider extends ChangeNotifier {
   void _updateTasks(List<Task> tasks) {
     _tasks = tasks;
     
-    // Check for notifications if push notifications are enabled
-    TaskNotificationService().checkAndNotifyTasks(tasks);
+    // Notifications are now handled through the NotificationProvider
+    // and created on-demand when task events occur
     
     notifyListeners();
   }
@@ -396,7 +396,7 @@ class TaskProvider extends ChangeNotifier {
         ),
       );
       
-      TaskNotificationService().notifyTaskAssigned(assignedTask);
+      // Notification will be created by the UI layer when needed
 
       print('✅ Task $taskId accepted');
     } catch (e) {

@@ -79,6 +79,15 @@ class AppSideMenu extends StatelessWidget {
           ),
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.settings),
+            title: const Text('Settings'),
+            onTap: () {
+              Navigator.pop(context);
+              onSelect?.call(7);
+              context.read<NavigationProvider>().selectFromSideMenu(7);
+            },
+          ),
+          ListTile(
             leading: const Icon(Icons.help_outline),
             title: const Text('Help/FAQ'),
             onTap: () {

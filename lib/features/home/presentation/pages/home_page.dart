@@ -6,10 +6,7 @@ import '../../../plans/datasources/providers/plan_provider.dart';
 import '../../../plans/datasources/models/plans_model.dart';
 import '../widgets/main_home_section.dart';
 import '../widgets/motivational_quote_card.dart';
-import '../widgets/plans_for_today_widget.dart';
 import '../widgets/features_carousel_widget.dart';
-import '../widgets/home_plan_card.dart';
-import '../widgets/plan_details_section.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -32,17 +29,12 @@ class _HomePageState extends State<HomePage> {
       _lastStreamedUserId = userId;
       print('[DEBUG] HomePage: Starting task stream for userId: $userId');
       context.read<TaskProvider>().streamUserActiveTasks(userId);
-      context.read<PlanProvider>().loadUserPlans(userId);
+      
+      // Defer the plan loading to after the current frame to avoid setState during build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        context.read<PlanProvider>().loadUserPlans(userId);
+      });
     }
-  }
-
-  void _showPlanDetails(Plan plan) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlanDetailsSection(plan: plan),
-      ),
-    );
   }
 
   @override
@@ -52,7 +44,7 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          MainHomeSection(onPlanTap: _showPlanDetails),
+          MainHomeSection(),
           const SizedBox(height: 24),
           const MotivationalQuoteSection(),
         ],

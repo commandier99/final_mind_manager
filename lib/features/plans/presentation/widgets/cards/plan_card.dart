@@ -33,8 +33,8 @@ class PlanCard extends StatelessWidget {
     }
   }
 
-  Color _getTechniqueColor(String technique) {
-    switch (technique.toLowerCase()) {
+  Color _getStyleColor(String style) {
+    switch (style.toLowerCase()) {
       case 'pomodoro':
         return Colors.red.shade400;
       case 'timeblocking':
@@ -48,7 +48,7 @@ class PlanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final techniqueColor = _getTechniqueColor(plan.planTechnique);
+    final styleColor = _getStyleColor(plan.planStyle);
 
     return GestureDetector(
       onTap: onTap,
@@ -60,7 +60,10 @@ class PlanCard extends StatelessWidget {
               color: Colors.grey.shade300,
               width: 1,
             ),
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(12),
+              bottomRight: Radius.circular(12),
+            ),
             color: Colors.white,
           ),
           child: Padding(
@@ -99,33 +102,29 @@ class PlanCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // Style Badge - Top Right
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: styleColor.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        plan.planStyle.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: styleColor,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
 
                 const SizedBox(height: 12),
-
-                // Technique Badge
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: techniqueColor.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      plan.planTechnique.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: techniqueColor,
-                      ),
-                    ),
-                  ),
-                ),
 
                 // Task Progress
                 Column(
@@ -190,29 +189,11 @@ class PlanCard extends StatelessWidget {
                     ],
                   ),
                 ],
-
-                const SizedBox(height: 12),
-
-                // Action Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: onTap,
-                    icon: const Icon(Icons.open_in_full, size: 16),
-                    label: const Text('View Plan'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
         ),
-      ),
+      )
     );
   }
 }

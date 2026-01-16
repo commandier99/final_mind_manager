@@ -454,49 +454,6 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                         ),
                       ),
                     ],
-                    // Accept button for pending assigned tasks (only I got this)
-                    if (_shouldShowAcceptButton()) ...[
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => _handleAcceptTask(context),
-                              icon: const Icon(Icons.thumb_up, size: 16),
-                              label: const Text('I got this'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green[600],
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () => _handleRequestHelp(context),
-                              icon: const Icon(Icons.help_outline, size: 16),
-                              label: const Text('I need help'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange[600],
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
                     // Status badge for accepted/declined tasks
                     if (_getAcceptanceStatusBadge() != null) ...[
                       const SizedBox(height: 8),

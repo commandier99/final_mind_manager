@@ -54,14 +54,18 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
     final isManager = widget.board.boardManagerId == currentUserId;
 
     return Scaffold(
-      appBar: AppTopBar(title: 'Board Details'),
+      appBar: AppTopBar(
+        title: 'Board Details',
+        showBackButton: true,
+        onBackPressed: () => Navigator.pop(context),
+        showNotificationButton: false,
+      ),
       drawer: AppSideMenu(
         onSelect: (sideMenuIndex) {
           print(
             '[DEBUG] BoardDetailsPage: SideMenu selected index = $sideMenuIndex',
           );
           navigation.selectFromSideMenu(sideMenuIndex + 4);
-          Navigator.pop(context);
         },
       ),
       body: SingleChildScrollView(

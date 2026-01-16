@@ -17,6 +17,7 @@ import 'features/boards/datasources/providers/board_stats_provider.dart';
 import 'shared/features/search/providers/search_provider.dart';
 import 'features/boards/datasources/providers/board_join_request_provider.dart';
 import 'shared/features/users/datasources/providers/activity_event_provider.dart';
+import 'shared/features/notifications/datasources/providers/notification_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +44,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => SearchProvider()),
         ChangeNotifierProvider(create: (_) => BoardJoinRequestProvider()),
         ChangeNotifierProvider(create: (_) => ActivityEventProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProxyProvider<UserProvider, AuthenticationProvider>(
           create: (context) => AuthenticationProvider(),

@@ -14,6 +14,8 @@ import '../pages/search_discover_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/help_page.dart';
 import '../pages/about_page.dart';
+import '../../features/notifications/datasources/providers/notification_provider.dart';
+import '../../features/users/datasources/providers/user_provider.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -98,8 +100,86 @@ class _MainScreenState extends State<MainScreen> {
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
     final selectedIndex = navigation.selectedIndex;
+    final isNotificationsPage = selectedIndex == 5;
     final showNotificationButton =
-        selectedIndex == 0 || navigation.sideMenuIndex != null;
+      !isNotificationsPage && (selectedIndex == 0 || navigation.sideMenuIndex != null);
+
+    // Custom actions for notifications page (3-dot menu)
+    List<Widget>? customActions;
+    if (isNotificationsPage) {
+      customActions = [
+        Consumer<NotificationProvider>(
+          builder: (context, notifProvider, _) {
+            if (notifProvider.notifications.isEmpty) {
+              return const SizedBox.shrink();
+            }
+            final userId = context.read<UserProvider>().userId;
+            return PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) async {
+                if (value == 'mark_all_read' && userId != null) {
+                  await notifProvider.markAllAsRead(userId);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('All notifications marked as read')),
+                    );
+                  }
+                } else if (value == 'clear_all' && userId != null) {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Clear All Notifications'),
+                      content: const Text('Are you sure you want to delete all notifications?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Clear All'),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    await notifProvider.clearUserNotifications(userId);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('All notifications cleared')),
+                      );
+                    }
+                  }
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(
+                  value: 'mark_all_read',
+                  child: Row(
+                    children: [
+                      Icon(Icons.done_all, color: Colors.green),
+                      SizedBox(width: 8),
+                      Text('Mark all as read'),
+                    ],
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'clear_all',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_sweep, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Clear all'),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ];
+    }
     
     // Determine search state based on current page
     final isSearchExpanded = selectedIndex == 1 ? _boardsSearchExpanded 
@@ -119,8 +199,13 @@ class _MainScreenState extends State<MainScreen> {
       key: _scaffoldKey,
       appBar: AppTopBar(
         onMenuPressed: _openDrawer,
+        onBackPressed: () {
+          navigation.selectFromBottomNav(0);
+        },
         title: navigation.currentTitle,
         showNotificationButton: showNotificationButton,
+        showBackButton: isNotificationsPage,
+        customActions: customActions,
         onSearchPressed: _handleSearchPressed,
         isSearchExpanded: isSearchExpanded,
         searchController: searchController,
@@ -130,7 +215,6 @@ class _MainScreenState extends State<MainScreen> {
       drawer: AppSideMenu(
         onSelect: (idx) {
           navigation.selectFromSideMenu(idx);
-          Navigator.pop(context);
         },
       ),
       body: IndexedStack(index: selectedIndex, children: _pages),

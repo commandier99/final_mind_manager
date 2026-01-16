@@ -4,24 +4,34 @@ import '../../datasources/providers/navigation_provider.dart';
 
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onMenuPressed;
+  final VoidCallback? onBackPressed;
   final VoidCallback? onSearchPressed;
   final String title;
   final bool showNotificationButton;
+  final bool showBackButton;
+  final bool showSettingsButton;
   final bool isSearchExpanded;
   final TextEditingController? searchController;
   final ValueChanged<String>? onSearchChanged;
   final VoidCallback? onSearchClear;
+  final VoidCallback? onSettingsPressed;
+  final List<Widget>? customActions;
 
   const AppTopBar({
     super.key,
     this.onMenuPressed,
+    this.onBackPressed,
     this.onSearchPressed,
     this.title = 'Mind Manager',
     this.showNotificationButton = true,
+    this.showBackButton = false,
+    this.showSettingsButton = false,
     this.isSearchExpanded = false,
     this.searchController,
     this.onSearchChanged,
     this.onSearchClear,
+    this.onSettingsPressed,
+    this.customActions,
   });
 
   @override
@@ -49,9 +59,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
               tooltip: 'Back',
             )
           : IconButton(
-              icon: const Icon(Icons.menu),
-              onPressed: onMenuPressed,
-              tooltip: 'Menu',
+              icon: Icon(showBackButton ? Icons.arrow_back : Icons.menu),
+              onPressed: showBackButton ? onBackPressed : onMenuPressed,
+              tooltip: showBackButton ? 'Back' : 'Menu',
             ),
       actions: [
         if (isSearchExpanded && searchController != null && searchController!.text.isNotEmpty)
@@ -61,14 +71,28 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
             tooltip: 'Clear',
           )
         else if (!isSearchExpanded)
-          ..._buildNormalActions(context),
+          ..._buildActions(context),
         const SizedBox(width: 8),
       ],
       elevation: 2,
     );
   }
 
-  List<Widget> _buildNormalActions(BuildContext context) {
+  List<Widget> _buildActions(BuildContext context) {
+    if (customActions != null) {
+      return customActions!;
+    }
+
+    if (showSettingsButton) {
+      return [
+        IconButton(
+          icon: const Icon(Icons.settings),
+          onPressed: onSettingsPressed,
+          tooltip: 'Settings',
+        ),
+      ];
+    }
+
     return [
       if (showNotificationButton)
         IconButton(
