@@ -9,15 +9,44 @@ import '../widgets/sections/task_details_section.dart';
 import '../widgets/sections/task_subtasks_list.dart';
 import '../widgets/sections/task_file_submissions_section.dart';
 import '../../../subtasks/datasources/providers/subtask_provider.dart';
+import '../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../../shared/features/users/datasources/providers/activity_event_provider.dart';
 
-class TaskDetailsPage extends StatelessWidget {
+class TaskDetailsPage extends StatefulWidget {
   final Task task;
 
   const TaskDetailsPage({super.key, required this.task});
 
   @override
+  State<TaskDetailsPage> createState() => _TaskDetailsPageState();
+}
+
+class _TaskDetailsPageState extends State<TaskDetailsPage> {
+  @override
+  void initState() {
+    super.initState();
+    // Log task_opened activity
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final userProvider = context.read<UserProvider>();
+      final activityProvider = context.read<ActivityEventProvider>();
+      
+      if (userProvider.userId != null && userProvider.currentUser != null) {
+        activityProvider.logEvent(
+          userId: userProvider.userId!,
+          userName: userProvider.currentUser!.userName,
+          activityType: 'task_opened',
+          userProfilePicture: userProvider.currentUser!.userProfilePicture,
+          taskId: widget.task.taskId,
+          boardId: widget.task.taskBoardId.isNotEmpty ? widget.task.taskBoardId : null,
+          description: 'Opened task: ${widget.task.taskTitle}',
+        );
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    print('[DEBUG] TaskDetailsPage: build called for taskId = ${task.taskId}');
+    print('[DEBUG] TaskDetailsPage: build called for taskId = ${widget.task.taskId}');
     final navigation = context.watch<NavigationProvider>();
 
     return Scaffold(
@@ -38,19 +67,19 @@ class TaskDetailsPage extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            TaskDetailsSection(taskId: task.taskId),
+            TaskDetailsSection(taskId: widget.task.taskId),
             const SizedBox(height: 1),
             // Only show file submissions for board tasks
-            if (task.taskBoardId.isNotEmpty) ...[
-              TaskFileSubmissionsSection(task: task),
+            if (widget.task.taskBoardId.isNotEmpty) ...[
+              TaskFileSubmissionsSection(task: widget.task),
               const SizedBox(height: 1),
             ],
             ChangeNotifierProvider(
               create: (_) => SubtaskProvider(),
               child: TaskSubtasksList(
-                parentTaskId: task.taskId,
-                boardId: task.taskBoardId.isNotEmpty ? task.taskBoardId : null,
-                task: task,
+                parentTaskId: widget.task.taskId,
+                boardId: widget.task.taskBoardId.isNotEmpty ? widget.task.taskBoardId : null,
+                task: widget.task,
               ),
             ),
           ],

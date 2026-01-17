@@ -33,6 +33,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   DateTime? _repeatEndDate;
   TimeOfDay? _repeatTime;
   String _currentUserName = 'Unknown'; // Store current user's name
+  bool _isLoading = false; // Loading state for task creation
   // Remove TaskStats fields from dialog state
   
   static const List<String> _daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -92,71 +93,114 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   }
 
   Future<void> _submit() async {
-    final taskProvider = context.read<TaskProvider>();
+    setState(() => _isLoading = true);
     
-    String taskTitle = _titleController.text.trim();
-    
-    // If title is empty, generate default "Task XX" title
-    if (taskTitle.isEmpty) {
-      taskTitle = _getNextUntitledTaskNumber(taskProvider.tasks);
-    }
-
-    // Determine the assigned to name - add "(Manager)" if user is the board manager
-    String assignedToName = _currentUserName;
-    if (_selectedBoard != null && _selectedBoard!.boardManagerId == widget.userId) {
-      assignedToName = '$_currentUserName (Manager)';
-    }
-
-    // Merge deadline date with time
-    DateTime? finalDeadline = _deadline;
-    if (finalDeadline != null && _deadlineTime != null) {
-      finalDeadline = DateTime(
-        finalDeadline.year,
-        finalDeadline.month,
-        finalDeadline.day,
-        _deadlineTime!.hour,
-        _deadlineTime!.minute,
+    // Show loading modal
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => PopScope(
+          canPop: false,
+          child: Dialog(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Creating task...',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       );
     }
 
-    // Convert repeat time to HH:mm format
-    String? repeatTimeStr;
-    if (_repeatTime != null) {
-      repeatTimeStr =
-          '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}';
+    try {
+      final taskProvider = context.read<TaskProvider>();
+      
+      String taskTitle = _titleController.text.trim();
+      
+      // If title is empty, generate default "Task XX" title
+      if (taskTitle.isEmpty) {
+        taskTitle = _getNextUntitledTaskNumber(taskProvider.tasks);
+      }
+
+      // Determine the assigned to name - add "(Manager)" if user is the board manager
+      String assignedToName = _currentUserName;
+      if (_selectedBoard != null && _selectedBoard!.boardManagerId == widget.userId) {
+        assignedToName = '$_currentUserName (Manager)';
+      }
+
+      // Merge deadline date with time
+      DateTime? finalDeadline = _deadline;
+      if (finalDeadline != null && _deadlineTime != null) {
+        finalDeadline = DateTime(
+          finalDeadline.year,
+          finalDeadline.month,
+          finalDeadline.day,
+          _deadlineTime!.hour,
+          _deadlineTime!.minute,
+        );
+      }
+
+      // Convert repeat time to HH:mm format
+      String? repeatTimeStr;
+      if (_repeatTime != null) {
+        repeatTimeStr =
+            '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}';
+      }
+
+      final newTask = Task(
+        taskId: const Uuid().v4(),
+        taskBoardId: _selectedBoard?.boardId ?? '',
+        taskBoardTitle: _selectedBoard?.boardTitle,
+        taskOwnerId: widget.userId,
+        taskOwnerName: _currentUserName,
+        taskAssignedBy: widget.userId,
+        taskAssignedTo: widget.userId,
+        taskAssignedToName: assignedToName,
+        taskCreatedAt: DateTime.now(),
+        taskTitle: taskTitle,
+        taskDescription: _descriptionController.text.trim(),
+        taskDeadline: finalDeadline,
+        taskIsDone: false,
+        taskIsDoneAt: null,
+        taskIsDeleted: false,
+        taskDeletedAt: null,
+        taskStats: TaskStats(), // Always initialize as empty
+        taskPriorityLevel: _priorityLevel,
+        taskStatus: 'TODO',
+        taskRequiresApproval: false,
+        taskIsRepeating: _isRepeating,
+        taskRepeatInterval: _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
+        taskRepeatEndDate: _repeatEndDate,
+        taskNextRepeatDate: null,
+        taskRepeatTime: repeatTimeStr,
+      );
+
+      await taskProvider.addTask(newTask);
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading modal
+        Navigator.pop(context); // Close dialog
+      }
+    } catch (e) {
+      print('Error creating task: $e');
+      if (mounted) {
+        Navigator.pop(context); // Close loading modal
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error creating task: $e')),
+        );
+      }
     }
-
-    final newTask = Task(
-      taskId: const Uuid().v4(),
-      taskBoardId: _selectedBoard?.boardId ?? '',
-      taskBoardTitle: _selectedBoard?.boardTitle,
-      taskOwnerId: widget.userId,
-      taskOwnerName: _currentUserName,
-      taskAssignedBy: widget.userId,
-      taskAssignedTo: widget.userId,
-      taskAssignedToName: assignedToName,
-      taskCreatedAt: DateTime.now(),
-      taskTitle: taskTitle,
-      taskDescription: _descriptionController.text.trim(),
-      taskDeadline: finalDeadline,
-      taskIsDone: false,
-      taskIsDoneAt: null,
-      taskIsDeleted: false,
-      taskDeletedAt: null,
-      taskStats: TaskStats(), // Always initialize as empty
-      taskPriorityLevel: _priorityLevel,
-      taskStatus: 'TODO',
-      taskRequiresApproval: false,
-      taskIsRepeating: _isRepeating,
-      taskRepeatInterval: _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
-      taskRepeatEndDate: _repeatEndDate,
-      taskNextRepeatDate: null,
-      taskRepeatTime: repeatTimeStr,
-    );
-
-    await taskProvider.addTask(newTask);
-
-    if (mounted) Navigator.pop(context);
   }
 
   @override

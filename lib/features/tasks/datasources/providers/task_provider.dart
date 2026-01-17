@@ -187,6 +187,11 @@ class TaskProvider extends ChangeNotifier {
       // Ensure taskStats is initialized (fallback to empty TaskStats)
       final newTask = task.copyWith(taskStats: task.taskStats ?? TaskStats());
 
+      // Add task immediately to local list for instant UI update
+      _tasks.add(newTask);
+      notifyListeners();
+      print('[DEBUG] TaskProvider: Task added to local list immediately');
+
       // Add task to Firestore using TaskService
       await _taskService.addTask(newTask);
 

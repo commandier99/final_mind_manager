@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "912208080075-vmadukuiltlb7g5fshqgcgto2upador5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.mind_manager_final",
+            "certificate_hash": "e13ca3c6704f2d56b90b05d1a60774638425c610"
+          }
+        },
+        {
           "client_id": "912208080075-56jeso876q45n5v6l8quenb2c9116e0j.apps.googleusercontent.com",
           "client_type": 3
         }

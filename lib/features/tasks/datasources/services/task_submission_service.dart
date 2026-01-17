@@ -123,7 +123,19 @@ class TaskSubmissionService {
         final taskData = taskDoc.data();
         final boardId = taskData?['taskBoardId'];
         
-        
+        await _activityEventService.logEvent(
+          userId: currentUser.uid,
+          userName: userData?['userName'] ?? 'Unknown',
+          activityType: 'file_submitted',
+          userProfilePicture: userData?['userProfilePicture'],
+          taskId: taskId,
+          boardId: boardId,
+          description: 'Submitted ${uploadedFiles.length} file(s) to task',
+          metadata: {
+            'fileCount': uploadedFiles.length,
+            'submissionId': submissionId,
+          },
+        );
       } catch (e) {
         print('⚠️ Failed to log activity: $e');
       }

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../datasources/providers/task_provider.dart';
 import '../../../datasources/models/task_model.dart';
+import '../../../datasources/services/task_submission_service.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../dialogs/edit_task_dialog.dart';
+import '../dialogs/file_submissions_dialog.dart';
 
 class TaskDetailsSection extends StatefulWidget {
   final String taskId;
@@ -17,6 +20,8 @@ class TaskDetailsSection extends StatefulWidget {
 
 class _TaskDetailsSectionState extends State<TaskDetailsSection> {
   bool _isDescriptionExpanded = false;
+  final TaskSubmissionService _submissionService = TaskSubmissionService();
+  bool _isUploading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -51,28 +56,24 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                             if (task.taskTitle.isNotEmpty) {
                               showDialog(
                                 context: context,
-                                builder:
-                                    (context) => AlertDialog(
-                                      title: const Text('Task Title'),
-                                      content: SingleChildScrollView(
-                                        child: Text(task.taskTitle),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed:
-                                              () => Navigator.pop(context),
-                                          child: const Text('Close'),
-                                        ),
-                                      ],
+                                builder: (context) => AlertDialog(
+                                  title: const Text('Task Title'),
+                                  content: SingleChildScrollView(
+                                    child: Text(task.taskTitle),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(context),
+                                      child: const Text('Close'),
                                     ),
+                                  ],
+                                ),
                               );
                             }
                           },
                           child: Text(
                             task.taskTitle,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
+                            style: Theme.of(context).textTheme.headlineSmall
                                 ?.copyWith(fontWeight: FontWeight.bold),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -82,10 +83,9 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                           'by ${task.taskOwnerName ?? "Unknown"}',
                           style: TextStyle(
                             fontSize: 12,
-                            color:
-                                Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -100,20 +100,22 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                           onPressed: () {
                             showDialog(
                               context: context,
-                              builder:
-                                  (context) => EditTaskDialog(task: task),
+                              builder: (context) => EditTaskDialog(task: task),
                             );
                           },
                         ),
-                      // Only show checkbox for task owner or board manager
-                      if (_canToggleTask(task, currentUserId))
-                        Checkbox(
-                          value: task.taskIsDone,
-                          onChanged: (value) {
-                            final taskProvider =
-                                context.read<TaskProvider>();
-                            taskProvider.toggleTaskDone(task);
-                          },
+                      // Only show upload icon for board tasks
+                      if (task.taskBoardId.isNotEmpty && _canToggleTask(task, currentUserId))
+                        IconButton(
+                          icon: _isUploading 
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.upload_file),
+                          tooltip: 'View/Upload files',
+                          onPressed: _isUploading ? null : () => _showFileSubmissionsDialog(task),
                         ),
                     ],
                   ),
@@ -143,10 +145,9 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: _isDescriptionExpanded ? null : 3,
-                    overflow:
-                        _isDescriptionExpanded
-                            ? TextOverflow.visible
-                            : TextOverflow.ellipsis,
+                    overflow: _isDescriptionExpanded
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                   ),
                   if (task.taskDescription.isNotEmpty &&
                       task.taskDescription.length > 120)
@@ -194,7 +195,8 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
               const SizedBox(height: 12),
 
               // Assignment info
-              if (task.taskAssignedTo.isNotEmpty && task.taskAssignedTo != 'None')
+              if (task.taskAssignedTo.isNotEmpty &&
+                  task.taskAssignedTo != 'None')
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -486,5 +488,53 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     final days = repeatInterval.split(',');
     return days.map((day) => day.substring(0, 3)).join(', ');
   }
-}
 
+  Future<void> _pickAndUploadFiles(Task task) async {
+    try {
+      setState(() => _isUploading = true);
+
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.any,
+        withData: true,
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        await _submissionService.createSubmission(
+          taskId: task.taskId,
+          files: result.files,
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Files uploaded successfully!'),
+              backgroundColor: Color(0xFF66BB6A),
+            ),
+          );
+        }
+      }
+
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error uploading files: $e'),
+            backgroundColor: const Color(0xFF9C88D4),
+          ),
+        );
+        setState(() => _isUploading = false);
+      }
+    }
+  }
+
+  void _showFileSubmissionsDialog(Task task) {
+    showDialog(
+      context: context,
+      builder: (context) => FileSubmissionsDialog(task: task),
+    );
+  }
+}

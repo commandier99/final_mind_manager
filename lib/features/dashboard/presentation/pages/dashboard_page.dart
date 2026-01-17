@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
-import '../../../../shared/features/users/datasources/providers/user_stats_provider.dart';
 import '../../../../shared/features/users/datasources/providers/activity_event_provider.dart';
-import '../../../../shared/features/users/datasources/models/user_stats_model.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../../boards/datasources/providers/board_join_request_provider.dart';
-import '../widgets/stat_card_widget.dart';
-import '../widgets/todays_overview_section.dart';
-import '../widgets/user_stats_section.dart';
-import '../widgets/activity_log_section.dart';
+import '../widgets/task_engagement_section.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -20,8 +14,6 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  DateTime _selectedDate = DateTime.now();
-  DateTime _focusedDate = DateTime.now();
 
   @override
   void initState() {
@@ -51,198 +43,205 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Recent Activity Section
-            const ActivityLogSection(),
+            // Completion Streak Section
+            _buildCompletionStreak(),
             const SizedBox(height: 32),
 
-            // Calendar Section
-            Card(
-              elevation: 2,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Calendar',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildCalendar(),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Today's Overview Section
-            const TodaysOverviewSection(),
-            const SizedBox(height: 24),
-            
-            // User Stats Section
-            const UserStatsSection(),
+            // Task Engagement Section
+            const TaskEngagementSection(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildCalendar() {
-    final daysInMonth =
-        DateTime(_focusedDate.year, _focusedDate.month + 1, 0).day;
-    final firstDayOfMonth = DateTime(_focusedDate.year, _focusedDate.month, 1);
-    final startingWeekday = firstDayOfMonth.weekday % 7;
+  Widget _buildCompletionStreak() {
+    final taskProvider = context.watch<TaskProvider>();
+    final tasks = taskProvider.tasks;
 
-    return Column(
-      children: [
-        // Month/Year Header with navigation
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    // Calculate streak: consecutive days with task completions
+    int currentStreak = 0;
+    int longestStreak = 0;
+    DateTime currentDate = DateTime.now();
+    
+    // Group completed tasks by date
+    Map<String, bool> daysWithCompletions = {};
+    for (var task in tasks) {
+      if (task.taskIsDone && task.taskIsDoneAt != null) {
+        String dateKey = '${task.taskIsDoneAt!.year}-${task.taskIsDoneAt!.month}-${task.taskIsDoneAt!.day}';
+        daysWithCompletions[dateKey] = true;
+      }
+    }
+
+    // Calculate current streak (consecutive days ending today)
+    DateTime checkDate = currentDate;
+    while (true) {
+      String dateKey = '${checkDate.year}-${checkDate.month}-${checkDate.day}';
+      if (daysWithCompletions.containsKey(dateKey)) {
+        currentStreak++;
+        checkDate = checkDate.subtract(const Duration(days: 1));
+      } else {
+        break;
+      }
+    }
+
+    // Calculate longest streak
+    if (daysWithCompletions.isNotEmpty) {
+      List<DateTime> sortedDates = daysWithCompletions.keys.map((key) {
+        final parts = key.split('-');
+        return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+      }).toList();
+      sortedDates.sort();
+
+      int tempStreak = 1;
+      for (int i = 1; i < sortedDates.length; i++) {
+        if (sortedDates[i].difference(sortedDates[i - 1]).inDays == 1) {
+          tempStreak++;
+          if (tempStreak > longestStreak) {
+            longestStreak = tempStreak;
+          }
+        } else {
+          tempStreak = 1;
+        }
+      }
+      if (longestStreak == 0) longestStreak = 1;
+    }
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                print('[DEBUG] DashboardPage: Previous month clicked - navigating from ${_focusedDate.month}/${_focusedDate.year}');
-                setState(() {
-                  _focusedDate = DateTime(
-                    _focusedDate.year,
-                    _focusedDate.month - 1,
-                  );
-                  print('[DEBUG] DashboardPage: Calendar now showing ${_focusedDate.month}/${_focusedDate.year}');
-                });
-              },
+            Row(
+              children: [
+                Icon(Icons.local_fire_department, color: Colors.orange[700], size: 28),
+                const SizedBox(width: 8),
+                Text(
+                  'Completion Streak',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              '${_getMonthName(_focusedDate.month)} ${_focusedDate.year}',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStreakStat(
+                  'Current Streak',
+                  currentStreak.toString(),
+                  'days',
+                  Colors.blue,
+                  Icons.trending_up,
+                ),
+                Container(
+                  width: 1,
+                  height: 60,
+                  color: Colors.grey[300],
+                ),
+                _buildStreakStat(
+                  'Longest Streak',
+                  longestStreak.toString(),
+                  'days',
+                  Colors.purple,
+                  Icons.emoji_events,
+                ),
+              ],
             ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                print('[DEBUG] DashboardPage: Next month clicked - navigating from ${_focusedDate.month}/${_focusedDate.year}');
-                setState(() {
-                  _focusedDate = DateTime(
-                    _focusedDate.year,
-                    _focusedDate.month + 1,
-                  );
-                  print('[DEBUG] DashboardPage: Calendar now showing ${_focusedDate.month}/${_focusedDate.year}');
-                });
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-
-        // Weekday headers
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children:
-              ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-                  .map(
-                    (day) => Expanded(
-                      child: Center(
-                        child: Text(
-                          day,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
+            if (currentStreak > 0)
+              Container(
+                margin: const EdgeInsets.only(top: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.green[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.green[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.check_circle, color: Colors.green[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        currentStreak == 1
+                            ? 'Keep it up! Complete a task tomorrow to continue your streak.'
+                            : '🔥 You\'re on fire! $currentStreak days of task completions!',
+                        style: TextStyle(
+                          color: Colors.green[900],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
-                  )
-                  .toList(),
-        ),
-        const SizedBox(height: 8),
-
-        // Calendar grid
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            childAspectRatio: 1,
-          ),
-          itemCount: 42,
-          itemBuilder: (context, index) {
-            final dayNumber = index - startingWeekday + 1;
-
-            if (dayNumber < 1 || dayNumber > daysInMonth) {
-              return const SizedBox.shrink();
-            }
-
-            final date = DateTime(
-              _focusedDate.year,
-              _focusedDate.month,
-              dayNumber,
-            );
-            final isSelected =
-                _selectedDate.year == date.year &&
-                _selectedDate.month == date.month &&
-                _selectedDate.day == date.day;
-            final isToday =
-                DateTime.now().year == date.year &&
-                DateTime.now().month == date.month &&
-                DateTime.now().day == date.day;
-
-            return GestureDetector(
-              onTap: () {
-                print('[DEBUG] DashboardPage: Date selected - ${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}');
-                setState(() {
-                  _selectedDate = date;
-                  print('[DEBUG] DashboardPage: Selection confirmed for ${_selectedDate.toString()}');
-                });
-              },
-              child: Container(
-                margin: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color:
-                      isSelected
-                          ? Colors.blue
-                          : isToday
-                          ? Colors.blue.withOpacity(0.2)
-                          : null,
-                  borderRadius: BorderRadius.circular(8),
-                  border:
-                      isToday && !isSelected
-                          ? Border.all(color: Colors.blue, width: 2)
-                          : null,
+                  ],
                 ),
-                child: Center(
-                  child: Text(
-                    '$dayNumber',
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black87,
-                      fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+              )
+            else
+              Container(
+                margin: const EdgeInsets.only(top: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Start your streak today by completing a task!',
+                        style: TextStyle(
+                          color: Colors.orange[900],
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
-            );
-          },
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  String _getMonthName(int month) {
-    const months = [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ];
-    return months[month - 1];
+  Widget _buildStreakStat(String label, String value, String unit, Color color, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 32),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          unit,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey[600],
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey[700],
+          ),
+        ),
+      ],
+    );
   }
 }
