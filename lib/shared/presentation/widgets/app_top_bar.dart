@@ -69,8 +69,14 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
             icon: const Icon(Icons.clear),
             onPressed: onSearchClear,
             tooltip: 'Clear',
+          ),
+        if (isSearchExpanded)
+          IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: onSearchPressed,
+            tooltip: 'Close search',
           )
-        else if (!isSearchExpanded)
+        else
           ..._buildActions(context),
         const SizedBox(width: 8),
       ],

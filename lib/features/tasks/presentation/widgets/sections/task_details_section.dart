@@ -11,11 +11,13 @@ import '../dialogs/edit_task_dialog.dart';
 class TaskDetailsSection extends StatefulWidget {
   final String taskId;
   final VoidCallback? onFileUploadPressed;
+  final bool showFileSubmissions;
 
   const TaskDetailsSection({
     super.key,
     required this.taskId,
     this.onFileUploadPressed,
+    this.showFileSubmissions = false,
   });
 
   @override
@@ -96,22 +98,13 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                   ),
                   Column(
                     children: [
-                      // Only show edit button for task owner or board manager
-                      if (_canEditTask(task, currentUserId))
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => EditTaskDialog(task: task),
-                            );
-                          },
-                        ),
                       // Only show upload icon for board tasks
                       if (task.taskBoardId.isNotEmpty && _canToggleTask(task, currentUserId))
                         IconButton(
-                          icon: const Icon(Icons.upload_file),
-                          tooltip: 'View/Upload files',
+                          icon: Icon(
+                            widget.showFileSubmissions ? Icons.checklist : Icons.upload_file,
+                          ),
+                          tooltip: widget.showFileSubmissions ? 'View subtasks' : 'View/Upload files',
                           onPressed: widget.onFileUploadPressed,
                         ),
                     ],
@@ -352,24 +345,27 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                   ],
                 ),
 
-              // Progress bar
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: _getProgress(task),
-                  minHeight: 20,
-                  backgroundColor: Colors.grey.shade300,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    _getProgress(task) == 1.0 ? Colors.green : Colors.blue,
+              // Progress bar - only show if there are subtasks
+              if ((task.taskStats.taskSubtasksCount ?? 0) > 0) ...
+                [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: _getProgress(task),
+                      minHeight: 20,
+                      backgroundColor: Colors.grey.shade300,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        _getProgress(task) == 1.0 ? Colors.green : Colors.blue,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                _getProgressText(task),
-                style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-              ),
-              const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+                  Text(
+                    _getProgressText(task),
+                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
+                  ),
+                  const SizedBox(height: 8),
+                ],
 
               // Divider
               Divider(

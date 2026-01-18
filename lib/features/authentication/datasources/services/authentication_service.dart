@@ -2,10 +2,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../shared/features/users/datasources/services/user_services.dart';
+import '../../../../../../features/boards/datasources/services/board_services.dart';
 
 class AuthenticationService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final UserService _userService = UserService();
+  final BoardService _boardService = BoardService();
 
   // Sign in with email and password
   Future<UserCredential> signInWithEmail({
@@ -49,6 +51,19 @@ class AuthenticationService {
       
       await _userService.saveUser(newUser);
       print('✅ [AuthenticationService] User created with UserModel and UserService');
+      
+      // Create a default "Personal" board for the new user
+      try {
+        await _boardService.addBoard(
+          boardTitle: 'Personal',
+          boardGoal: 'Personal tasks and projects',
+          boardGoalDescription: 'A space to manage your personal tasks and projects',
+        );
+        print('✅ [AuthenticationService] Personal board created for new user ${userCredential.user!.uid}');
+      } catch (e) {
+        print('⚠️ [AuthenticationService] Error creating Personal board: $e');
+        // Don't throw - user account was created successfully
+      }
     }
 
     return userCredential;

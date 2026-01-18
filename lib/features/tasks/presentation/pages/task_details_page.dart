@@ -23,6 +23,9 @@ class TaskDetailsPage extends StatefulWidget {
 
 class _TaskDetailsPageState extends State<TaskDetailsPage> {
   bool _showFileSubmissions = false;
+  bool _isSearchExpanded = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -47,6 +50,22 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
   }
 
   @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchExpanded = !_isSearchExpanded;
+      if (!_isSearchExpanded) {
+        _searchController.clear();
+        _searchQuery = '';
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     print('[DEBUG] TaskDetailsPage: build called for taskId = ${widget.task.taskId}');
     final navigation = context.watch<NavigationProvider>();
@@ -57,6 +76,47 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
           showBackButton: true,
           onBackPressed: () => Navigator.pop(context),
           showNotificationButton: false,
+          isSearchExpanded: _isSearchExpanded,
+          searchController: _searchController,
+          onSearchPressed: _toggleSearch,
+          onSearchChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+          onSearchClear: () {
+            setState(() {
+              _searchController.clear();
+              _searchQuery = '';
+            });
+          },
+          customActions: [
+            if (!_isSearchExpanded) ...[
+              IconButton(
+                icon: const Icon(Icons.search),
+                onPressed: _toggleSearch,
+              ),
+              PopupMenuButton(
+                icon: const Icon(Icons.more_vert),
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    child: const Text('Edit'),
+                    onTap: () {
+                      // TODO: Navigate to edit task page
+                      print('[DEBUG] TaskDetailsPage: Edit tapped for taskId = ${widget.task.taskId}');
+                    },
+                  ),
+                  PopupMenuItem(
+                    child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                    onTap: () {
+                      // TODO: Implement task deletion
+                      print('[DEBUG] TaskDetailsPage: Delete tapped for taskId = ${widget.task.taskId}');
+                    },
+                  ),
+                ],
+              ),
+            ],
+          ],
         ),
         drawer: AppSideMenu(
           onSelect: (sideMenuIndex) {
@@ -76,6 +136,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                   _showFileSubmissions = !_showFileSubmissions;
                 });
               },
+              showFileSubmissions: _showFileSubmissions,
             ),
             const SizedBox(height: 1),
             // Only show file submissions for board tasks when toggled

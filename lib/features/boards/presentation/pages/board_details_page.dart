@@ -24,23 +24,45 @@ class BoardDetailsPage extends StatefulWidget {
 
 class _BoardDetailsPageState extends State<BoardDetailsPage> {
   bool _showStats = false;
+  bool _isSearchExpanded = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    print(
-      '[DEBUG] BoardDetailsPage: initState called for boardId = ${widget.board.boardId}',
-    );
+    print('[DEBUG] BoardDetailsPage: initState called');
+    print('[DEBUG] BoardDetailsPage: boardId = ${widget.board.boardId}');
+    print('[DEBUG] BoardDetailsPage: boardTitle = ${widget.board.boardTitle}');
+    print('[DEBUG] BoardDetailsPage: boardIsDeleted = ${widget.board.boardIsDeleted}');
+    print('[DEBUG] BoardDetailsPage: widget.board = $widget.board');
 
     // Initialize streams after the first frame
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Start streaming tasks for this board
+      print('[DEBUG] BoardDetailsPage: calling streamTasksByBoard with boardId = ${widget.board.boardId}');
       context.read<TaskProvider>().streamTasksByBoard(widget.board.boardId);
 
       // Start streaming board stats
       context.read<BoardStatsProvider>().streamStatsForBoard(
         widget.board.boardId,
       );
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _toggleSearch() {
+    setState(() {
+      _isSearchExpanded = !_isSearchExpanded;
+      if (!_isSearchExpanded) {
+        _searchController.clear();
+        _searchQuery = '';
+      }
     });
   }
 
@@ -59,6 +81,47 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
         showBackButton: true,
         onBackPressed: () => Navigator.pop(context),
         showNotificationButton: false,
+        isSearchExpanded: _isSearchExpanded,
+        searchController: _searchController,
+        onSearchPressed: _toggleSearch,
+        onSearchChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+        },
+        onSearchClear: () {
+          setState(() {
+            _searchController.clear();
+            _searchQuery = '';
+          });
+        },
+        customActions: [
+          if (!_isSearchExpanded) ...[        
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: _toggleSearch,
+            ),
+            PopupMenuButton(
+              icon: const Icon(Icons.more_vert),
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  child: const Text('Edit'),
+                  onTap: () {
+                    // TODO: Navigate to edit board page
+                    print('[DEBUG] BoardDetailsPage: Edit tapped for boardId = ${widget.board.boardId}');
+                  },
+                ),
+                PopupMenuItem(
+                  child: const Text('Delete', style: TextStyle(color: Colors.red)),
+                  onTap: () {
+                    // TODO: Implement board deletion
+                    print('[DEBUG] BoardDetailsPage: Delete tapped for boardId = ${widget.board.boardId}');
+                  },
+                ),
+              ],
+            ),
+          ],
+        ],
       ),
       drawer: AppSideMenu(
         onSelect: (sideMenuIndex) {

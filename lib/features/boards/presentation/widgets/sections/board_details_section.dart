@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../../datasources/providers/board_stats_provider.dart';
 import '../../../datasources/providers/board_provider.dart';
 import 'package:provider/provider.dart';
-import '../dialogs/edit_board_dialog.dart';
 import 'board_members_section.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
@@ -64,7 +63,6 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
         final progress = taskTotal > 0 ? taskDone / taskTotal : 0.0;
         final percentage =
             taskTotal > 0 ? (progress * 100).toStringAsFixed(1) : '0.0';
-        final isManager = board.boardManagerId == currentUserId;
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 4.0),
@@ -127,23 +125,12 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                   ),
                   IconButton(
                     icon: Icon(
-                      Icons.insights,
-                      color: widget.showStats ? Colors.blue : const Color(0xFF7986CB),
+                      widget.showStats ? Icons.task : Icons.assessment,
                     ),
                     onPressed: () {
                       widget.onStatsToggle(!widget.showStats);
                     },
                   ),
-                  if (isManager)
-                    IconButton(
-                      icon: const Icon(Icons.edit),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (context) => EditBoardDialog(board: board),
-                        );
-                      },
-                    ),
                 ],
               ),
               const SizedBox(height: 8),

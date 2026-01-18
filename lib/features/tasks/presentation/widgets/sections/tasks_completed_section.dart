@@ -63,7 +63,7 @@ class TasksCompletedSection extends StatelessWidget {
                     taskProvider.toggleTaskDone(
                       task.copyWith(
                         taskIsDone: isDone ?? false,
-                        taskStatus: (isDone ?? false) ? 'COMPLETED' : 'TODO',
+                        taskStatus: (isDone ?? false) ? 'COMPLETED' : 'To Do',
                       ),
                     );
                   },

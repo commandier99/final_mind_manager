@@ -96,17 +96,13 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
   }
 
   Color _getStatusColor(String status) {
-    switch (status.toUpperCase()) {
-      case 'TODO':
+    switch (status) {
+      case 'To Do':
         return Colors.grey;
-      case 'IN_PROGRESS':
+      case 'In Progress':
         return Colors.blue;
-      case 'IN_REVIEW':
-        return Colors.purple;
-      case 'ON_PAUSE':
+      case 'Paused':
         return Colors.orange;
-      case 'UNDER_REVISION':
-        return Colors.red;
       case 'COMPLETED':
         return Colors.green;
       default:
@@ -115,17 +111,13 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
   }
 
   IconData _getStatusIcon(String status) {
-    switch (status.toUpperCase()) {
-      case 'TODO':
+    switch (status) {
+      case 'To Do':
         return Icons.circle_outlined;
-      case 'IN_PROGRESS':
+      case 'In Progress':
         return Icons.autorenew;
-      case 'IN_REVIEW':
-        return Icons.visibility;
-      case 'ON_PAUSE':
+      case 'Paused':
         return Icons.pause_circle;
-      case 'UNDER_REVISION':
-        return Icons.edit;
       case 'COMPLETED':
         return Icons.check_circle;
       default:
@@ -176,29 +168,60 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Slidable(
         key: ValueKey(widget.task.taskId),
-        endActionPane: canDelete ? ActionPane(
-          motion: const DrawerMotion(),
-          extentRatio: 0.25,
-          children: [
-            SlidableAction(
-              onPressed: (_) => _handleDelete(context),
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              icon: Icons.delete,
-              label: 'Delete',
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ],
-        ) : null,
-        child: GestureDetector(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => TaskDetailsPage(task: widget.task),
-              ),
-            );
-          },
-          child: Card(
+        endActionPane: canDelete
+            ? ActionPane(
+                motion: const DrawerMotion(),
+                extentRatio: 0.25,
+                children: [
+                  Expanded(
+                    child: Container(
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade400,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () => _handleDelete(context),
+                            borderRadius: BorderRadius.circular(8),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.delete, color: Colors.white, size: 20),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Delete',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : null,
+        child: Builder(
+          builder: (context) => GestureDetector(
+            onTap: () {
+              Slidable.of(context)?.close();
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => TaskDetailsPage(task: widget.task),
+                ),
+              );
+            },
+            child: Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.zero,
@@ -466,7 +489,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
           ),
         ),
       ),
-    );
+    ));
   }
 
   double _getProgress() {
@@ -667,7 +690,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       // Create updated task with new status
       final updatedTask = widget.task.copyWith(
         taskIsDone: isDone,
-        taskStatus: isDone ? 'COMPLETED' : 'TODO',
+        taskStatus: isDone ? 'COMPLETED' : 'To Do',
       );
       
       // Toggle the task done status

@@ -4,6 +4,7 @@ import '../../datasources/models/board_model.dart';
 import '../../datasources/providers/board_provider.dart';
 import '../../datasources/providers/board_stats_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../tasks/datasources/providers/task_provider.dart';
 import '../widgets/cards/board_card.dart';
 import '../widgets/dialogs/add_board_button.dart';
 import 'board_details_page.dart';
@@ -87,6 +88,195 @@ class _BoardsPageState extends State<BoardsPage> {
         },
       );
     });
+  }
+
+  Future<void> _handleBoardDeletion(Board board) async {
+    final taskProvider = context.read<TaskProvider>();
+    final boardProvider = context.read<BoardProvider>();
+    
+    // Check if board has tasks
+    final boardTasks = taskProvider.tasks.where((task) => task.taskBoardId == board.boardId).toList();
+    
+    if (boardTasks.isEmpty) {
+      // No tasks, proceed with deletion
+      boardProvider.softDeleteBoard(board);
+      return;
+    }
+    
+    // Board has tasks, show dialog with options
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Board with Tasks'),
+        content: Text(
+          'This board has ${boardTasks.length} task(s). What would you like to do?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _showMigrationDialog(board, boardTasks);
+            },
+            child: const Text('Migrate Tasks'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _confirmDeleteBoardAndTasks(board, boardTasks);
+            },
+            child: const Text('Delete All', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMigrationDialog(Board fromBoard, List<dynamic> tasksToMigrate) {
+    final boardProvider = context.read<BoardProvider>();
+    final otherBoards = boardProvider.boards
+        .where((b) => b.boardId != fromBoard.boardId && !b.boardIsDeleted)
+        .toList();
+    
+    if (otherBoards.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No other boards available to migrate tasks to')),
+      );
+      return;
+    }
+    
+    Board? selectedBoard;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Select Destination Board'),
+        content: StatefulBuilder(
+          builder: (context, setState) => DropdownButton<Board>(
+            isExpanded: true,
+            hint: const Text('Choose a board'),
+            value: selectedBoard,
+            items: otherBoards.map((board) {
+              return DropdownMenuItem<Board>(
+                value: board,
+                child: Text(board.boardTitle),
+              );
+            }).toList(),
+            onChanged: (board) {
+              setState(() {
+                selectedBoard = board;
+              });
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: selectedBoard == null
+                ? null
+                : () {
+                    Navigator.pop(context);
+                    _performMigration(fromBoard, selectedBoard!, tasksToMigrate);
+                  },
+            child: const Text('Migrate'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performMigration(Board fromBoard, Board toBoard, List<dynamic> tasksToMigrate) async {
+    final taskProvider = context.read<TaskProvider>();
+    final boardProvider = context.read<BoardProvider>();
+    
+    try {
+      // Migrate each task to the new board
+      for (var task in tasksToMigrate) {
+        final migratedTask = task.copyWith(taskBoardId: toBoard.boardId);
+        await taskProvider.updateTask(migratedTask);
+      }
+      
+      // Delete the board
+      boardProvider.softDeleteBoard(fromBoard);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${tasksToMigrate.length} task(s) migrated to ${toBoard.boardTitle}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error migrating tasks: $e')),
+        );
+      }
+    }
+  }
+
+  void _confirmDeleteBoardAndTasks(Board board, List<dynamic> tasksToDelete) {
+    final taskProvider = context.read<TaskProvider>();
+    final boardProvider = context.read<BoardProvider>();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text(
+          'Are you sure you want to delete this board and all ${tasksToDelete.length} task(s)?'
+          '\n\nThis action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteTasksAndBoard(board, tasksToDelete, taskProvider, boardProvider);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteTasksAndBoard(
+    Board board,
+    List<dynamic> tasksToDelete,
+    dynamic taskProvider,
+    dynamic boardProvider,
+  ) async {
+    try {
+      // Delete all tasks
+      for (var task in tasksToDelete) {
+        await taskProvider.deleteTask(task.taskId);
+      }
+      
+      // Delete the board
+      boardProvider.softDeleteBoard(board);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Board and ${tasksToDelete.length} task(s) deleted')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error deleting board: $e')),
+        );
+      }
+    }
   }
 
   List<Board> _filterBoards(List<Board> boards) {
@@ -181,32 +371,40 @@ class _BoardsPageState extends State<BoardsPage> {
                   );
                 }
 
-                print(
-                  '[DEBUG] BoardsPage: Building ListView with ${filteredBoards.length} boards.',
-                );
                 return ListView.builder(
                   itemCount: filteredBoards.length,
                   itemBuilder: (context, index) {
                     final board = filteredBoards[index];
-                    return BoardCard(
-                      board: board,
-                      onTap: () {
-                        print(
-                          '[DEBUG] BoardsPage: BoardCard tapped. boardId = ${board.boardId}',
-                        );
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                BoardDetailsPage(board: board),
+                    return Column(
+                      children: [
+                        BoardCard(
+                          board: board,
+                          onTap: () {
+                            print(
+                              '[DEBUG] BoardsPage: BoardCard tapped. boardId = ${board.boardId}',
+                            );
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    BoardDetailsPage(board: board),
+                              ),
+                            );
+                          },
+                          onDelete: () {
+                            print(
+                              '[DEBUG] BoardsPage: Deleting board. boardId = ${board.boardId}',
+                            );
+                            _handleBoardDeletion(board);
+                          },
+                        ),
+                        // Add divider after Personal board
+                        if (board.boardTitle == 'Personal')
+                          Divider(
+                            height: 16,
+                            thickness: 1,
+                            color: Colors.grey[300],
                           ),
-                        );
-                      },
-                      onDelete: () {
-                        print(
-                          '[DEBUG] BoardsPage: Deleting board. boardId = ${board.boardId}',
-                        );
-                        boardProvider.softDeleteBoard(board);
-                      },
+                      ],
                     );
                   },
                 );

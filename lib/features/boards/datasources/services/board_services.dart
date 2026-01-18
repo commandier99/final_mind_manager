@@ -27,6 +27,9 @@ class BoardService {
     final boardRef = _boardCollection.doc();
     final now = DateTime.now();
 
+    print('[DEBUG] BoardService: Creating new board with ID = ${boardRef.id}');
+    print('[DEBUG] BoardService: Title = $boardTitle');
+
     final newBoard = Board(
       boardId: boardRef.id,
       boardManagerId: user.uid,
@@ -381,6 +384,7 @@ class BoardService {
   }
 
   Future<void> softDeleteBoard(Board board) async {
+    print('[DEBUG] BoardService: soft deleting board ${board.boardId} with title ${board.boardTitle}');
     final user = _auth.currentUser;
     final updatedBoard = board.copyWith(
       boardIsDeleted: true,
@@ -390,6 +394,7 @@ class BoardService {
     );
 
     await _boardCollection.doc(board.boardId).update(updatedBoard.toMap());
+    print('[DEBUG] BoardService: board ${board.boardId} soft-deleted successfully');
   }
 
   Future<void> restoreBoard(Board board) async {

@@ -280,6 +280,17 @@ class TaskProvider extends ChangeNotifier {
       // Pass task object to hardDeleteTask so it can log the activity event
       await _taskService.hardDeleteTask(taskId, task: taskToDelete);
 
+      // Update board stats (same as softDeleteTask)
+      if (taskToDelete != null && taskToDelete.taskBoardId.isNotEmpty) {
+        await _boardStatsService.incrementStats(
+          taskToDelete.taskBoardId,
+          tasksDeleted: 1,
+          tasksAdded: -1, // Decrement total tasks
+          tasksDone:
+              taskToDelete.taskIsDone ? -1 : 0, // Decrement done if task was done
+        );
+      }
+
       // Track activity for task deletion using the task owner
       if (taskToDelete != null) {
         print(

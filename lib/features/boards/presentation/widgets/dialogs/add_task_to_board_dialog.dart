@@ -211,7 +211,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskDeletedAt: null,
         taskStats: TaskStats(),
         taskPriorityLevel: _priorityLevel,
-        taskStatus: 'TODO',
+        taskStatus: 'To Do',
         taskRequiresApproval: false,
         taskIsRepeating: _isRepeating,
         taskRepeatInterval: _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,

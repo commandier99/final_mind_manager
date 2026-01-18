@@ -27,9 +27,9 @@ class Task {
 
   final TaskStats taskStats; // TaskStats model for task stats
 
-  // Status field - tracks task workflow state
+  // Status field - tracks task workflow state (core statuses only)
   final String
-  taskStatus; // e.g. 'TODO', 'IN_PROGRESS', 'IN_REVIEW', 'ON_PAUSE', 'UNDER_REVISION', 'COMPLETED'
+  taskStatus; // e.g. 'To Do', 'In Progress', 'Paused', 'Completed'
 
   // Approval fields - optional, only used if task requires approval
   final bool taskRequiresApproval; // Whether this task needs approval
@@ -69,7 +69,7 @@ class Task {
     this.taskIsDone = false,
     this.taskIsDoneAt,
     required this.taskStats, // TaskStats passed as a parameter
-    this.taskStatus = 'TODO',
+    this.taskStatus = 'To Do',
     this.taskRequiresApproval = false,
     this.taskSubmissionId,
     this.taskIsRepeating = false,
@@ -81,6 +81,48 @@ class Task {
     this.taskHelpers = const [],
     this.taskHelperNames = const {},
   });
+
+  // Helper to map legacy Firestore statuses to core statuses
+  static String _mapStatusFromFirestore(String status) {
+    switch (status.toUpperCase()) {
+      case 'TODO':
+      case 'TO DO':
+        return 'To Do';
+      case 'IN_PROGRESS':
+      case 'IN PROGRESS':
+        return 'In Progress';
+      case 'ON_PAUSE':
+      case 'PAUSED':
+        return 'Paused';
+      case 'COMPLETED':
+        return 'COMPLETED';
+      // Legacy states map to In Progress
+      case 'IN_REVIEW':
+      case 'UNDER_REVISION':
+        return 'In Progress';
+      default:
+        return 'To Do';
+    }
+  }
+
+  // Computed deadline state getters
+  bool get isOverdue {
+    if (taskIsDone || taskDeadline == null) return false;
+    return DateTime.now().isAfter(taskDeadline!);
+  }
+
+  bool get isDueToday {
+    if (taskIsDone || taskDeadline == null) return false;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final deadlineDay = DateTime(taskDeadline!.year, taskDeadline!.month, taskDeadline!.day);
+    return deadlineDay == today;
+  }
+
+  bool get isDueUpcoming {
+    if (taskIsDone || taskDeadline == null || isOverdue || isDueToday) return false;
+    return DateTime.now().isBefore(taskDeadline!);
+  }
 
   // Factory to create Task from Firestore document
   factory Task.fromMap(Map<String, dynamic> data, String documentId) {
@@ -107,7 +149,7 @@ class Task {
           data['taskStats'] != null
               ? TaskStats.fromMap(Map<String, dynamic>.from(data['taskStats']))
               : TaskStats(), // Fallback to empty TaskStats if null
-      taskStatus: data['taskStatus'] as String? ?? 'TODO',
+      taskStatus: _mapStatusFromFirestore(data['taskStatus'] as String? ?? 'To Do'),
       taskRequiresApproval: data['taskRequiresApproval'] as bool? ?? false,
       taskSubmissionId: data['taskSubmissionId'] as String?,
       taskIsRepeating: data['taskIsRepeating'] as bool? ?? false,

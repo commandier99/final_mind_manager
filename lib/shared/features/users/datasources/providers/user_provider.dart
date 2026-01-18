@@ -126,6 +126,17 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
+  /// Get profile picture for a specific user by ID
+  Future<String?> getUserProfilePicture(String userId) async {
+    try {
+      final user = await _userService.getUserById(userId);
+      return user?.userProfilePicture;
+    } catch (e) {
+      if (kDebugMode) print('⚠️ [UserProvider] Error getting user profile picture: $e');
+      return null;
+    }
+  }
+
   Future<void> signOut() async {
     await _auth.signOut();
     _currentUser = null;

@@ -5,11 +5,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/authentication_service.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../shared/features/users/datasources/services/user_services.dart';
+import '../../../../../../features/boards/datasources/services/board_services.dart';
 
 class AuthenticationProvider extends ChangeNotifier {
   final AuthenticationService _authService = AuthenticationService();
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final UserService _userService = UserService();
+  final BoardService _boardService = BoardService();
 
   User? _user;
   bool _isLoading = false;
@@ -132,6 +134,14 @@ class AuthenticationProvider extends ChangeNotifier {
       print('🔵 [AuthenticationProvider] Firebase sign-in complete. User: ${_user?.email}');
 
       if (_user != null) {
+        // Check if user document already exists to determine if this is a new user
+        print('🔵 [AuthenticationProvider] Checking if user document exists...');
+        final userDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_user!.uid)
+            .get();
+        final isNewUser = !userDoc.exists;
+        
         // Always create/update user document for Google sign-in users
         print('🔵 [AuthenticationProvider] Creating/updating user document...');
         try {
@@ -152,6 +162,23 @@ class AuthenticationProvider extends ChangeNotifier {
           );
           await _userService.saveUser(newUser);
           print('✅ [AuthenticationProvider] User document and userStats saved for Google sign-in');
+          
+          // Only create a default "Personal" board for NEW users
+          if (isNewUser) {
+            try {
+              await _boardService.addBoard(
+                boardTitle: 'Personal',
+                boardGoal: 'Personal tasks and projects',
+                boardGoalDescription: 'A space to manage your personal tasks and projects',
+              );
+              print('✅ [AuthenticationProvider] Personal board created for NEW Google user ${_user!.uid}');
+            } catch (e) {
+              print('⚠️ [AuthenticationProvider] Error creating Personal board: $e');
+              // Don't throw - user account was created successfully
+            }
+          } else {
+            print('ℹ️ [AuthenticationProvider] Existing user, skipping Personal board creation');
+          }
         } catch (e) {
           print('❌ [AuthenticationProvider] Error creating user document: $e');
           _error = 'Failed to create user profile: $e';

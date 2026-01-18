@@ -40,10 +40,8 @@ class _PlansPageState extends State<PlansPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final userId = context.read<UserProvider>().userId;
-    if (userId != null && !_initialized) {
+    if (userId != null) {
       _userId = userId;
-      _initialized = true;
-      Provider.of<PlanProvider>(context, listen: false).loadUserPlans(userId);
     }
   }
 
@@ -119,17 +117,30 @@ class _PlansPageState extends State<PlansPage> {
         label: const Text('New Plan'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(8),
         child: _userId == null
             ? const Center(child: CircularProgressIndicator())
             : Consumer<PlanProvider>(
                 builder: (context, planProvider, _) {
-                  final plans = planProvider.userPlans;
-                  final filteredPlans = _filterPlans(plans);
+                  return StreamBuilder<List<Plan>>(
+                    stream: planProvider.streamUserPlans(_userId!),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text('Error loading plans: ${snapshot.error}'),
+                        );
+                      }
+
+                      final plans = snapshot.data ?? [];
+                      final filteredPlans = _filterPlans(plans);
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                       const SizedBox(height: 16),
 
                       Expanded(
@@ -216,7 +227,8 @@ class _PlansPageState extends State<PlansPage> {
                                 },
                               ),
                       ),
-                    ],
+                      ]);
+                    },
                   );
                 },
               ),

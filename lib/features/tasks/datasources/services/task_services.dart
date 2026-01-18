@@ -164,16 +164,26 @@ class TaskService {
   Stream<List<Task>> streamTasks({String? boardId, String? ownerId}) {
     Query query = _tasks.where('taskIsDeleted', isEqualTo: false);
 
-    if (boardId != null) query = query.where('taskBoardId', isEqualTo: boardId);
-    if (ownerId != null) query = query.where('taskOwnerId', isEqualTo: ownerId);
+    if (boardId != null) {
+      print('[DEBUG] TaskService: Streaming tasks for boardId = $boardId');
+      query = query.where('taskBoardId', isEqualTo: boardId);
+    }
+    if (ownerId != null) {
+      print('[DEBUG] TaskService: Streaming tasks for ownerId = $ownerId');
+      query = query.where('taskOwnerId', isEqualTo: ownerId);
+    }
 
     query = query.orderBy('taskCreatedAt', descending: true);
 
     return query.snapshots().map((snapshot) {
-      return snapshot.docs
+      final tasks = snapshot.docs
           .map((doc) {
             try {
-              return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+              final task = Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+              if (boardId != null) {
+                print('[DEBUG] TaskService: Loaded task ${task.taskId} for board $boardId with taskBoardId = ${task.taskBoardId}');
+              }
+              return task;
             } catch (e) {
               print('⚠️ Error parsing task ${doc.id}: $e');
               return null;
@@ -181,6 +191,11 @@ class TaskService {
           })
           .whereType<Task>()
           .toList(); // filter out nulls
+      
+      if (boardId != null) {
+        print('[DEBUG] TaskService: Returning ${tasks.length} tasks for boardId = $boardId');
+      }
+      return tasks;
     });
   }
 
