@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
@@ -20,10 +19,12 @@ class TaskSubmissionService {
   // ========================
 
   /// Upload files and create submission
+  /// onProgress callback: (submissionId, currentFile, totalFiles, fileName, progress)
   Future<String> createSubmission({
     required String taskId,
     required List<PlatformFile> files,
     String? message,
+    Function(String, int, int, String, double)? onProgress,
   }) async {
     try {
       print('📤 [Upload] Starting submission for task: $taskId');
@@ -53,6 +54,9 @@ class TaskSubmissionService {
 
         if (file.bytes != null) {
           print('📤 [Upload] Uploading to Cloudinary...');
+          
+          // Report progress
+          onProgress?.call(submissionId, i + 1, files.length, file.name, 0.0);
 
           // Upload to Cloudinary
           final uploadResult = await _cloudinary.uploadSubmissionFile(
@@ -64,6 +68,9 @@ class TaskSubmissionService {
           print('📤 [Upload] Upload successful!');
           print('📤 [Upload] URL: ${uploadResult['url']}');
           print('📤 [Upload] Public ID: ${uploadResult['publicId']}');
+          
+          // Report progress complete for this file
+          onProgress?.call(submissionId, i + 1, files.length, file.name, 1.0);
 
           // Get file extension
           final fileType = file.extension ?? 'unknown';
@@ -208,6 +215,95 @@ class TaskSubmissionService {
     }
   }
 
+  /// Get total uploaded bytes for a specific task (sum of all submission files)
+  Future<int> getTotalBytesForTask(String taskId) async {
+    try {
+      final snapshot = await _submissions
+          .where('taskId', isEqualTo: taskId)
+          .get();
+
+      int total = 0;
+      for (final doc in snapshot.docs) {
+        final data = doc.data() as Map<String, dynamic>;
+        final files = (data['files'] as List<dynamic>?) ?? [];
+        for (final f in files) {
+          final fileSize = (f as Map<String, dynamic>)['fileSize'] as int? ?? 0;
+          total += fileSize;
+        }
+      }
+      return total;
+    } catch (e) {
+      print('⚠️ Error calculating total task bytes: $e');
+      return 0;
+    }
+  }
+
+  // ========================
+  // DELETE SUBMISSION
+  // ========================
+
+  /// Deletes a submission document and updates the related task.
+  /// Note: Cloudinary deletion is not supported by cloudinary_public; files remain in storage.
+  Future<void> deleteSubmission(String submissionId) async {
+    try {
+      // Get submission to obtain taskId and details for logging
+      final doc = await _submissions.doc(submissionId).get();
+      if (!doc.exists) return;
+
+      final data = doc.data() as Map<String, dynamic>;
+      final String taskId = data['taskId'] as String? ?? '';
+      final String submittedBy = data['submittedBy'] as String? ?? '';
+      final String submittedByName = data['submittedByName'] as String? ?? 'Unknown';
+      final List<dynamic> files = (data['files'] as List<dynamic>?) ?? [];
+
+      // Delete submission document
+      await _submissions.doc(submissionId).delete();
+
+      // Update task: clear submissionId and reset status if needed
+      final taskRef = _firestore.collection('tasks').doc(taskId);
+      final taskDoc = await taskRef.get();
+      if (taskDoc.exists) {
+        final taskData = taskDoc.data() as Map<String, dynamic>;
+        final currentSubmissionId = taskData['taskSubmissionId'] as String?;
+        final currentStatus = taskData['taskStatus'] as String?;
+        final updates = <String, dynamic>{};
+
+        if (currentSubmissionId == submissionId) {
+          updates['taskSubmissionId'] = null;
+        }
+        if (currentStatus == 'IN_REVIEW') {
+          updates['taskStatus'] = 'IN_PROGRESS';
+        }
+        if (updates.isNotEmpty) {
+          await taskRef.update(updates);
+        }
+      }
+
+      // Log deletion activity
+      try {
+        final taskDoc = await _firestore.collection('tasks').doc(taskId).get();
+        final boardId = (taskDoc.data() as Map<String, dynamic>?)?['taskBoardId'];
+        await _activityEventService.logEvent(
+          userId: submittedBy,
+          userName: submittedByName,
+          activityType: 'file_submission_deleted',
+          boardId: boardId,
+          taskId: taskId,
+          description: 'Deleted a submission',
+          metadata: {
+            'submissionId': submissionId,
+            'fileCount': files.length,
+          },
+        );
+      } catch (e) {
+        print('⚠️ Failed to log deletion activity: $e');
+      }
+    } catch (e) {
+      print('⚠️ Error deleting submission: $e');
+      rethrow;
+    }
+  }
+
   // ========================
   // UPDATE SUBMISSION
   // ========================
@@ -259,35 +355,5 @@ class TaskSubmissionService {
     }
   }
 
-  // ========================
-  // DELETE SUBMISSION
-  // ========================
 
-  /// Delete submission and its files
-  Future<void> deleteSubmission(String submissionId) async {
-    try {
-      final submission = await getSubmissionById(submissionId);
-      if (submission == null) return;
-
-      // Note: Cloudinary free tier doesn't support deletion via API
-      // Files will remain in Cloudinary but are not accessible via the app
-      print(
-        '⚠️ Files remain in Cloudinary (deletion not supported in free tier)',
-      );
-
-      // Delete submission document
-      await _submissions.doc(submissionId).delete();
-
-      // Update task to remove submission reference
-      await _firestore.collection('tasks').doc(submission.taskId).update({
-        'taskSubmissionId': FieldValue.delete(),
-        'taskStatus': 'TODO',
-      });
-
-      print('✅ Submission deleted: $submissionId');
-    } catch (e) {
-      print('⚠️ Error deleting submission: $e');
-      rethrow;
-    }
-  }
 }

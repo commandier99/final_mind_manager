@@ -327,6 +327,18 @@ class TaskEngagementSection extends StatelessWidget {
                     color: Colors.purple.shade700,
                   ),
                 ),
+                const SizedBox(height: 4),
+                if (task.taskBoardTitle != null)
+                  Text(
+                    task.taskBoardTitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -385,6 +397,18 @@ class TaskEngagementSection extends StatelessWidget {
                     color: Colors.orange.shade700,
                   ),
                 ),
+                const SizedBox(height: 4),
+                if (task.taskBoardTitle != null)
+                  Text(
+                    task.taskBoardTitle!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
               ],
             ),
           ),
@@ -439,7 +463,22 @@ class TaskEngagementSection extends StatelessWidget {
                     color: Colors.black87,
                   ),
                 ),
-                const SizedBox(height: 4),
+                if (task.taskBoardTitle != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, bottom: 4),
+                    child: Text(
+                      task.taskBoardTitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.grey.shade500,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  )
+                else
+                  const SizedBox(height: 4),
                 Row(
                   children: [
                     Icon(

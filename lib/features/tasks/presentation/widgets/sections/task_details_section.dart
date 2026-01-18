@@ -7,12 +7,16 @@ import '../../../datasources/services/task_submission_service.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../dialogs/edit_task_dialog.dart';
-import '../dialogs/file_submissions_dialog.dart';
 
 class TaskDetailsSection extends StatefulWidget {
   final String taskId;
+  final VoidCallback? onFileUploadPressed;
 
-  const TaskDetailsSection({super.key, required this.taskId});
+  const TaskDetailsSection({
+    super.key,
+    required this.taskId,
+    this.onFileUploadPressed,
+  });
 
   @override
   State<TaskDetailsSection> createState() => _TaskDetailsSectionState();
@@ -21,7 +25,6 @@ class TaskDetailsSection extends StatefulWidget {
 class _TaskDetailsSectionState extends State<TaskDetailsSection> {
   bool _isDescriptionExpanded = false;
   final TaskSubmissionService _submissionService = TaskSubmissionService();
-  bool _isUploading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -107,15 +110,9 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                       // Only show upload icon for board tasks
                       if (task.taskBoardId.isNotEmpty && _canToggleTask(task, currentUserId))
                         IconButton(
-                          icon: _isUploading 
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.upload_file),
+                          icon: const Icon(Icons.upload_file),
                           tooltip: 'View/Upload files',
-                          onPressed: _isUploading ? null : () => _showFileSubmissionsDialog(task),
+                          onPressed: widget.onFileUploadPressed,
                         ),
                     ],
                   ),
@@ -489,52 +486,5 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     return days.map((day) => day.substring(0, 3)).join(', ');
   }
 
-  Future<void> _pickAndUploadFiles(Task task) async {
-    try {
-      setState(() => _isUploading = true);
-
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: FileType.any,
-        withData: true,
-      );
-
-      if (result != null && result.files.isNotEmpty) {
-        await _submissionService.createSubmission(
-          taskId: task.taskId,
-          files: result.files,
-        );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Files uploaded successfully!'),
-              backgroundColor: Color(0xFF66BB6A),
-            ),
-          );
-        }
-      }
-
-      if (mounted) {
-        setState(() => _isUploading = false);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error uploading files: $e'),
-            backgroundColor: const Color(0xFF9C88D4),
-          ),
-        );
-        setState(() => _isUploading = false);
-      }
-    }
-  }
-
-  void _showFileSubmissionsDialog(Task task) {
-    showDialog(
-      context: context,
-      builder: (context) => FileSubmissionsDialog(task: task),
-    );
-  }
+  
 }

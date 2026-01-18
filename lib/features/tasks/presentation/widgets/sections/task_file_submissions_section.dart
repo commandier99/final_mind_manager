@@ -5,8 +5,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/models/task_submission_model.dart';
 import '../../../datasources/services/task_submission_service.dart';
-import '../../../datasources/providers/task_provider.dart';
+import '../../../datasources/providers/upload_progress_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../../boards/datasources/providers/board_provider.dart';
 
 class TaskFileSubmissionsSection extends StatefulWidget {
   final Task task;
@@ -21,10 +22,33 @@ class TaskFileSubmissionsSection extends StatefulWidget {
 class _TaskFileSubmissionsSectionState
     extends State<TaskFileSubmissionsSection> {
   final TaskSubmissionService _submissionService = TaskSubmissionService();
-  bool _isUploading = false;
+
+  @override
+  void dispose() {
+    // Upload continues in background even after dispose
+    print('🗑️ [FileSubmissions] Widget disposed, upload continues in background');
+    super.dispose();
+  }
 
   Future<void> _pickAndUploadFiles() async {
     try {
+      // Check current storage usage before opening file picker
+      const int maxBytes = 100 * 1024 * 1024; // 100 MB
+      final int existingBytes = await _submissionService.getTotalBytesForTask(widget.task.taskId);
+      
+      if (existingBytes >= maxBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Task storage limit reached. Cannot upload more files.'),
+              backgroundColor: Color(0xFF9C88D4),
+              duration: Duration(seconds: 3),
+            ),
+          );
+        }
+        return;
+      }
+
       print('📁 [FilePicker] Opening file picker...');
 
       FilePickerResult? result = await FilePicker.platform.pickFiles(
@@ -48,23 +72,79 @@ class _TaskFileSubmissionsSectionState
           print('📁 [FilePicker] - Extension: ${file.extension}');
         }
 
-        setState(() => _isUploading = true);
+        // Enforce max 100MB per task capacity (existing + new)
+        const int maxBytes = 100 * 1024 * 1024; // 100 MB
+        final int existingBytes = await _submissionService.getTotalBytesForTask(widget.task.taskId);
+        final int newBytes = result.files.fold<int>(0, (sum, f) => sum + (f.size));
+        final int totalAfterUpload = existingBytes + newBytes;
 
-        await _submissionService.createSubmission(
+        if (totalAfterUpload > maxBytes) {
+          final usedMb = (existingBytes / (1024 * 1024)).toStringAsFixed(1);
+          final newMb = (newBytes / (1024 * 1024)).toStringAsFixed(1);
+          final limitMb = (maxBytes / (1024 * 1024)).toStringAsFixed(0);
+          final remainingBytes = maxBytes - existingBytes;
+          final remainingMb = (remainingBytes / (1024 * 1024)).clamp(0, 100).toStringAsFixed(1);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Task storage limit ${limitMb}MB exceeded. Used: ${usedMb}MB, New: ${newMb}MB, Remaining: ${remainingMb}MB.'),
+                backgroundColor: const Color(0xFF9C88D4),
+              ),
+            );
+          }
+          return;
+        }
+
+        // Start background upload - doesn't await, continues in background
+        final uploadProgressProvider = context.read<UploadProgressProvider>();
+        
+        _submissionService.createSubmission(
           taskId: widget.task.taskId,
           files: result.files,
-        );
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Files uploaded successfully!'),
-              backgroundColor: Color(0xFF66BB6A),
-            ),
-          );
-          setState(() => _isUploading = false);
-        }
+          onProgress: (submissionId, currentFile, totalFiles, fileName, progress) {
+            uploadProgressProvider.updateProgress(
+              submissionId: submissionId,
+              fileName: fileName,
+              currentFile: currentFile,
+              totalFiles: totalFiles,
+              progress: progress,
+            );
+          },
+        ).then((submissionId) {
+          print('✅ [Upload] Background upload completed for task ${widget.task.taskId}');
+          uploadProgressProvider.clearProgress(submissionId);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Files uploaded successfully!'),
+                backgroundColor: Color(0xFF66BB6A),
+              ),
+            );
+          } else {
+            // Widget disposed during upload, but upload completed in background
+            print('🗑️ [Upload] Widget disposed, upload completed in background');
+          }
+        }).catchError((e) {
+          print('❌ [Upload] Background upload failed: $e');
+          final uploadProgressProvider = context.read<UploadProgressProvider>();
+          // Clear all active uploads on error
+          for (final submissionId in uploadProgressProvider.uploads.keys.toList()) {
+            uploadProgressProvider.clearProgress(submissionId);
+          }
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error uploading files: $e'),
+                backgroundColor: const Color(0xFF9C88D4),
+              ),
+            );
+          } else {
+            // Widget disposed during error handling
+            print('🗑️ [Upload] Widget disposed during error handling');
+          }
+        });
       } else {
+        // User cancelled picker without selecting files
         print('📁 [FilePicker] No files selected or result is null');
       }
     } catch (e) {
@@ -72,11 +152,10 @@ class _TaskFileSubmissionsSectionState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error uploading files: $e'),
+            content: Text('Error: $e'),
             backgroundColor: const Color(0xFF9C88D4),
           ),
         );
-        setState(() => _isUploading = false);
       }
     }
   }
@@ -106,6 +185,85 @@ class _TaskFileSubmissionsSectionState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Show persistent upload progress for all active uploads
+          Consumer<UploadProgressProvider>(
+            builder: (context, uploadProgress, _) {
+              if (!uploadProgress.isUploading) {
+                return const SizedBox.shrink();
+              }
+              return Column(
+                children: uploadProgress.uploads.entries.map((entry) {
+                  final upload = entry.value;
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade50,
+                      border: Border.all(color: Colors.blue.shade200),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Uploading...',
+                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    upload.fileName,
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              '${(upload.fileProgress * 100).toStringAsFixed(0)}%',
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: upload.fileProgress,
+                        minHeight: 4,
+                        backgroundColor: Colors.blue.shade200,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+                      ),
+                    ),
+                  ],
+                    ),
+                  );
+                }).toList(),
+              );
+            },
+          ),
+          
           // Section header
           Text(
             'File Submissions',
@@ -120,21 +278,11 @@ class _TaskFileSubmissionsSectionState
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _isUploading ? null : _pickAndUploadFiles,
-                icon:
-                    _isUploading
-                        ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                        : const Icon(Icons.attach_file, size: 24),
-                label: Text(
-                  _isUploading ? 'Uploading Files...' : 'Attach Files',
-                  style: const TextStyle(
+                onPressed: _pickAndUploadFiles,
+                icon: const Icon(Icons.attach_file, size: 24),
+                label: const Text(
+                  'Attach Files',
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
                   ),
@@ -223,49 +371,123 @@ class _TaskFileSubmissionsSectionState
                 );
               }
 
-              if (submissions.isEmpty) {
-                return Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
+              // Compute storage usage
+              const int maxBytes = 100 * 1024 * 1024; // 100MB
+              int usedBytes = 0;
+              for (final s in submissions) {
+                for (final f in s.files) {
+                  print('📊 [Storage] File: ${f.fileName}, Size: ${f.fileSize} bytes');
+                  usedBytes += f.fileSize;
+                }
+              }
+              print('📊 [Storage] Total used bytes: $usedBytes');
+              print('📊 [Storage] Max bytes: $maxBytes');
+              final double progress = (usedBytes / maxBytes).clamp(0.0, 1.0);
+              final String usedMb = (usedBytes / (1024 * 1024)).toStringAsFixed(1);
+              final String remainingMb = ((maxBytes - usedBytes) / (1024 * 1024)).clamp(0, 100).toStringAsFixed(1);
+              print('📊 [Storage] Progress: $progress');
+              print('📊 [Storage] Used MB: $usedMb');
+              print('📊 [Storage] Remaining MB: $remainingMb');
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Storage usage header
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                    ),
                     child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          Icons.folder_open,
-                          size: 48,
-                          color: Colors.grey[400],
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Storage Used: $usedMb MB of 100 MB',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[800],
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'Remaining: $remainingMb MB',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
                         ),
                         const SizedBox(height: 8),
-                        Text(
-                          'No file submissions yet',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        if (canUpload) ...[
-                          const SizedBox(height: 4),
-                          Text(
-                            'Upload files to submit your work',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey[500],
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(6),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            backgroundColor: Colors.grey[300],
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              progress < 0.7
+                                  ? const Color(0xFF66BB6A) // green
+                                  : (progress < 0.9
+                                      ? const Color(0xFFFFA726) // orange
+                                      : const Color(0xFFEF5350)), // red
                             ),
                           ),
-                        ],
+                        ),
                       ],
                     ),
                   ),
-                );
-              }
+                  const SizedBox(height: 12),
 
-              return ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: submissions.length,
-                itemBuilder: (context, index) {
-                  final submission = submissions[index];
-                  return _buildSubmissionCard(submission);
-                },
+                  if (submissions.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.folder_open,
+                              size: 48,
+                              color: Colors.grey[400],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'No file submissions yet',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            if (canUpload) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Upload files to submit your work',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[500],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: submissions.length,
+                      itemBuilder: (context, index) {
+                        final submission = submissions[index];
+                        return _buildSubmissionCard(submission);
+                      },
+                    ),
+                ],
               );
             },
           ),
@@ -295,6 +517,10 @@ class _TaskFileSubmissionsSectionState
         statusColor = Colors.blue;
         statusIcon = Icons.pending;
     }
+
+    final userProvider = context.read<UserProvider>();
+    final currentUserId = userProvider.userId ?? '';
+    final canDelete = _canDeleteSubmission(submission, currentUserId);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -334,6 +560,14 @@ class _TaskFileSubmissionsSectionState
                     ),
                   ),
                 ),
+                if (canDelete) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: 'Delete submission',
+                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    onPressed: () => _confirmDeleteSubmission(submission),
+                  ),
+                ],
               ],
             ),
             if (submission.feedback != null && submission.feedback!.isNotEmpty)
@@ -436,6 +670,68 @@ class _TaskFileSubmissionsSectionState
         ),
       ),
     );
+  }
+
+  bool _canDeleteSubmission(TaskSubmission submission, String currentUserId) {
+    // Allow delete if user is the submitter, task owner or assignee
+    if (submission.submittedBy == currentUserId) return true;
+    if (widget.task.taskOwnerId == currentUserId) return true;
+    if (widget.task.taskAssignedTo == currentUserId) return true;
+
+    // Board manager can also delete
+    if (widget.task.taskBoardId.isNotEmpty) {
+      final boardProvider = context.read<BoardProvider>();
+      final boards = boardProvider.boards;
+      var board;
+      for (final b in boards) {
+        if (b.boardId == widget.task.taskBoardId) { board = b; break; }
+      }
+      if (board != null && board.boardManagerId == currentUserId) return true;
+    }
+    return false;
+  }
+
+  Future<void> _confirmDeleteSubmission(TaskSubmission submission) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Submission'),
+        content: const Text('Are you sure you want to delete this submission? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _submissionService.deleteSubmission(submission.submissionId);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Submission deleted.'),
+              backgroundColor: Color(0xFF66BB6A),
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error deleting submission: $e'),
+              backgroundColor: const Color(0xFF9C88D4),
+            ),
+          );
+        }
+      }
+    }
   }
 
   IconData _getFileIcon(String type) {

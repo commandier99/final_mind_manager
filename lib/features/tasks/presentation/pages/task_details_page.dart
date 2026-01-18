@@ -22,6 +22,8 @@ class TaskDetailsPage extends StatefulWidget {
 }
 
 class _TaskDetailsPageState extends State<TaskDetailsPage> {
+  bool _showFileSubmissions = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,42 +52,53 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
     final navigation = context.watch<NavigationProvider>();
 
     return Scaffold(
-      appBar: AppTopBar(
-        title: 'Task Details',
-        showBackButton: true,
-        onBackPressed: () => Navigator.pop(context),
-        showNotificationButton: false,
-      ),
-      drawer: AppSideMenu(
-        onSelect: (sideMenuIndex) {
-          print(
-            '[DEBUG] TaskDetailsPage: SideMenu selected index = $sideMenuIndex',
-          );
-          navigation.selectFromSideMenu(sideMenuIndex + 4);
-        },
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            TaskDetailsSection(taskId: widget.task.taskId),
+        appBar: AppTopBar(
+          title: 'Task Details',
+          showBackButton: true,
+          onBackPressed: () => Navigator.pop(context),
+          showNotificationButton: false,
+        ),
+        drawer: AppSideMenu(
+          onSelect: (sideMenuIndex) {
+            print(
+              '[DEBUG] TaskDetailsPage: SideMenu selected index = $sideMenuIndex',
+            );
+            navigation.selectFromSideMenu(sideMenuIndex + 4);
+          },
+        ),
+        body: SingleChildScrollView(
+          child: Column(
+            children: [
+              TaskDetailsSection(
+              taskId: widget.task.taskId,
+              onFileUploadPressed: () {
+                setState(() {
+                  _showFileSubmissions = !_showFileSubmissions;
+                });
+              },
+            ),
             const SizedBox(height: 1),
-            // Only show file submissions for board tasks
-            if (widget.task.taskBoardId.isNotEmpty) ...[
-              TaskFileSubmissionsSection(task: widget.task),
-              const SizedBox(height: 1),
-            ],
-            ChangeNotifierProvider(
-              create: (_) => SubtaskProvider(),
-              child: TaskSubtasksList(
-                parentTaskId: widget.task.taskId,
-                boardId: widget.task.taskBoardId.isNotEmpty ? widget.task.taskBoardId : null,
+            // Only show file submissions for board tasks when toggled
+            if (widget.task.taskBoardId.isNotEmpty && _showFileSubmissions) ...[
+              TaskFileSubmissionsSection(
                 task: widget.task,
               ),
-            ),
-          ],
+              const SizedBox(height: 1),
+            ],
+            // Only show subtasks when file submissions are not visible
+            if (!_showFileSubmissions)
+              ChangeNotifierProvider(
+                create: (_) => SubtaskProvider(),
+                child: TaskSubtasksList(
+                  parentTaskId: widget.task.taskId,
+                  boardId: widget.task.taskBoardId.isNotEmpty ? widget.task.taskBoardId : null,
+                  task: widget.task,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      bottomNavigationBar: AppBottomNavigation(
+        bottomNavigationBar: AppBottomNavigation(
         currentIndex: navigation.bottomNavIndex ?? 0,
         onTap: (index) {
           print('[DEBUG] TaskDetailsPage: BottomNav tapped index = $index');

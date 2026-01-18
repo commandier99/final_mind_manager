@@ -43,9 +43,9 @@ class _DashboardPageState extends State<DashboardPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Completion Streak Section
-            _buildCompletionStreak(),
-            const SizedBox(height: 32),
+            // Daily Check-in Streak Section
+            _buildDailyCheckInStreak(),
+            const SizedBox(height: 16),
 
             // Task Engagement Section
             const TaskEngagementSection(),
@@ -55,21 +55,30 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildCompletionStreak() {
-    final taskProvider = context.watch<TaskProvider>();
-    final tasks = taskProvider.tasks;
+  Widget _buildDailyCheckInStreak() {
+    final activityProvider = context.watch<ActivityEventProvider>();
+    final userProvider = context.watch<UserProvider>();
+    final events = activityProvider.events;
 
-    // Calculate streak: consecutive days with task completions
+    // Check if user already checked in today
+    final today = DateTime.now();
+    final todayKey = '${today.year}-${today.month}-${today.day}';
+    final checkedInToday = events.any((event) {
+      final eventKey = '${event.ActEvTimestamp.year}-${event.ActEvTimestamp.month}-${event.ActEvTimestamp.day}';
+      return eventKey == todayKey && event.ActEvType == 'daily_check_in';
+    });
+
+    // Calculate streak: consecutive days with check-in activity
     int currentStreak = 0;
     int longestStreak = 0;
     DateTime currentDate = DateTime.now();
     
-    // Group completed tasks by date
-    Map<String, bool> daysWithCompletions = {};
-    for (var task in tasks) {
-      if (task.taskIsDone && task.taskIsDoneAt != null) {
-        String dateKey = '${task.taskIsDoneAt!.year}-${task.taskIsDoneAt!.month}-${task.taskIsDoneAt!.day}';
-        daysWithCompletions[dateKey] = true;
+    // Group check-in activities by date
+    Map<String, bool> daysWithCheckIn = {};
+    for (var event in events) {
+      if (event.ActEvType == 'daily_check_in') {
+        String dateKey = '${event.ActEvTimestamp.year}-${event.ActEvTimestamp.month}-${event.ActEvTimestamp.day}';
+        daysWithCheckIn[dateKey] = true;
       }
     }
 
@@ -77,7 +86,7 @@ class _DashboardPageState extends State<DashboardPage> {
     DateTime checkDate = currentDate;
     while (true) {
       String dateKey = '${checkDate.year}-${checkDate.month}-${checkDate.day}';
-      if (daysWithCompletions.containsKey(dateKey)) {
+      if (daysWithCheckIn.containsKey(dateKey)) {
         currentStreak++;
         checkDate = checkDate.subtract(const Duration(days: 1));
       } else {
@@ -86,8 +95,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     // Calculate longest streak
-    if (daysWithCompletions.isNotEmpty) {
-      List<DateTime> sortedDates = daysWithCompletions.keys.map((key) {
+    if (daysWithCheckIn.isNotEmpty) {
+      List<DateTime> sortedDates = daysWithCheckIn.keys.map((key) {
         final parts = key.split('-');
         return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
       }).toList();
@@ -115,16 +124,66 @@ class _DashboardPageState extends State<DashboardPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Icon(Icons.local_fire_department, color: Colors.orange[700], size: 28),
-                const SizedBox(width: 8),
-                Text(
-                  'Completion Streak',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.local_fire_department, color: Colors.orange[700], size: 28),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Daily Check-in',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
+                if (!checkedInToday)
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      final userId = userProvider.userId;
+                      final userName = userProvider.currentUser?.userName ?? 'User';
+                      if (userId != null) {
+                        await context.read<ActivityEventProvider>().logEvent(
+                          userId: userId,
+                          userName: userName,
+                          activityType: 'daily_check_in',
+                          userProfilePicture: userProvider.currentUser?.userProfilePicture,
+                          description: 'Daily check-in',
+                        );
+                        print('[DEBUG] Daily check-in logged successfully');
+                      }
+                    },
+                    icon: const Icon(Icons.check),
+                    label: const Text('Check In'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.green),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green, size: 18),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Checked In',
+                          style: TextStyle(
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
             const SizedBox(height: 16),
@@ -168,8 +227,8 @@ class _DashboardPageState extends State<DashboardPage> {
                     Expanded(
                       child: Text(
                         currentStreak == 1
-                            ? 'Keep it up! Complete a task tomorrow to continue your streak.'
-                            : '🔥 You\'re on fire! $currentStreak days of task completions!',
+                            ? 'Keep it up! Check in tomorrow to continue your streak.'
+                            : '🔥 You\'re on fire! $currentStreak days of check-ins!',
                         style: TextStyle(
                           color: Colors.green[900],
                           fontSize: 13,
@@ -195,7 +254,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Start your streak today by completing a task!',
+                        'Start your streak today by checking in!',
                         style: TextStyle(
                           color: Colors.orange[900],
                           fontSize: 13,

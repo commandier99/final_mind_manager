@@ -18,12 +18,16 @@ import 'shared/features/search/providers/search_provider.dart';
 import 'features/boards/datasources/providers/board_join_request_provider.dart';
 import 'shared/features/users/datasources/providers/activity_event_provider.dart';
 import 'shared/features/notifications/datasources/providers/notification_provider.dart';
+import 'features/tasks/datasources/providers/upload_progress_provider.dart';
+import 'shared/utilities/cloudinary_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  // Initialize Cloudinary for file uploads
+  CloudinaryService().initialize();
   runApp(const MyApp());
 }
 
@@ -46,6 +50,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ActivityEventProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
+        ChangeNotifierProvider(create: (_) => UploadProgressProvider()),
         ChangeNotifierProxyProvider<UserProvider, AuthenticationProvider>(
           create: (context) => AuthenticationProvider(),
           update: (context, userProvider, authProvider) {
