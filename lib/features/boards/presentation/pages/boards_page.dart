@@ -292,6 +292,20 @@ class _BoardsPageState extends State<BoardsPage> {
     }).toList();
   }
 
+  List<Board> _sortBoards(List<Board> boards) {
+    // Sort so "Personal" is always first (case-insensitive)
+    try {
+      final personalBoard = boards.firstWhere(
+        (b) => b.boardTitle.toLowerCase() == 'personal',
+      );
+      final otherBoards = boards.where((b) => b.boardTitle.toLowerCase() != 'personal').toList();
+      return [personalBoard, ...otherBoards];
+    } catch (e) {
+      // Personal board doesn't exist, return as is
+      return boards;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     print('[DEBUG] BoardsPage: build called. userId = $_userId');
@@ -312,7 +326,7 @@ class _BoardsPageState extends State<BoardsPage> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final filteredBoards = _filterBoards(boardProvider.boards);
+                final filteredBoards = _sortBoards(_filterBoards(boardProvider.boards));
 
                 if (filteredBoards.isEmpty && _searchQuery.isNotEmpty) {
                   return Center(
@@ -398,7 +412,7 @@ class _BoardsPageState extends State<BoardsPage> {
                           },
                         ),
                         // Add divider after Personal board
-                        if (board.boardTitle == 'Personal')
+                        if (board.boardTitle.toLowerCase() == 'personal')
                           Divider(
                             height: 16,
                             thickness: 1,

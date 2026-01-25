@@ -21,9 +21,13 @@ class Task {
   final String taskDescription;
 
   final DateTime? taskDeadline;
+  final bool taskDeadlineMissed; // Whether the deadline was missed
+  final int taskExtensionCount; // How many times deadline was extended
 
   final bool taskIsDone;
   final DateTime? taskIsDoneAt;
+
+  final bool taskFailed; // Whether task was marked as failed by manager
 
   final TaskStats taskStats; // TaskStats model for task stats
 
@@ -66,8 +70,11 @@ class Task {
     required this.taskTitle,
     required this.taskDescription,
     this.taskDeadline,
+    this.taskDeadlineMissed = false,
+    this.taskExtensionCount = 0,
     this.taskIsDone = false,
     this.taskIsDoneAt,
+    this.taskFailed = false,
     required this.taskStats, // TaskStats passed as a parameter
     this.taskStatus = 'To Do',
     this.taskRequiresApproval = false,
@@ -143,8 +150,11 @@ class Task {
       taskTitle: data['taskTitle'] as String? ?? 'Untitled Task',
       taskDescription: data['taskDescription'] as String? ?? '',
       taskDeadline: (data['taskDeadline'] as Timestamp?)?.toDate(),
+      taskDeadlineMissed: data['taskDeadlineMissed'] as bool? ?? false,
+      taskExtensionCount: data['taskExtensionCount'] as int? ?? 0,
       taskIsDone: data['taskIsDone'] as bool? ?? false,
       taskIsDoneAt: (data['taskIsDoneAt'] as Timestamp?)?.toDate(),
+      taskFailed: data['taskFailed'] as bool? ?? false,
       taskStats:
           data['taskStats'] != null
               ? TaskStats.fromMap(Map<String, dynamic>.from(data['taskStats']))
@@ -188,9 +198,12 @@ class Task {
       'taskDescription': taskDescription,
       if (taskDeadline != null)
         'taskDeadline': Timestamp.fromDate(taskDeadline!),
+      'taskDeadlineMissed': taskDeadlineMissed,
+      'taskExtensionCount': taskExtensionCount,
       'taskIsDone': taskIsDone,
       if (taskIsDoneAt != null)
         'taskIsDoneAt': Timestamp.fromDate(taskIsDoneAt!),
+      'taskFailed': taskFailed,
       'taskStats': taskStats.toMap(),
       'taskStatus': taskStatus,
       'taskRequiresApproval': taskRequiresApproval,
@@ -226,8 +239,11 @@ class Task {
     String? taskTitle,
     String? taskDescription,
     DateTime? taskDeadline,
+    bool? taskDeadlineMissed,
+    int? taskExtensionCount,
     bool? taskIsDone,
     DateTime? taskIsDoneAt,
+    bool? taskFailed,
     TaskStats? taskStats,
     String? taskStatus,
     bool? taskRequiresApproval,
@@ -257,8 +273,11 @@ class Task {
       taskTitle: taskTitle ?? this.taskTitle,
       taskDescription: taskDescription ?? this.taskDescription,
       taskDeadline: taskDeadline ?? this.taskDeadline,
+      taskDeadlineMissed: taskDeadlineMissed ?? this.taskDeadlineMissed,
+      taskExtensionCount: taskExtensionCount ?? this.taskExtensionCount,
       taskIsDone: taskIsDone ?? this.taskIsDone,
       taskIsDoneAt: taskIsDoneAt ?? this.taskIsDoneAt,
+      taskFailed: taskFailed ?? this.taskFailed,
       taskStats: taskStats ?? this.taskStats,
       taskStatus: taskStatus ?? this.taskStatus,
       taskRequiresApproval: taskRequiresApproval ?? this.taskRequiresApproval,

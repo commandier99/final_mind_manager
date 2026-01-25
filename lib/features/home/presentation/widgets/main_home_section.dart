@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../plans/datasources/models/plans_model.dart';
 import 'greeting_section.dart';
+import 'quick_actions_widget.dart';
 import 'features_carousel_widget.dart';
 
 class MainHomeSection extends StatelessWidget {
@@ -16,6 +17,8 @@ class MainHomeSection extends StatelessWidget {
         const GreetingSection(),
         const SizedBox(height: 20),
         const FeaturesCarouselWidget(),
+        const SizedBox(height: 20),
+        const QuickActionsWidget(),
       ],
     );
   }

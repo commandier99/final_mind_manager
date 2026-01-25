@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:uuid/uuid.dart';
 import 'dart:async';
 import '../models/task_model.dart'; // Import Task model
 import '../models/task_stats_model.dart'; // Import TaskStats model
@@ -513,5 +514,111 @@ class TaskProvider extends ChangeNotifier {
 
   Stream<List<Map<String, dynamic>>> streamVolunteerRequests(String boardId) {
     return _taskService.streamVolunteerRequests(boardId);
+  }
+
+  // ----------------------
+  // DEADLINE MANAGEMENT
+  // ----------------------
+
+  /// Mark a task deadline as missed and create next repeat if applicable
+  Future<void> markDeadlineMissed(Task task) async {
+    try {
+      final updatedTask = task.copyWith(taskDeadlineMissed: true);
+      await updateTask(updatedTask);
+
+      // If this is a repeating task, create next instance
+      if (task.taskIsRepeating) {
+        // Calculate next repeat date
+        DateTime? nextRepeatDate = task.taskNextRepeatDate;
+        if (nextRepeatDate != null && task.taskRepeatInterval != null) {
+          // Logic to calculate next repeat based on interval
+          // (You can expand this based on your repeat logic)
+          nextRepeatDate = _calculateNextRepeatDate(nextRepeatDate, task.taskRepeatInterval!);
+          
+          // Create new instance for next repeat
+          final nextTask = task.copyWith(
+            taskId: const Uuid().v4(),
+            taskIsDone: false,
+            taskDeadlineMissed: false,
+            taskNextRepeatDate: nextRepeatDate,
+          );
+          await addTask(nextTask);
+        }
+      }
+
+      print('✅ Task ${task.taskId} deadline marked as missed');
+    } catch (e) {
+      print('⚠️ Error marking deadline as missed: $e');
+      rethrow;
+    }
+  }
+
+  /// Extend a deadline for a missed task
+  Future<void> extendDeadline(Task task, DateTime newDeadline) async {
+    try {
+      final updatedTask = task.copyWith(
+        taskDeadline: newDeadline,
+        taskDeadlineMissed: false,
+        taskExtensionCount: task.taskExtensionCount + 1,
+      );
+      await updateTask(updatedTask);
+
+      print('✅ Task ${task.taskId} deadline extended to $newDeadline');
+    } catch (e) {
+      print('⚠️ Error extending deadline: $e');
+      rethrow;
+    }
+  }
+
+  /// Mark a task as failed (permanent failure)
+  Future<void> markTaskFailed(Task task) async {
+    try {
+      final updatedTask = task.copyWith(taskFailed: true);
+      await updateTask(updatedTask);
+
+      print('✅ Task ${task.taskId} marked as failed');
+    } catch (e) {
+      print('⚠️ Error marking task as failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Calculate next repeat date based on interval
+  DateTime _calculateNextRepeatDate(DateTime current, String interval) {
+    // Parse interval and calculate next date
+    // Example: "Monday,Wednesday,Friday" or daily/weekly/monthly
+    if (interval.contains(',')) {
+      // Multiple days - calculate next occurrence
+      final days = interval.split(',');
+      return _getNextOccurrenceOfDays(current, days);
+    } else {
+      // Single interval like "daily", "weekly", "monthly"
+      return _getNextOccurrenceByInterval(current, interval);
+    }
+  }
+
+  DateTime _getNextOccurrenceOfDays(DateTime current, List<String> days) {
+    final dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    
+    DateTime next = current.add(const Duration(days: 1));
+    
+    while (!days.contains(dayNames[next.weekday - 1])) {
+      next = next.add(const Duration(days: 1));
+    }
+    
+    return next;
+  }
+
+  DateTime _getNextOccurrenceByInterval(DateTime current, String interval) {
+    switch (interval.toLowerCase()) {
+      case 'daily':
+        return current.add(const Duration(days: 1));
+      case 'weekly':
+        return current.add(const Duration(days: 7));
+      case 'monthly':
+        return DateTime(current.year, current.month + 1, current.day);
+      default:
+        return current.add(const Duration(days: 1));
+    }
   }
 }

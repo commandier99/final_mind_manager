@@ -80,4 +80,53 @@ class TaskStatsService {
       print('⚠️ Error deleting task stats for $taskId: $e');
     }
   }
+
+  /// Increment deadlines missed count
+  Future<void> incrementDeadlinesMissed(String taskId) async {
+    try {
+      final taskStats = await getTaskStatsById(taskId);
+      if (taskStats != null) {
+        final updatedStats = taskStats.copyWith(
+          deadlinesMissedCount: (taskStats.deadlinesMissedCount ?? 0) + 1,
+        );
+        await updateTaskStats(taskId, updatedStats);
+        print('✅ Task stats for $taskId deadlines missed count incremented');
+      }
+    } catch (e) {
+      print('⚠️ Error incrementing deadlines missed for $taskId: $e');
+    }
+  }
+
+  /// Increment deadlines extended count
+  Future<void> incrementDeadlinesExtended(String taskId) async {
+    try {
+      final taskStats = await getTaskStatsById(taskId);
+      if (taskStats != null) {
+        final updatedStats = taskStats.copyWith(
+          deadlinesExtendedCount: (taskStats.deadlinesExtendedCount ?? 0) + 1,
+        );
+        await updateTaskStats(taskId, updatedStats);
+        print('✅ Task stats for $taskId deadlines extended count incremented');
+      }
+    } catch (e) {
+      print('⚠️ Error incrementing deadlines extended for $taskId: $e');
+    }
+  }
+
+  /// Increment tasks failed count
+  Future<void> incrementTasksFailed(String taskId) async {
+    try {
+      final taskStats = await getTaskStatsById(taskId);
+      if (taskStats != null) {
+        final updatedStats = taskStats.copyWith(
+          tasksFailedCount: (taskStats.tasksFailedCount ?? 0) + 1,
+        );
+        await updateTaskStats(taskId, updatedStats);
+        print('✅ Task stats for $taskId tasks failed count incremented');
+      }
+    } catch (e) {
+      print('⚠️ Error incrementing tasks failed for $taskId: $e');
+    }
+  }
 }
+  

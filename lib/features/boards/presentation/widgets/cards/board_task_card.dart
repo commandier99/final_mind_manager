@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/pages/task_details_page.dart';
+import '../../../../tasks/presentation/pages/task_applications_page.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../datasources/models/board_model.dart';
 
@@ -30,11 +33,175 @@ class BoardTaskCard extends StatefulWidget {
 }
 
 class _BoardTaskCardState extends State<BoardTaskCard> {
-  bool _isToggling = false;
+  late bool _isInterested;
+  late String _currentUserId;
 
   @override
   void initState() {
     super.initState();
+    _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    _isInterested = widget.task.taskHelpers.contains(_currentUserId);
+  }
+
+  bool _isTaskUnassigned() {
+    return widget.task.taskAssignedTo.isEmpty;
+  }
+
+  bool _shouldAllowUnassigned() {
+    // Only allow unassigned status if there are multiple board members
+    // If board has only 1 member (the manager), tasks must be assigned
+    return widget.board == null || (widget.board!.memberIds.length > 1);
+  }
+
+  String _getAutoAssignedUserId() {
+    // If board has only 1 member, return that member's ID
+    if (widget.board != null && widget.board!.memberIds.length == 1) {
+      return widget.board!.memberIds.first;
+    }
+    return '';
+  }
+
+  Future<void> _toggleInterest(bool interested) async {
+    if (interested && !_isInterested) {
+      // Show appeal dialog when expressing interest
+      _showAppealDialog();
+    } else if (!interested && _isInterested) {
+      // Remove interest without dialog
+      await _removeInterest();
+    }
+  }
+
+  void _showAppealDialog() {
+    final appealController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Express Your Interest'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Why should you be assigned to this task?',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: appealController,
+                maxLines: 5,
+                minLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Share your interest and relevant skills...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _submitInterest(appealController.text);
+              appealController.dispose();
+            },
+            icon: const Icon(Icons.thumb_up),
+            label: const Text('Submit'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitInterest(String appealText) async {
+    final taskProvider = context.read<TaskProvider>();
+    
+    try {
+      final updatedHelpers = [...widget.task.taskHelpers, _currentUserId];
+      
+      // Update task with new helper
+      final updatedTask = widget.task.copyWith(
+        taskHelpers: updatedHelpers,
+      );
+      await taskProvider.updateTask(updatedTask);
+      
+      // Save appeal to subcollection
+      final appealsRef = FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(widget.task.taskId)
+          .collection('appeals');
+      
+      await appealsRef.add({
+        'userId': _currentUserId,
+        'userName': widget.task.taskOwnerName,
+        'userProfilePicture': '',
+        'appealText': appealText,
+        'createdAt': Timestamp.now(),
+      });
+      
+      setState(() => _isInterested = true);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('✅ Interest submitted!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error submitting interest: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit interest: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeInterest() async {
+    final taskProvider = context.read<TaskProvider>();
+    
+    try {
+      final updatedHelpers = widget.task.taskHelpers
+          .where((id) => id != _currentUserId)
+          .toList();
+      final updatedTask = widget.task.copyWith(
+        taskHelpers: updatedHelpers,
+      );
+      await taskProvider.updateTask(updatedTask);
+      setState(() => _isInterested = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Interest removed'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error removing interest: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove interest: $e')),
+        );
+      }
+    }
   }
 
   String _getDisplayAssignedName() {
@@ -158,6 +325,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         widget.task.taskAssignedToName.isEmpty ||
         widget.task.taskAssignedToName == 'Unassigned';
     final priorityColor = _getPriorityColor(widget.task.taskPriorityLevel);
+    final canHaveUnassigned = _shouldAllowUnassigned();
     
     // Only allow delete for board manager or task owner
     final canDelete = widget.board != null && widget.currentUserId != null &&
@@ -215,11 +383,21 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
           builder: (context) => GestureDetector(
             onTap: () {
               Slidable.of(context)?.close();
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => TaskDetailsPage(task: widget.task),
-                ),
-              );
+              // If task is unassigned, go to applications page first
+              // But only if user is the board manager
+              if (widget.task.taskAssignedTo.isEmpty && widget.board?.boardManagerId == _currentUserId) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => TaskApplicationsPage(task: widget.task),
+                  ),
+                );
+              } else {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (context) => TaskDetailsPage(task: widget.task),
+                  ),
+                );
+              }
             },
             child: Card(
             elevation: 2,
@@ -349,16 +527,6 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        // Checkbox - interactive for manager, view-only for members
-                        if (widget.board != null && widget.currentUserId != null)
-                          Checkbox(
-                            value: widget.task.taskIsDone,
-                            onChanged: !_isToggling && widget.board!.boardManagerId == widget.currentUserId
-                                ? (bool? newValue) {
-                                    _handleToggleDone(newValue ?? false);
-                                  }
-                                : null, // null makes it view-only for members or disabled during toggle
-                          ),
                         // Main content
                         Expanded(
                           child: Column(
@@ -397,6 +565,70 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                           ),
                         ),
                         const SizedBox(width: 8),
+                        // Show interest buttons only if task is unassigned AND unassigned is allowed
+                        if (_isTaskUnassigned() && canHaveUnassigned)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Tooltip(
+                                message: _isInterested ? 'Not interested' : 'Interested',
+                                child: GestureDetector(
+                                  onTap: () {
+                                    if (_isInterested) {
+                                      _removeInterest();
+                                    } else {
+                                      _toggleInterest(true);
+                                    }
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _isInterested
+                                          ? Colors.green.shade100
+                                          : Colors.grey.shade100,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: _isInterested
+                                            ? Colors.green
+                                            : Colors.grey.shade400,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _isInterested
+                                              ? Icons.thumb_up
+                                              : Icons.thumb_up_outlined,
+                                          size: 16,
+                                          color: _isInterested
+                                              ? Colors.green
+                                              : Colors.grey,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          _isInterested ? 'Interested' : 'Interest?',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: _isInterested
+                                                ? Colors.green.shade700
+                                                : Colors.grey.shade700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        else if (_hasSubtasks())
+                          const SizedBox(width: 8),
                         // Circular progress indicator
                         if (_hasSubtasks())
                           SizedBox(
@@ -455,33 +687,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                         // ),
                       ],
                     ),
-                    // I volunteer button for unassigned tasks or declined tasks
-                    if (_shouldShowVolunteerButton()) ...[
-                      const SizedBox(height: 12),
-                      ElevatedButton.icon(
-                        onPressed: () => _handleVolunteer(context),
-                        icon: const Icon(Icons.volunteer_activism, size: 16),
-                        label: Text(
-                          widget.task.taskAcceptanceStatus == 'declined'
-                              ? 'I volunteer to help'
-                              : 'I volunteer',
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue[600],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ],
-                    // Status badge for accepted/declined tasks
-                    if (_getAcceptanceStatusBadge() != null) ...[
-                      const SizedBox(height: 8),
-                      _getAcceptanceStatusBadge()!,
-                    ],
+
                   ],
                 ),
               ),
@@ -513,218 +719,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     return "${date.month}/${date.day}";
   }
 
-  bool _shouldShowVolunteerButton() {
-    // Show volunteer button if:
-    // 1. Task is unassigned OR status is 'declined' (help requested)
-    // 2. Current user is not already assigned or helping
-    // 3. Task is not completed
-    if (widget.currentUserId == null || widget.task.taskIsDone) {
-      return false;
-    }
 
-    final isUnassigned = widget.task.taskAssignedTo.isEmpty;
-    final needsHelp = widget.task.taskAcceptanceStatus == 'declined';
-    final isNotAssigned = widget.task.taskAssignedTo != widget.currentUserId;
-    final isNotHelper = !widget.task.taskHelpers.contains(widget.currentUserId);
-
-    // Only show if (unassigned OR declined) AND user is not involved
-    return (isUnassigned || needsHelp) && isNotAssigned && isNotHelper;
-  }
-
-  bool _shouldShowAcceptButton() {
-    // Show "I got this" button only for pending tasks
-    if (widget.currentUserId == null || widget.task.taskIsDone) {
-      return false;
-    }
-
-    final isAssignedToCurrentUser =
-        widget.task.taskAssignedTo == widget.currentUserId;
-    final isPending =
-        widget.task.taskAcceptanceStatus == null ||
-        widget.task.taskAcceptanceStatus == 'pending';
-
-    return isAssignedToCurrentUser && isPending;
-  }
-
-  Widget? _getAcceptanceStatusBadge() {
-    if (widget.task.taskAcceptanceStatus == null ||
-        widget.task.taskAcceptanceStatus == 'pending') {
-      return null;
-    }
-
-    final isAccepted = widget.task.taskAcceptanceStatus == 'accepted';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: isAccepted ? Colors.green[50] : Colors.orange[50],
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(
-          color: isAccepted ? Colors.green[300]! : Colors.orange[300]!,
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isAccepted ? Icons.thumb_up : Icons.help_outline,
-            size: 14,
-            color: isAccepted ? Colors.green[700] : Colors.orange[700],
-          ),
-          const SizedBox(width: 4),
-          Text(
-            isAccepted ? 'Accepted' : 'Needs Help',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isAccepted ? Colors.green[700] : Colors.orange[700],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleAcceptTask(BuildContext context) async {
-    try {
-      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-      await taskProvider.acceptTask(widget.task.taskId);
-
-      if (context.mounted) {
-        // Force rebuild by calling setState
-        setState(() {});
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Task accepted! You got this!'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚠️ Error accepting task: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleRequestHelp(BuildContext context) async {
-    try {
-      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-      await taskProvider.declineTask(widget.task.taskId);
-
-      if (context.mounted) {
-        // Force rebuild by calling setState
-        setState(() {});
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📢 Help requested! Others can now volunteer.'),
-            backgroundColor: Colors.orange,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚠️ Error requesting help: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleVolunteer(BuildContext context) async {
-    try {
-      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-      await taskProvider.volunteerForTask(widget.task.taskId);
-
-      if (context.mounted) {
-        // Force rebuild by calling setState
-        setState(() {});
-
-        final isHelping = widget.task.taskAcceptanceStatus == 'declined';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isHelping
-                  ? '🤝 You volunteered to help with this task!'
-                  : '🙋 You volunteered for this task!',
-            ),
-            backgroundColor: Colors.blue,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚠️ Error volunteering: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleToggleDone(bool isDone) async {
-    try {
-      // Prevent multiple rapid toggles
-      if (_isToggling) return;
-      
-      setState(() {
-        _isToggling = true;
-      });
-
-      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
-      
-      // Create updated task with new status
-      final updatedTask = widget.task.copyWith(
-        taskIsDone: isDone,
-        taskStatus: isDone ? 'COMPLETED' : 'To Do',
-      );
-      
-      // Toggle the task done status
-      await taskProvider.toggleTaskDone(updatedTask);
-      
-      if (mounted) {
-        setState(() {
-          _isToggling = false;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              isDone ? '✅ Task completed!' : '↩️ Task marked as incomplete',
-            ),
-            duration: const Duration(seconds: 1),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isToggling = false;
-        });
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('⚠️ Error updating task: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   Future<void> _handleDelete(BuildContext context) async {
     try {

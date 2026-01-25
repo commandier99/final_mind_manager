@@ -59,6 +59,8 @@ class MyApp extends StatelessWidget {
               authProvider.onUserAuthenticated = (userId) {
                 print('[DEBUG] main.dart: onUserAuthenticated callback triggered for userId: $userId');
                 userProvider.loadUserData(userId);
+                // Reset NavigationProvider to home page on sign in
+                context.read<NavigationProvider>().selectFromBottomNav(0);
               };
             }
             return authProvider ?? AuthenticationProvider();

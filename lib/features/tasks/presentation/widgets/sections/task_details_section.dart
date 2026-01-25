@@ -255,51 +255,6 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                   ],
                 ),
 
-              // Helpers info
-              if (task.taskHelpers.isNotEmpty)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Helpers (${task.taskHelpers.length})',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      children: task.taskHelpers
-                          .asMap()
-                          .entries
-                          .map(
-                            (entry) => Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.teal.shade100,
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                task.taskHelperNames[entry.value] ?? 'User',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.teal.shade700,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-
               // Repeating info
               if (task.taskIsRepeating)
                 Column(

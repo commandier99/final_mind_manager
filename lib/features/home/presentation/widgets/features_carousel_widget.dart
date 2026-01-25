@@ -133,7 +133,16 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
         ];
 
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            const Text(
+              'Recommended Actions',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 12),
             SizedBox(
               height: 150,
               child: PageView.builder(

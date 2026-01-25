@@ -124,6 +124,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
     try {
       final taskProvider = context.read<TaskProvider>();
+      final isRepeating = _deadline != null ? _isRepeating : false;
       
       String taskTitle = _titleController.text.trim();
       
@@ -170,19 +171,22 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),
         taskDeadline: finalDeadline,
+        taskDeadlineMissed: false,
+        taskExtensionCount: 0,
         taskIsDone: false,
         taskIsDoneAt: null,
+        taskFailed: false,
         taskIsDeleted: false,
         taskDeletedAt: null,
         taskStats: TaskStats(), // Always initialize as empty
         taskPriorityLevel: _priorityLevel,
         taskStatus: 'TODO',
         taskRequiresApproval: false,
-        taskIsRepeating: _isRepeating,
-        taskRepeatInterval: _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
+        taskIsRepeating: isRepeating,
+        taskRepeatInterval: isRepeating && _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
-        taskRepeatTime: repeatTimeStr,
+        taskRepeatTime: isRepeating ? repeatTimeStr : null,
       );
 
       await taskProvider.addTask(newTask);
@@ -205,6 +209,10 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Repeating is only allowed when a deadline is set
+    final canRepeat = _deadline != null;
+    final effectiveRepeat = canRepeat ? _isRepeating : false;
+
     return AlertDialog(
       title: const Text('Add New Task'),
       content: SingleChildScrollView(
@@ -325,92 +333,94 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   hintText: 'Optional',
                 ),
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Text('Repeating Task'),
-                  const Spacer(),
-                  Switch(
-                    value: _isRepeating,
-                    onChanged: (val) => setState(() => _isRepeating = val),
-                  ),
-                ],
-              ),
-              if (_isRepeating) ...[
+              if (canRepeat) ...[
                 const SizedBox(height: 8),
-                const Text('Repeat on days:',
-                    style:
-                        TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: _daysOfWeek
-                        .map((day) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(day.substring(0, 3)),
-                                selected: _repeatDays.contains(day),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _repeatDays.add(day);
-                                      // Sort days by week order
-                                      _repeatDays.sort((a, b) =>
-                                          _daysOfWeek.indexOf(a) -
-                                          _daysOfWeek.indexOf(b));
-                                    } else {
-                                      _repeatDays.remove(day);
-                                    }
-                                  });
-                                },
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _repeatEndDate ?? DateTime.now(),
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime(2100),
-                          );
-                          if (picked != null) {
-                            setState(() => _repeatEndDate = picked);
-                          }
-                        },
-                        child: Text(
-                          _repeatEndDate == null
-                              ? 'Pick Repeat End Date'
-                              : 'Repeat End: ${_repeatEndDate!.toLocal().toString().split(' ')[0]}',
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final picked = await showTimePicker(
-                          context: context,
-                          initialTime: _repeatTime ?? TimeOfDay.now(),
-                        );
-                        if (picked != null) {
-                          setState(() => _repeatTime = picked);
-                        }
-                      },
-                      child: Text(
-                        _repeatTime == null
-                            ? 'Time'
-                            : _repeatTime!.format(context),
-                      ),
+                    const Text('Repeating Task'),
+                    const Spacer(),
+                    Switch(
+                      value: effectiveRepeat,
+                      onChanged: (val) => setState(() => _isRepeating = val),
                     ),
                   ],
                 ),
+                if (effectiveRepeat) ...[
+                  const SizedBox(height: 8),
+                  const Text('Repeat on days:',
+                      style:
+                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: _daysOfWeek
+                          .map((day) => Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: FilterChip(
+                                  label: Text(day.substring(0, 3)),
+                                  selected: _repeatDays.contains(day),
+                                  onSelected: (selected) {
+                                    setState(() {
+                                      if (selected) {
+                                        _repeatDays.add(day);
+                                        // Sort days by week order
+                                        _repeatDays.sort((a, b) =>
+                                            _daysOfWeek.indexOf(a) -
+                                            _daysOfWeek.indexOf(b));
+                                      } else {
+                                        _repeatDays.remove(day);
+                                      }
+                                    });
+                                  },
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _repeatEndDate ?? DateTime.now(),
+                              firstDate: DateTime.now(),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              setState(() => _repeatEndDate = picked);
+                            }
+                          },
+                          child: Text(
+                            _repeatEndDate == null
+                                ? 'Pick Repeat End Date'
+                                : 'Repeat End: ${_repeatEndDate!.toLocal().toString().split(' ')[0]}',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () async {
+                          final picked = await showTimePicker(
+                            context: context,
+                            initialTime: _repeatTime ?? TimeOfDay.now(),
+                          );
+                          if (picked != null) {
+                            setState(() => _repeatTime = picked);
+                          }
+                        },
+                        child: Text(
+                          _repeatTime == null
+                              ? 'Time'
+                              : _repeatTime!.format(context),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ],
           ),

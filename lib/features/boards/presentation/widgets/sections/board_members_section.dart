@@ -5,6 +5,7 @@ import '../../../../../shared/datasources/providers/navigation_provider.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../datasources/services/board_services.dart';
 import '../../../datasources/providers/board_provider.dart';
+import '../dialogs/add_member_to_board_dialog.dart';
 
 class BoardMembersSection extends StatefulWidget {
   final List<String> memberIds;
@@ -38,40 +39,14 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header row
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  "Board Members",
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.person_add_rounded, color: Colors.grey),
-                tooltip: "Add Member",
-                onPressed: () {
-                  // Navigate to Search & Discover page (index 6)
-                  final navigation = context.read<NavigationProvider>();
-                  navigation.selectFromSideMenu(6);
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Members list - always visible, horizontally scrollable
+          // Members list - always visible, horizontally scrollable with add button
           SizedBox(
             height: 80,
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children:
-                    widget.memberIds.map((uid) {
+                children: [
+                  ...widget.memberIds.map((uid) {
                       final role = widget.board.memberRoles[uid] ?? 'member';
                       final isManager = uid == widget.board.boardManagerId;
                       final isCurrentUserManager =
@@ -171,10 +146,59 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                         },
                       );
                     }).toList(),
-              ),
+                  // Add Member Button at the end
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        InkWell(
+                          onTap: () {
+                            showDialog(
+                              context: context,
+                              builder: (context) => AddMemberToBoardDialog(
+                                board: widget.board,
+                              ),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(24),
+                          child: Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.grey.shade400,
+                                width: 2,
+                                strokeAlign: BorderSide.strokeAlignOutside,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.add,
+                              size: 24,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        SizedBox(
+                          width: 60,
+                          child: Text(
+                            "Add",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
             ),
           ),
-        ],
+      )],
       ),
     );
   }

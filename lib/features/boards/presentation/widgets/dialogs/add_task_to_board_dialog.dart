@@ -59,9 +59,6 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
 
     final members = <String, String>{};
 
-    // Add "None" option for unassigned tasks
-    members[''] = 'None';
-
     // Add the manager (current user) with their actual name
     try {
       final currentUserData = await UserService().getUserById(widget.userId);
@@ -304,9 +301,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (_loadingMembers)
-                const Center(child: CircularProgressIndicator())
-              else
+              if (!_loadingMembers && _boardMembers.length > 1)
                 Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: DropdownButtonFormField<String>(
@@ -376,13 +371,14 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                 ],
               ),
               const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text('Repeating Task'),
-                value: _isRepeating,
-                onChanged: (val) => setState(() => _isRepeating = val),
-                contentPadding: EdgeInsets.zero,
-              ),
-              if (_isRepeating) ...[
+              if (_deadline != null)
+                SwitchListTile(
+                  title: const Text('Repeating Task'),
+                  value: _isRepeating,
+                  onChanged: (val) => setState(() => _isRepeating = val),
+                  contentPadding: EdgeInsets.zero,
+                ),
+              if (_deadline != null && _isRepeating) ...[
                 const SizedBox(height: 12),
                 const Text(
                   'Repeat on days:',

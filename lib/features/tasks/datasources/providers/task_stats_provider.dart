@@ -59,4 +59,34 @@ class TaskStatsProvider extends ChangeNotifier {
 
   /// Optional: get cached stats
   TaskStats? getStats(String taskId) => _taskStats[taskId];
+
+  /// Mark deadline as missed
+  Future<void> markDeadlineMissed(String taskId) async {
+    await _service.incrementDeadlinesMissed(taskId);
+    final current = _taskStats[taskId] ?? TaskStats();
+    _taskStats[taskId] = current.copyWith(
+      deadlinesMissedCount: (current.deadlinesMissedCount ?? 0) + 1,
+    );
+    notifyListeners();
+  }
+
+  /// Extend deadline
+  Future<void> extendDeadline(String taskId) async {
+    await _service.incrementDeadlinesExtended(taskId);
+    final current = _taskStats[taskId] ?? TaskStats();
+    _taskStats[taskId] = current.copyWith(
+      deadlinesExtendedCount: (current.deadlinesExtendedCount ?? 0) + 1,
+    );
+    notifyListeners();
+  }
+
+  /// Mark task as failed
+  Future<void> markTaskFailed(String taskId) async {
+    await _service.incrementTasksFailed(taskId);
+    final current = _taskStats[taskId] ?? TaskStats();
+    _taskStats[taskId] = current.copyWith(
+      tasksFailedCount: (current.tasksFailedCount ?? 0) + 1,
+    );
+    notifyListeners();
+  }
 }

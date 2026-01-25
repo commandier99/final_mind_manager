@@ -3,12 +3,18 @@ class TaskStats {
   final int? taskSubtasksDoneCount; // Number of subtasks completed
   final int? taskSubtasksDeletedCount; // Number of deleted subtasks
   final int? taskEditsCount; // Number of times the task has been edited
+  final int? deadlinesMissedCount; // Total times deadline was missed
+  final int? deadlinesExtendedCount; // Total times deadline was extended
+  final int? tasksFailedCount; // Total times task was marked as failed
 
   TaskStats({
     this.taskSubtasksCount,
     this.taskSubtasksDoneCount,
     this.taskSubtasksDeletedCount,
     this.taskEditsCount,
+    this.deadlinesMissedCount,
+    this.deadlinesExtendedCount,
+    this.tasksFailedCount,
   });
 
   // Factory method to create TaskStats from Firestore data
@@ -18,6 +24,9 @@ class TaskStats {
       taskSubtasksDoneCount: data['taskSubtasksDoneCount'] as int?,
       taskSubtasksDeletedCount: data['taskSubtasksDeletedCount'] as int?,
       taskEditsCount: data['taskEditsCount'] as int?,
+      deadlinesMissedCount: data['deadlinesMissedCount'] as int?,
+      deadlinesExtendedCount: data['deadlinesExtendedCount'] as int?,
+      tasksFailedCount: data['tasksFailedCount'] as int?,
     );
   }
 
@@ -28,6 +37,9 @@ class TaskStats {
       'taskSubtasksDoneCount': taskSubtasksDoneCount,
       'taskSubtasksDeletedCount': taskSubtasksDeletedCount,
       'taskEditsCount': taskEditsCount,
+      'deadlinesMissedCount': deadlinesMissedCount,
+      'deadlinesExtendedCount': deadlinesExtendedCount,
+      'tasksFailedCount': tasksFailedCount,
     };
   }
 
@@ -37,6 +49,9 @@ class TaskStats {
     int? taskSubtasksDoneCount,
     int? taskSubtasksDeletedCount,
     int? taskEditsCount,
+    int? deadlinesMissedCount,
+    int? deadlinesExtendedCount,
+    int? tasksFailedCount,
   }) {
     return TaskStats(
       taskSubtasksCount: taskSubtasksCount ?? this.taskSubtasksCount,
@@ -45,6 +60,10 @@ class TaskStats {
       taskSubtasksDeletedCount:
           taskSubtasksDeletedCount ?? this.taskSubtasksDeletedCount,
       taskEditsCount: taskEditsCount ?? this.taskEditsCount,
+      deadlinesMissedCount: deadlinesMissedCount ?? this.deadlinesMissedCount,
+      deadlinesExtendedCount:
+          deadlinesExtendedCount ?? this.deadlinesExtendedCount,
+      tasksFailedCount: tasksFailedCount ?? this.tasksFailedCount,
     );
   }
 

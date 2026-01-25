@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/providers/task_provider.dart';
 import '../../pages/task_details_page.dart';
+import '../../pages/task_applications_page.dart';
+import '../../../../boards/datasources/providers/board_provider.dart';
 
 class TaskCard extends StatefulWidget {
   final Task task;
@@ -24,8 +28,178 @@ class TaskCard extends StatefulWidget {
 }
 
 class _TaskCardState extends State<TaskCard> {
+  late bool _isInterested;
+  late String _currentUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    // Track if current user has already expressed interest in helpers list
+    _isInterested = widget.task.taskHelpers.contains(_currentUserId);
+  }
+
   bool _hasSubtasks() {
     return (widget.task.taskStats.taskSubtasksCount ?? 0) > 0;
+  }
+
+  bool _isTaskUnassigned() {
+    // Task is unassigned if assigned to empty string
+    return widget.task.taskAssignedTo.isEmpty;
+  }
+
+  bool _shouldAllowUnassigned() {
+    // Only allow unassigned status if there are multiple board members
+    // If board has only 1 member (the manager), tasks must be assigned
+    if (widget.task.taskBoardId.isEmpty) return true;
+    
+    final boardProvider = context.read<BoardProvider>();
+    final board = boardProvider.getBoardById(widget.task.taskBoardId);
+    
+    return board == null || (board.memberIds.length > 1);
+  }
+
+  Future<void> _toggleInterest(bool interested) async {
+    if (interested && !_isInterested) {
+      // Show appeal dialog when expressing interest
+      _showAppealDialog();
+    } else if (!interested && _isInterested) {
+      // Remove interest without dialog
+      await _removeInterest();
+    }
+  }
+
+  void _showAppealDialog() {
+    final appealController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Express Your Interest'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Why should you be assigned to this task?',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: appealController,
+                maxLines: 5,
+                minLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Share your interest and relevant skills...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pop(context);
+              _submitInterest(appealController.text);
+              appealController.dispose();
+            },
+            icon: const Icon(Icons.thumb_up),
+            label: const Text('Submit'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.green,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitInterest(String appealText) async {
+    final taskProvider = context.read<TaskProvider>();
+    
+    try {
+      final updatedHelpers = [...widget.task.taskHelpers, _currentUserId];
+      
+      // Update task with new helper
+      final updatedTask = widget.task.copyWith(
+        taskHelpers: updatedHelpers,
+      );
+      await taskProvider.updateTask(updatedTask);
+      
+      // Save appeal to subcollection
+      final appealsRef = FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(widget.task.taskId)
+          .collection('appeals');
+      
+      await appealsRef.add({
+        'userId': _currentUserId,
+        'userName': widget.task.taskOwnerName,
+        'userProfilePicture': '',
+        'appealText': appealText,
+        'createdAt': Timestamp.now(),
+      });
+      
+      setState(() => _isInterested = true);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('✅ Interest submitted!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error submitting interest: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to submit interest: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _removeInterest() async {
+    final taskProvider = context.read<TaskProvider>();
+    
+    try {
+      final updatedHelpers = widget.task.taskHelpers
+          .where((id) => id != _currentUserId)
+          .toList();
+      final updatedTask = widget.task.copyWith(
+        taskHelpers: updatedHelpers,
+      );
+      await taskProvider.updateTask(updatedTask);
+      setState(() => _isInterested = false);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Interest removed'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error removing interest: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to remove interest: $e')),
+        );
+      }
+    }
   }
 
   Color _getPriorityColor(String priority) {
@@ -153,12 +327,35 @@ class _TaskCardState extends State<TaskCard> {
             ),
             child: GestureDetector(
               onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => TaskDetailsPage(task: widget.task),
-                  ),
-                );
+                // If task is unassigned, go to applications page first
+                // But only if user is the board manager
+                if (widget.task.taskAssignedTo.isEmpty) {
+                  final boardProvider = context.read<BoardProvider>();
+                  final board = boardProvider.getBoardById(widget.task.taskBoardId);
+                  
+                  if (board?.boardManagerId == _currentUserId) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TaskApplicationsPage(task: widget.task),
+                      ),
+                    );
+                  } else {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => TaskDetailsPage(task: widget.task),
+                      ),
+                    );
+                  }
+                } else {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TaskDetailsPage(task: widget.task),
+                    ),
+                  );
+                }
               },
               child: Card(
                 elevation: 3,
@@ -475,6 +672,70 @@ class _TaskCardState extends State<TaskCard> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          // Show interest buttons only if task is unassigned AND unassigned is allowed
+                          if (_isTaskUnassigned() && _shouldAllowUnassigned())
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Tooltip(
+                                  message: _isInterested ? 'Not interested' : 'Interested',
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      if (_isInterested) {
+                                        _removeInterest();
+                                      } else {
+                                        _toggleInterest(true);
+                                      }
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 6,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: _isInterested
+                                            ? Colors.green.shade100
+                                            : Colors.grey.shade100,
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(
+                                          color: _isInterested
+                                              ? Colors.green
+                                              : Colors.grey.shade400,
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _isInterested
+                                                ? Icons.thumb_up
+                                                : Icons.thumb_up_outlined,
+                                            size: 16,
+                                            color: _isInterested
+                                                ? Colors.green
+                                                : Colors.grey,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            _isInterested ? 'Interested' : 'Interest?',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: _isInterested
+                                                  ? Colors.green.shade700
+                                                  : Colors.grey.shade700,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            )
+                          else if (_hasSubtasks())
+                            const SizedBox(width: 8),
                           if (_hasSubtasks())
                             SizedBox(
                               width: 45,
