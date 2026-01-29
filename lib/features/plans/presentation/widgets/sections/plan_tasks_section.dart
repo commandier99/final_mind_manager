@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/models/plans_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
-import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../boards/presentation/widgets/cards/board_task_card.dart';
 
 class PlanTasksSection extends StatelessWidget {

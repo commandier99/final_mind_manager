@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mind_manager_final/features/boards/datasources/models/board_model.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -682,9 +683,12 @@ class _TaskFileSubmissionsSectionState
     if (widget.task.taskBoardId.isNotEmpty) {
       final boardProvider = context.read<BoardProvider>();
       final boards = boardProvider.boards;
-      var board;
+      Board? board;
       for (final b in boards) {
-        if (b.boardId == widget.task.taskBoardId) { board = b; break; }
+        if (b.boardId == widget.task.taskBoardId) {
+          board = b;
+          break;
+        }
       }
       if (board != null && board.boardManagerId == currentUserId) return true;
     }

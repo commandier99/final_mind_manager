@@ -129,6 +129,19 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
         return;
       }
 
+      // Check for configuration errors
+      if (authProvider.error != null &&
+          (authProvider.error!.contains('ApiException: 7') ||
+              authProvider.error!.contains('Network error') ||
+              authProvider.error!.contains('Configuration error'))) {
+        _showErrorDialog(
+          'Google Sign-In Error',
+          authProvider.error!,
+          onRetry: () => _handleGoogleSignIn(authProvider),
+        );
+        return;
+      }
+
       _handleAuthResult(authProvider);
     } catch (e) {
       // Check if it's an email verification error
@@ -138,9 +151,44 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
           'Please check your email and verify your account before signing in.',
         );
       } else {
-        _showSnack('Google sign-in failed: $e');
+        _showErrorDialog(
+          'Google Sign-In Failed',
+          'Error: ${e.toString()}',
+          onRetry: () => _handleGoogleSignIn(authProvider),
+        );
       }
     }
+  }
+
+  void _showErrorDialog(
+    String title,
+    String message, {
+    VoidCallback? onRetry,
+  }) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text(message),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Dismiss'),
+          ),
+          if (onRetry != null)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                onRetry();
+              },
+              child: const Text('Retry'),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -328,7 +376,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                               width: 24,
                             ),
                             const SizedBox(width: 12),
-                            const Text('Continue with Google'),
+                            Text(isLoading ? 'Signing in...' : 'Continue with Google'),
                           ],
                         ),
                       ),

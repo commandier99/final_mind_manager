@@ -119,14 +119,14 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
           FeatureCard(
             icon: Icons.warning_amber,
             title: 'Overdue Tasks',
-            description: '${overdueTasks.length} overdue from ${overdueBoards} boards',
+            description: '${overdueTasks.length} overdue from $overdueBoards boards',
             isStaticCard: false,
             cardColor: Colors.red.shade400,
           ),
           FeatureCard(
             icon: Icons.today,
             title: 'Due Today',
-            description: '${tasksDueToday.length} tasks from ${todayBoards} boards',
+            description: '${tasksDueToday.length} tasks from $todayBoards boards',
             isStaticCard: false,
             cardColor: Colors.orange.shade400,
           ),

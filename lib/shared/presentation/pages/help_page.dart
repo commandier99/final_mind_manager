@@ -5,6 +5,7 @@ class HelpPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('Help / FAQ'));
+    print('[DEBUG] HelpPage: build called');
+    return const Center(child: Text('Help Page'));
   }
 }

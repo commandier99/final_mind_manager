@@ -23,6 +23,7 @@ class Task {
   final DateTime? taskDeadline;
   final bool taskDeadlineMissed; // Whether the deadline was missed
   final int taskExtensionCount; // How many times deadline was extended
+  final DateTime? taskReminderSentAt; // When deadline reminder was sent (to prevent duplicates)
 
   final bool taskIsDone;
   final DateTime? taskIsDoneAt;
@@ -72,6 +73,7 @@ class Task {
     this.taskDeadline,
     this.taskDeadlineMissed = false,
     this.taskExtensionCount = 0,
+    this.taskReminderSentAt,
     this.taskIsDone = false,
     this.taskIsDoneAt,
     this.taskFailed = false,
@@ -152,6 +154,7 @@ class Task {
       taskDeadline: (data['taskDeadline'] as Timestamp?)?.toDate(),
       taskDeadlineMissed: data['taskDeadlineMissed'] as bool? ?? false,
       taskExtensionCount: data['taskExtensionCount'] as int? ?? 0,
+      taskReminderSentAt: (data['taskReminderSentAt'] as Timestamp?)?.toDate(),
       taskIsDone: data['taskIsDone'] as bool? ?? false,
       taskIsDoneAt: (data['taskIsDoneAt'] as Timestamp?)?.toDate(),
       taskFailed: data['taskFailed'] as bool? ?? false,
@@ -200,6 +203,8 @@ class Task {
         'taskDeadline': Timestamp.fromDate(taskDeadline!),
       'taskDeadlineMissed': taskDeadlineMissed,
       'taskExtensionCount': taskExtensionCount,
+      if (taskReminderSentAt != null)
+        'taskReminderSentAt': Timestamp.fromDate(taskReminderSentAt!),
       'taskIsDone': taskIsDone,
       if (taskIsDoneAt != null)
         'taskIsDoneAt': Timestamp.fromDate(taskIsDoneAt!),

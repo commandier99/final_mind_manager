@@ -3,8 +3,8 @@ import '/features/tasks/datasources/models/task_model.dart';
 
 class NavigationProvider extends ChangeNotifier {
   int _selectedIndex = 0;
-  int? _bottomNavIndex = null;
-  int? _sideMenuIndex = null;
+  int? _bottomNavIndex;
+  int? _sideMenuIndex;
   String _currentTitle = 'Home';
   Task? _selectedTask;
 

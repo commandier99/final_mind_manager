@@ -194,7 +194,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person_search),
                     ),
-                    value:
+                    initialValue:
                         _memberRoles.entries
                                 .firstWhere(
                                   (entry) => entry.value == 'inspector',
@@ -218,7 +218,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                           value: entry.key,
                           child: Text(entry.value),
                         );
-                      }).toList(),
+                      }),
                     ],
                     onChanged: (String? newInspectorId) {
                       setState(() {

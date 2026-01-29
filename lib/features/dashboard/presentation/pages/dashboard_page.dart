@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../../shared/features/users/datasources/providers/activity_event_provider.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
-import '../../../boards/datasources/providers/board_join_request_provider.dart';
+import '../../../boards/datasources/providers/board_request_provider.dart';
 import '../widgets/task_engagement_section.dart';
 
 class DashboardPage extends StatefulWidget {
@@ -24,7 +24,7 @@ class _DashboardPageState extends State<DashboardPage> {
       print('[DEBUG] DashboardPage: userId from UserProvider = $userId');
       if (userId != null) {
         print('[DEBUG] DashboardPage: Streaming board join requests for userId: $userId');
-        context.read<BoardJoinRequestProvider>().streamRequestsByUser(userId);
+        context.read<BoardRequestProvider>().streamRequestsByUser(userId);
         print('[DEBUG] DashboardPage: Streaming all user tasks for userId: $userId');
         context.read<TaskProvider>().streamAllUserTasks(userId);
         print('[DEBUG] DashboardPage: Streaming activity events for userId: $userId');

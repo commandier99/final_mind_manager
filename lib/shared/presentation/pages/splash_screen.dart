@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../../../features/authentication/datasources/providers/authentication_provider.dart';
+import '../../services/firebase_messaging_service.dart';
+import '../../services/deadline_reminder_service.dart';
+import '../../features/users/datasources/providers/user_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -60,6 +66,18 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<void> _checkAuthAndNavigate() async {
     if (!mounted) return;
 
+    // Request notification permission on app startup (non-blocking)
+    unawaited(
+      Permission.notification.status.then((status) {
+        if (status.isDenied) {
+          print('[SplashScreen] Requesting notification permission on app startup');
+          Permission.notification.request().then((result) {
+            print('[SplashScreen] Notification permission result: $result');
+          });
+        }
+      }),
+    );
+
     final authProvider = Provider.of<AuthenticationProvider>(
       context,
       listen: false,
@@ -67,6 +85,24 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     // Check if user is authenticated and email is verified
     if (authProvider.isAuthenticated) {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      
+      // Get current Firebase user and load their data
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      if (firebaseUser != null) {
+        await userProvider.loadUserData(firebaseUser.uid);
+        
+        if (userProvider.currentUser?.userId != null) {
+          print('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
+          FirebaseMessagingService().registerTokenForUser(userProvider.currentUser!.userId);
+          
+          // Check for deadline reminders when app opens
+          await DeadlineReminderService(FirebaseMessagingService().localNotifications)
+              .checkAndSendReminders();
+        } else {
+          print('[SplashScreen] ⚠️ User not loaded after await');
+        }
+      }
       Navigator.pushReplacementNamed(context, '/home');
     } else {
       Navigator.pushReplacementNamed(context, '/auth');

@@ -34,7 +34,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   TimeOfDay? _repeatTime;
   String _currentUserName = 'Unknown'; // Store current user's name
   bool _isLoading = false; // Loading state for task creation
-  // Remove TaskStats fields from dialog state
+  // Assignment fields
+  String? _assignedToUserId;
+  String? _assignedToUserName;
+  Map<String, String> _boardMembers = {};
+  bool _loadingMembers = false;
   
   static const List<String> _daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -64,6 +68,56 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       setState(() {});
     } catch (e) {
       print('Error loading boards: $e');
+    }
+  }
+
+  Future<void> _loadBoardMembers() async {
+    if (_selectedBoard == null) {
+      setState(() {
+        _boardMembers = {};
+        _assignedToUserId = null;
+        _assignedToUserName = null;
+      });
+      return;
+    }
+
+    setState(() => _loadingMembers = true);
+
+    try {
+      final members = <String, String>{};
+
+      // Add the task owner (manager)
+      members[widget.userId] = 'Manager';
+
+      // Add all board members
+      for (String memberId in _selectedBoard!.memberIds) {
+        if (memberId != widget.userId) {
+          // Skip inspectors - they cannot be assigned tasks
+          final role = _selectedBoard!.memberRoles[memberId] ?? 'member';
+          if (role == 'inspector') continue;
+
+          try {
+            final userData = await UserService().getUserById(memberId);
+            if (userData != null && userData.userName.isNotEmpty) {
+              members[memberId] = userData.userName;
+            } else {
+              members[memberId] = 'Unknown User';
+            }
+          } catch (e) {
+            members[memberId] = 'Unknown User';
+          }
+        }
+      }
+
+      setState(() {
+        _boardMembers = members;
+        _loadingMembers = false;
+        // Reset assignee selection when board changes
+        _assignedToUserId = null;
+        _assignedToUserName = null;
+      });
+    } catch (e) {
+      setState(() => _loadingMembers = false);
     }
   }
 
@@ -133,10 +187,15 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskTitle = _getNextUntitledTaskNumber(taskProvider.tasks);
       }
 
-      // Determine the assigned to name - add "(Manager)" if user is the board manager
-      String assignedToName = _currentUserName;
-      if (_selectedBoard != null && _selectedBoard!.boardManagerId == widget.userId) {
-        assignedToName = '$_currentUserName (Manager)';
+      // Determine the assigned to name and ID
+      String assignedToId = _assignedToUserId ?? widget.userId;
+      String assignedToName = _assignedToUserName ?? _currentUserName;
+      
+      // If assigned to manager, add "(Manager)" suffix
+      if (assignedToId == widget.userId) {
+        if (_selectedBoard != null && _selectedBoard!.boardManagerId == widget.userId) {
+          assignedToName = '$_currentUserName (Manager)';
+        }
       }
 
       // Merge deadline date with time
@@ -165,7 +224,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        taskAssignedTo: widget.userId,
+        taskAssignedTo: assignedToId,
         taskAssignedToName: assignedToName,
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
@@ -327,12 +386,59 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                 onChanged:
                     _boards.isEmpty
                         ? null
-                        : (board) => setState(() => _selectedBoard = board),
+                        : (board) {
+                          setState(() => _selectedBoard = board);
+                          if (board != null) {
+                            _loadBoardMembers();
+                          } else {
+                            setState(() {
+                              _boardMembers = {};
+                              _assignedToUserId = null;
+                              _assignedToUserName = null;
+                            });
+                          }
+                        },
                 decoration: const InputDecoration(
                   labelText: 'Select Board',
                   hintText: 'Optional',
                 ),
               ),
+              const SizedBox(height: 8),
+              // Assignment dropdown
+              if (_selectedBoard != null) ...[
+                if (_loadingMembers)
+                  const Center(child: CircularProgressIndicator())
+                else if (_boardMembers.isNotEmpty)
+                  DropdownButtonFormField<String?>(
+                    initialValue: _assignedToUserId,
+                    decoration: const InputDecoration(
+                      labelText: 'Assign To',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    items: [
+                      // "None" option for unassigned tasks
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('None - Open for petitions'),
+                      ),
+                      // All board members
+                      ..._boardMembers.entries.map((entry) {
+                        return DropdownMenuItem<String?>(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        );
+                      }).toList(),
+                    ],
+                    onChanged: (val) {
+                      setState(() {
+                        _assignedToUserId = val;
+                        _assignedToUserName = val != null ? _boardMembers[val] : null;
+                      });
+                    },
+                  ),
+                const SizedBox(height: 8),
+              ],
               if (canRepeat) ...[
                 const SizedBox(height: 8),
                 Row(

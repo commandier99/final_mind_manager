@@ -282,7 +282,7 @@ class TaskSubmissionService {
       // Log deletion activity
       try {
         final taskDoc = await _firestore.collection('tasks').doc(taskId).get();
-        final boardId = (taskDoc.data() as Map<String, dynamic>?)?['taskBoardId'];
+        final boardId = (taskDoc.data())?['taskBoardId'];
         await _activityEventService.logEvent(
           userId: submittedBy,
           userName: submittedByName,

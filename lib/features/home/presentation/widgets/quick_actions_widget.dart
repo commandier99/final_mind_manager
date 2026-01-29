@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../pages/mind_set_page.dart';
 
 class QuickActionsWidget extends StatelessWidget {

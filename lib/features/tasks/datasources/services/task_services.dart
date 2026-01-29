@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/task_model.dart'; // Ensure TaskModel is imported
 import '../models/task_stats_model.dart'; // Ensure TaskStats is imported
 import 'task_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
+import '../../../../shared/services/notification_dispatch_service.dart';
 
 class TaskService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -35,6 +37,14 @@ class TaskService {
           description: 'created a task',
           metadata: {'taskTitle': task.taskTitle},
         );
+      }
+
+      // Send deadline notification if task has a deadline
+      if (task.taskDeadline != null && task.taskBoardId.isNotEmpty) {
+        print('[Notification] Task has deadline: ${task.taskDeadline}, sending notifications...');
+        await _sendDeadlineNotification(task);
+      } else {
+        print('[Notification] Task has no deadline or empty boardId. Deadline: ${task.taskDeadline}, BoardId: ${task.taskBoardId}');
       }
 
       print('✅ Task ${task.taskId} added successfully');
@@ -92,9 +102,7 @@ class TaskService {
     try {
       // Get task data if not provided (for activity logging)
       Task? taskData = task;
-      if (taskData == null) {
-        taskData = await getTaskById(taskId);
-      }
+      taskData ??= await getTaskById(taskId);
 
       // First, delete the task from the 'tasks' collection
       await _tasks.doc(taskId).delete();
@@ -496,5 +504,53 @@ class TaskService {
             return data;
           }).toList();
         });
+  }
+
+  /// Send deadline notification to the assigned user
+  Future<void> _sendDeadlineNotification(Task task) async {
+    try {
+      print('[Notification] Task has deadline: ${task.taskDeadline}, sending notifications...');
+      
+      // Send notification to the person assigned to the task
+      final assignedUserId = task.taskAssignedTo;
+      if (assignedUserId.isEmpty || assignedUserId == 'None') {
+        print('[Notification] ⚠️ Task has no assignee, skipping deadline notification');
+        return;
+      }
+
+      print('[Notification] Starting to send deadline notifications...');
+
+      // Use NotificationDispatchService to send notification
+      final localNotifications = FlutterLocalNotificationsPlugin();
+      final dispatchService = NotificationDispatchService(localNotifications);
+
+      await dispatchService.sendNotificationToUser(
+        userId: assignedUserId,
+        title: 'Task Deadline: ${task.taskTitle}',
+        body: '${task.taskTitle} is due ${_formatDeadline(task.taskDeadline!)}',
+        category: 'task_deadline',
+        data: {
+          'taskId': task.taskId,
+          'boardId': task.taskBoardId,
+          'type': 'task_deadline',
+        },
+      );
+    } catch (e) {
+      print('[Notification] ❌ Error sending deadline notification: $e');
+    }
+  }
+
+  /// Format deadline for display
+  String _formatDeadline(DateTime deadline) {
+    final now = DateTime.now();
+    final difference = deadline.difference(now);
+    
+    if (difference.inHours < 1) {
+      return '${difference.inMinutes} minutes';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours} hours';
+    } else {
+      return '${difference.inDays} days';
+    }
   }
 }

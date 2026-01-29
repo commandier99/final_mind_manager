@@ -3,10 +3,8 @@ import 'package:provider/provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../../plans/datasources/providers/plan_provider.dart';
-import '../../../plans/datasources/models/plans_model.dart';
 import '../widgets/main_home_section.dart';
 import '../widgets/motivational_quote_card.dart';
-import '../widgets/features_carousel_widget.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});

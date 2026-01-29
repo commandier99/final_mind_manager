@@ -262,24 +262,31 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                 if (_loadingMembers)
                   const Center(child: CircularProgressIndicator())
                 else if (_boardMembers.isNotEmpty)
-                  DropdownButtonFormField<String>(
+                  DropdownButtonFormField<String?>(
                     initialValue: _assignedToUserId,
                     decoration: const InputDecoration(
                       labelText: 'Assigned To',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person),
                     ),
-                    items:
-                        _boardMembers.entries.map((entry) {
-                          return DropdownMenuItem<String>(
-                            value: entry.key,
-                            child: Text(entry.value),
-                          );
-                        }).toList(),
+                    items: [
+                      // "None" option for unassigned tasks
+                      const DropdownMenuItem<String?>(
+                        value: null,
+                        child: Text('None - Open for petitions'),
+                      ),
+                      // All board members
+                      ..._boardMembers.entries.map((entry) {
+                        return DropdownMenuItem<String?>(
+                          value: entry.key,
+                          child: Text(entry.value),
+                        );
+                      }).toList(),
+                    ],
                     onChanged: (val) {
                       setState(() {
                         _assignedToUserId = val;
-                        _assignedToUserName = _boardMembers[val];
+                        _assignedToUserName = val != null ? _boardMembers[val] : null;
                       });
                     },
                   ),

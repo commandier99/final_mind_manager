@@ -5,7 +5,7 @@ import '../../../../../shared/datasources/providers/navigation_provider.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../datasources/services/board_services.dart';
 import '../../../datasources/providers/board_provider.dart';
-import '../dialogs/add_member_to_board_dialog.dart';
+import '../../pages/add_member_to_board_page.dart';
 
 class BoardMembersSection extends StatefulWidget {
   final List<String> memberIds;
@@ -145,56 +145,59 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                           );
                         },
                       );
-                    }).toList(),
-                  // Add Member Button at the end
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            showDialog(
-                              context: context,
-                              builder: (context) => AddMemberToBoardDialog(
-                                board: widget.board,
+                    }),
+                  // Add Member Button at the end (only for non-personal boards)
+                  if (widget.board.boardTitle.toLowerCase() != 'personal')
+                    Padding(
+                      padding: const EdgeInsets.only(right: 12.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => AddMemberToBoardPage(
+                                    board: widget.board,
+                                  ),
+                                ),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(24),
+                            child: Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.grey.shade400,
+                                  width: 2,
+                                  strokeAlign: BorderSide.strokeAlignOutside,
+                                ),
                               ),
-                            );
-                          },
-                          borderRadius: BorderRadius.circular(24),
-                          child: Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: Colors.grey.shade400,
-                                width: 2,
-                                strokeAlign: BorderSide.strokeAlignOutside,
+                              child: Icon(
+                                Icons.add,
+                                size: 24,
+                                color: Colors.grey.shade600,
                               ),
-                            ),
-                            child: Icon(
-                              Icons.add,
-                              size: 24,
-                              color: Colors.grey.shade600,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 4),
-                        SizedBox(
-                          width: 60,
-                          child: Text(
-                            "Add",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: 60,
+                            child: Text(
+                              "Add",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
                 ],
             ),
           ),

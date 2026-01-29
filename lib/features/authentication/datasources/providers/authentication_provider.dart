@@ -142,29 +142,29 @@ class AuthenticationProvider extends ChangeNotifier {
             .get();
         final isNewUser = !userDoc.exists;
         
-        // Always create/update user document for Google sign-in users
-        print('🔵 [AuthenticationProvider] Creating/updating user document...');
         try {
-          final newUser = UserModel(
-            userId: _user!.uid,
-            userEmail: _user!.email!,
-            userName: _user!.displayName ?? 'User',
-            userHandle: _user!.email!.split('@')[0],
-            userCreatedAt: Timestamp.now(),
-            userIsVerified: _user!.emailVerified,
-            userProfilePicture: _user!.photoURL,
-            userIsPublic: false,
-            userAllowSearch: false,
-            userIsActive: true,
-            userIsBanned: false,
-            userLocale: 'en',
-            userTimezone: 'UTC',
-          );
-          await _userService.saveUser(newUser);
-          print('✅ [AuthenticationProvider] User document and userStats saved for Google sign-in');
-          
-          // Only create a default "Personal" board for NEW users
           if (isNewUser) {
+            // Create complete user document for NEW users
+            print('🔵 [AuthenticationProvider] Creating new user document...');
+            final newUser = UserModel(
+              userId: _user!.uid,
+              userEmail: _user!.email!,
+              userName: _user!.displayName ?? 'User',
+              userHandle: _user!.email!.split('@')[0],
+              userCreatedAt: Timestamp.now(),
+              userIsVerified: _user!.emailVerified,
+              userProfilePicture: _user!.photoURL,
+              userIsPublic: false,
+              userAllowSearch: false,
+              userIsActive: true,
+              userIsBanned: false,
+              userLocale: 'en',
+              userTimezone: 'UTC',
+            );
+            await _userService.saveUser(newUser);
+            print('✅ [AuthenticationProvider] New user document and userStats created');
+            
+            // Create a default "Personal" board for new users
             try {
               await _boardService.addBoard(
                 boardTitle: 'Personal',
@@ -177,7 +177,25 @@ class AuthenticationProvider extends ChangeNotifier {
               // Don't throw - user account was created successfully
             }
           } else {
-            print('ℹ️ [AuthenticationProvider] Existing user, skipping Personal board creation');
+            // Update only specific fields for EXISTING users to preserve their data
+            print('🔵 [AuthenticationProvider] Updating existing user...');
+            final updates = <String, dynamic>{};
+            
+            // Only update email verification status and profile picture if they changed
+            if (_user!.emailVerified) {
+              updates['userIsVerified'] = true;
+            }
+            if (_user!.photoURL != null) {
+              updates['userProfilePicture'] = _user!.photoURL;
+            }
+            
+            // Update the fields if there are any changes
+            if (updates.isNotEmpty) {
+              await _userService.updateUserFields(_user!.uid, updates);
+              print('✅ [AuthenticationProvider] Existing user updated with: $updates');
+            } else {
+              print('ℹ️ [AuthenticationProvider] No updates needed for existing user');
+            }
           }
         } catch (e) {
           print('❌ [AuthenticationProvider] Error creating user document: $e');
@@ -235,6 +253,27 @@ class AuthenticationProvider extends ChangeNotifier {
   }
 
   String _getErrorMessage(dynamic error) {
+    // Handle Google Sign-In specific errors
+    if (error.toString().contains('network_error')) {
+      return 'Network error. Please check your internet connection and try again.';
+    }
+    
+    if (error.toString().contains('ApiException: 7')) {
+      return 'Unable to connect to Google services. This may be due to:\n'
+          '• Missing or invalid SHA-1 certificate fingerprint\n'
+          '• Network connectivity issues\n'
+          '• Google Play Services not configured\n\n'
+          'Please check your Firebase configuration and try again.';
+    }
+    
+    if (error.toString().contains('sign_in_canceled')) {
+      return 'Sign-in was cancelled.';
+    }
+    
+    if (error.toString().contains('DEVELOPER_ERROR')) {
+      return 'Configuration error. Please verify your Google OAuth credentials.';
+    }
+
     if (error is FirebaseAuthException) {
       switch (error.code) {
         case 'user-not-found':
@@ -249,6 +288,8 @@ class AuthenticationProvider extends ChangeNotifier {
           return 'The password is too weak.';
         case 'network-request-failed':
           return 'Network error. Please check your connection.';
+        case 'account-exists-with-different-credential':
+          return 'This email is already registered with a different sign-in method.';
         default:
           return error.message ?? 'An authentication error occurred.';
       }

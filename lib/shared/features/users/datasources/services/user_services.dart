@@ -57,6 +57,7 @@ class UserService {
       print('✅ [UserService] User $uid updated successfully');
     } catch (e) {
       print('⚠️ [UserService] Error updating user fields: $e');
+      rethrow;
     }
   }
 

@@ -330,7 +330,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         );
-                      }).toList(),
+                      }),
                     ],
                   ),
                 ),

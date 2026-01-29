@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../../../datasources/models/plans_model.dart';
-import '../../../datasources/providers/plan_provider.dart';
-import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 
 class PlanDetailsSection extends StatefulWidget {
   final Plan plan;

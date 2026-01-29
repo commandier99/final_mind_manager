@@ -94,8 +94,14 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
 
     setState(() {
       _boardMembers = members;
-      _assignedToUserId = widget.userId;
-      _assignedToUserName = members[widget.userId];
+      // If only one member in board, auto-assign to them
+      if (members.length == 1) {
+        _assignedToUserId = members.keys.first;
+        _assignedToUserName = members.values.first;
+      } else {
+        _assignedToUserId = null;  // Default to None for multi-member boards
+        _assignedToUserName = null;
+      }
       _loadingMembers = false;
     });
   }
@@ -105,11 +111,6 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
     _titleController.dispose();
     _descriptionController.dispose();
     super.dispose();
-  }
-
-  /// Truncate name if needed
-  String _truncateName(String name) {
-    return name.length > 20 ? '${name.substring(0, 20)}...' : name;
   }
 
   /// Get the next untitled task number based on existing tasks
@@ -181,6 +182,12 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           _deadlineTime!.minute,
         );
       }
+      
+      // Debug logging
+      print('📋 [TaskDialog] Creating task with deadline: $finalDeadline');
+      if (finalDeadline == null) {
+        print('⚠️ [TaskDialog] No deadline set for this task');
+      }
 
       // Convert repeat time to HH:mm format
       String? repeatTimeStr;
@@ -196,8 +203,8 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        taskAssignedTo: _assignedToUserId ?? widget.userId,
-        taskAssignedToName: _assignedToUserName ?? 'Unknown User',
+        taskAssignedTo: _assignedToUserId ?? 'None',
+        taskAssignedToName: _assignedToUserName ?? 'Unassigned',
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),
@@ -301,30 +308,64 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                 ),
               ),
               const SizedBox(height: 12),
-              if (!_loadingMembers && _boardMembers.length > 1)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _assignedToUserId,
-                    decoration: const InputDecoration(
-                      labelText: 'Assign To',
-                      border: OutlineInputBorder(),
-                    ),
-                    items:
-                        _boardMembers.entries.map((entry) {
-                          return DropdownMenuItem<String>(
+              if (!_loadingMembers && _boardMembers.isNotEmpty) ...[
+                if (_boardMembers.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: _assignedToUserId,
+                      decoration: const InputDecoration(
+                        labelText: 'Assign To',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        // "None" option for unassigned tasks
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('None'),
+                        ),
+                        // All board members
+                        ..._boardMembers.entries.map((entry) {
+                          return DropdownMenuItem<String?>(
                             value: entry.key,
                             child: Text(entry.value),
                           );
                         }).toList(),
-                    onChanged: (val) {
-                      setState(() {
-                        _assignedToUserId = val;
-                        _assignedToUserName = _boardMembers[val];
-                      });
-                    },
+                      ],
+                      onChanged: (val) {
+                        setState(() {
+                          _assignedToUserId = val;
+                          _assignedToUserName = val != null ? _boardMembers[val] : null;
+                        });
+                      },
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      border: Border.all(color: Colors.blue[200]!),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.blue[700], size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Task will be assigned to ${_assignedToUserName ?? 'the board member'}',
+                            style: TextStyle(
+                              color: Colors.blue[700],
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+              ],
               const SizedBox(height: 12),
               Row(
                 children: [

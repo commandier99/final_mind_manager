@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../datasources/providers/board_stats_provider.dart';
-import '../../../datasources/providers/board_provider.dart';
 import 'board_activity_section.dart';
 
 class BoardStatsSection extends StatefulWidget {

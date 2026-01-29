@@ -1,14 +1,12 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:async';
 import '../models/task_model.dart'; // Import Task model
-import '../models/task_stats_model.dart'; // Import TaskStats model
 import '../services/task_services.dart';
 import '../../../boards/datasources/services/board_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/user_daily_activity_services.dart';
-import '../../../../shared/features/notifications/datasources/services/notification_service.dart';
+import '../../../notifications/datasources/helpers/notification_helper.dart';
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService = TaskService();
@@ -48,10 +46,6 @@ class TaskProvider extends ChangeNotifier {
 
   void _updateTasks(List<Task> tasks) {
     _tasks = tasks;
-    
-    // Notifications are now handled through the NotificationProvider
-    // and created on-demand when task events occur
-    
     notifyListeners();
   }
 
@@ -186,7 +180,7 @@ class TaskProvider extends ChangeNotifier {
     try {
       print('[DEBUG] TaskProvider: addTask called for taskId = ${task.taskId}');
       // Ensure taskStats is initialized (fallback to empty TaskStats)
-      final newTask = task.copyWith(taskStats: task.taskStats ?? TaskStats());
+      final newTask = task.copyWith(taskStats: task.taskStats);
 
       // Add task immediately to local list for instant UI update
       _tasks.add(newTask);
@@ -195,6 +189,30 @@ class TaskProvider extends ChangeNotifier {
 
       // Add task to Firestore using TaskService
       await _taskService.addTask(newTask);
+
+      // Send task assignment notification if task is assigned to someone
+      print('[DEBUG] TaskProvider: Task assigned to = "${newTask.taskAssignedTo}", isEmpty = ${newTask.taskAssignedTo.isEmpty}');
+      
+      // Create deadline notification if task has a deadline
+      if (newTask.taskDeadline != null && newTask.taskAssignedTo.isNotEmpty && newTask.taskAssignedTo != 'None') {
+        try {
+          await NotificationHelper.createNotificationPair(
+            userId: newTask.taskAssignedTo,
+            title: 'Task Assigned: ${newTask.taskTitle}',
+            message: 'A new task "${newTask.taskTitle}" has been assigned to you with a deadline',
+            category: NotificationHelper.categoryTaskAssigned,
+            relatedId: newTask.taskId,
+            metadata: {
+              'boardTitle': newTask.taskBoardTitle,
+              'deadline': newTask.taskDeadline.toString(),
+              'assignedBy': newTask.taskAssignedBy,
+            },
+          );
+          print('✅ Notification created for task assignment: ${newTask.taskId}');
+        } catch (e) {
+          print('⚠️ Error creating notification for task: $e');
+        }
+      }
 
       // Track activity
       await _userDailyActivityService.incrementToday(newTask.taskOwnerId, {
@@ -226,7 +244,7 @@ class TaskProvider extends ChangeNotifier {
       );
       // Ensure taskStats is initialized (fallback to empty TaskStats)
       final updatedTask = task.copyWith(
-        taskStats: task.taskStats ?? TaskStats(),
+        taskStats: task.taskStats,
       );
 
       // Update task in tasks collection using TaskService
@@ -393,26 +411,6 @@ class TaskProvider extends ChangeNotifier {
         currentUser.displayName ?? 'Unknown User',
       );
 
-      // Find the task and notify about assignment
-      final assignedTask = _tasks.firstWhere(
-        (task) => task.taskId == taskId,
-        orElse: () => Task(
-          taskId: taskId,
-          taskTitle: 'Task',
-          taskDescription: '',
-          taskBoardId: '',
-          taskOwnerId: '',
-          taskOwnerName: 'Unknown',
-          taskAssignedBy: '',
-          taskAssignedTo: '',
-          taskAssignedToName: '',
-          taskCreatedAt: DateTime.now(),
-          taskStats: TaskStats(),
-          taskIsDone: false,
-          taskIsDeleted: false,
-        ),
-      );
-      
       // Notification will be created by the UI layer when needed
 
       print('✅ Task $taskId accepted');

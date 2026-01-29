@@ -19,7 +19,7 @@ class PlansPage extends StatefulWidget {
 
 class _PlansPageState extends State<PlansPage> {
   String? _userId;
-  bool _initialized = false;
+  final bool _initialized = false;
   bool _isSearchExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';

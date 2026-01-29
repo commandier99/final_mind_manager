@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class BoardJoinRequest {
-  final String boardJoinRequestId;
+class BoardRequest {
+  final String boardRequestId;
   final String boardId;
   final String boardTitle;
   final String boardManagerId;
@@ -10,14 +10,15 @@ class BoardJoinRequest {
   final String userName;
   final String? userProfilePicture;
   final String requestStatus; // 'pending', 'approved', 'rejected'
+  final String requestType; // 'invitation' or 'join_request'
   final String? requestMessage; // User's message with the request
   final DateTime requestCreatedAt;
   final DateTime? requestRespondedAt;
   final String? requestRespondedBy; // Manager who approved/rejected
   final String? requestResponseMessage; // Manager's response message
 
-  BoardJoinRequest({
-    required this.boardJoinRequestId,
+  BoardRequest({
+    required this.boardRequestId,
     required this.boardId,
     required this.boardTitle,
     required this.boardManagerId,
@@ -26,6 +27,7 @@ class BoardJoinRequest {
     required this.userName,
     this.userProfilePicture,
     required this.requestStatus,
+    this.requestType = 'invitation', // Default to invitation for backward compatibility
     this.requestMessage,
     required this.requestCreatedAt,
     this.requestRespondedAt,
@@ -33,12 +35,12 @@ class BoardJoinRequest {
     this.requestResponseMessage,
   });
 
-  factory BoardJoinRequest.fromMap(
+  factory BoardRequest.fromMap(
     Map<String, dynamic> data,
     String documentId,
   ) {
-    return BoardJoinRequest(
-      boardJoinRequestId: documentId,
+    return BoardRequest(
+      boardRequestId: documentId,
       boardId: data['boardId'] ?? '',
       boardTitle: data['boardTitle'] ?? 'Unknown',
       boardManagerId: data['boardManagerId'] ?? '',
@@ -47,6 +49,7 @@ class BoardJoinRequest {
       userName: data['userName'] ?? 'Unknown',
       userProfilePicture: data['userProfilePicture'] as String?,
       requestStatus: data['requestStatus'] ?? 'pending',
+      requestType: data['requestType'] ?? 'invitation', // Default to invitation for backward compatibility
       requestMessage: data['requestMessage'] as String?,
       requestCreatedAt:
           (data['requestCreatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -58,7 +61,7 @@ class BoardJoinRequest {
 
   Map<String, dynamic> toMap() {
     return {
-      'boardJoinRequestId': boardJoinRequestId,
+      'boardRequestId': boardRequestId,
       'boardId': boardId,
       'boardTitle': boardTitle,
       'boardManagerId': boardManagerId,
@@ -67,6 +70,7 @@ class BoardJoinRequest {
       'userName': userName,
       if (userProfilePicture != null) 'userProfilePicture': userProfilePicture,
       'requestStatus': requestStatus,
+      'requestType': requestType,
       if (requestMessage != null) 'requestMessage': requestMessage,
       'requestCreatedAt': Timestamp.fromDate(requestCreatedAt),
       if (requestRespondedAt != null)
@@ -77,8 +81,8 @@ class BoardJoinRequest {
     };
   }
 
-  BoardJoinRequest copyWith({
-    String? boardJoinRequestId,
+  BoardRequest copyWith({
+    String? boardRequestId,
     String? boardId,
     String? boardTitle,
     String? boardManagerId,
@@ -87,14 +91,15 @@ class BoardJoinRequest {
     String? userName,
     String? userProfilePicture,
     String? requestStatus,
+    String? requestType,
     String? requestMessage,
     DateTime? requestCreatedAt,
     DateTime? requestRespondedAt,
     String? requestRespondedBy,
     String? requestResponseMessage,
   }) {
-    return BoardJoinRequest(
-      boardJoinRequestId: boardJoinRequestId ?? this.boardJoinRequestId,
+    return BoardRequest(
+      boardRequestId: boardRequestId ?? this.boardRequestId,
       boardId: boardId ?? this.boardId,
       boardTitle: boardTitle ?? this.boardTitle,
       boardManagerId: boardManagerId ?? this.boardManagerId,
@@ -103,6 +108,7 @@ class BoardJoinRequest {
       userName: userName ?? this.userName,
       userProfilePicture: userProfilePicture ?? this.userProfilePicture,
       requestStatus: requestStatus ?? this.requestStatus,
+      requestType: requestType ?? this.requestType,
       requestMessage: requestMessage ?? this.requestMessage,
       requestCreatedAt: requestCreatedAt ?? this.requestCreatedAt,
       requestRespondedAt: requestRespondedAt ?? this.requestRespondedAt,

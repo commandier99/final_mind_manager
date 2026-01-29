@@ -8,10 +8,8 @@ import 'package:provider/provider.dart';
 import '../widgets/sections/board_details_section.dart';
 import '../widgets/sections/board_tasks_section.dart';
 import '../widgets/sections/board_stats_section.dart';
-import '../widgets/sections/volunteer_requests_widget.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../datasources/providers/board_stats_provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class BoardDetailsPage extends StatefulWidget {
   final Board board;
@@ -72,8 +70,6 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
       '[DEBUG] BoardDetailsPage: build called for boardId = ${widget.board.boardId}',
     );
     final navigation = context.watch<NavigationProvider>();
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final isManager = widget.board.boardManagerId == currentUserId;
 
     return Scaffold(
       appBar: AppTopBar(
@@ -147,12 +143,6 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
 
             // Conditional rendering - Tasks or Stats
             if (!_showStats) ...[
-              // Volunteer Requests Section
-              VolunteerRequestsWidget(
-                boardId: widget.board.boardId,
-                isManager: isManager,
-              ),
-              
               // Board Tasks Section
               BoardTasksSection(
                 boardId: widget.board.boardId,

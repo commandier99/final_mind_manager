@@ -44,7 +44,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
   }
 
   bool _isTaskUnassigned() {
-    return widget.task.taskAssignedTo.isEmpty;
+    return widget.task.taskAssignedTo.isEmpty || widget.task.taskAssignedTo == 'None';
   }
 
   bool _shouldAllowUnassigned() {
@@ -138,23 +138,28 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       );
       await taskProvider.updateTask(updatedTask);
       
-      // Save appeal to subcollection
-      final appealsRef = FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(widget.task.taskId)
-          .collection('appeals');
-      
-      await appealsRef.add({
-        'userId': _currentUserId,
-        'userName': widget.task.taskOwnerName,
-        'userProfilePicture': '',
-        'appealText': appealText,
-        'createdAt': Timestamp.now(),
-      });
-      
-      setState(() => _isInterested = true);
+      // Save appeal to subcollection - wrapped in try-catch for permission errors
+      try {
+        final appealsRef = FirebaseFirestore.instance
+            .collection('tasks')
+            .doc(widget.task.taskId)
+            .collection('appeals');
+        
+        await appealsRef.add({
+          'userId': _currentUserId,
+          'userName': widget.task.taskOwnerName,
+          'userProfilePicture': '',
+          'appealText': appealText,
+          'createdAt': Timestamp.now(),
+        });
+      } catch (e) {
+        print('⚠️ Warning: Could not save appeal text: $e');
+        // Continue anyway - the interest (taskHelpers) was still recorded
+      }
       
       if (mounted) {
+        setState(() => _isInterested = true);
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: const Text('✅ Interest submitted!'),
@@ -385,7 +390,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
               Slidable.of(context)?.close();
               // If task is unassigned, go to applications page first
               // But only if user is the board manager
-              if (widget.task.taskAssignedTo.isEmpty && widget.board?.boardManagerId == _currentUserId) {
+              final isUnassigned = widget.task.taskAssignedTo.isEmpty || widget.task.taskAssignedTo == 'None';
+              final isManager = widget.board?.boardManagerId == _currentUserId;
+              
+              if (isUnassigned && isManager) {
                 Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (context) => TaskApplicationsPage(task: widget.task),

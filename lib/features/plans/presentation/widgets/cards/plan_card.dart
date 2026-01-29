@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import '../../../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../datasources/models/plans_model.dart';
-import '../../../datasources/providers/plan_provider.dart';
 
 class PlanCard extends StatelessWidget {
   final Plan plan;

@@ -7,6 +7,18 @@ import '../../../../features/boards/datasources/models/board_model.dart';
 import '../../../../features/tasks/datasources/models/task_model.dart';
 
 class SearchProvider extends ChangeNotifier {
+    // --- Compatibility for AddMemberToBoardDialog ---
+    /// Clear the user search query and notify listeners
+    void clearSearch() {
+      _query = '';
+      notifyListeners();
+    }
+
+    /// True if user search is loading
+    bool get isSearching => _isLoadingUsers;
+
+    /// User search results filtered by query
+    List<UserModel> get searchResults => filteredUserResults;
   final SearchService _searchService = SearchService();
   final UserService _userService = UserService();
 

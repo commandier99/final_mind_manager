@@ -80,7 +80,7 @@ class _FileSubmissionsDialogState extends State<FileSubmissionsDialog> {
     final canUpload = _canUploadFiles();
 
     return Dialog(
-      child: Container(
+      child: SizedBox(
         width: MediaQuery.of(context).size.width * 0.9,
         height: MediaQuery.of(context).size.height * 0.8,
         child: Column(

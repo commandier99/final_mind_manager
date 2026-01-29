@@ -279,7 +279,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                     ),
                   ),
                 );
-              }).toList(),
+              }),
               if (board.memberIds.length > 3)
                 Positioned(
                   left: 3 * 16.0,

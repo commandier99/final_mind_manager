@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:file_picker/file_picker.dart';
 import '../../../datasources/providers/task_provider.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/services/task_submission_service.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
-import '../dialogs/edit_task_dialog.dart';
 
 class TaskDetailsSection extends StatefulWidget {
   final String taskId;

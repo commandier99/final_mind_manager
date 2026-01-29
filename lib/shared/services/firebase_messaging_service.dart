@@ -1,5 +1,6 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FirebaseMessagingService {
   static final FirebaseMessagingService _instance =
@@ -14,6 +15,11 @@ class FirebaseMessagingService {
   final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // Getter to expose local notifications plugin for other services
+  FlutterLocalNotificationsPlugin get localNotifications =>
+      _localNotificationsPlugin;
 
   Future<void> initialize() async {
     try {
@@ -207,6 +213,35 @@ class FirebaseMessagingService {
     } catch (e) {
       print('[FCM] Error unsubscribing from topic: $e');
       rethrow;
+    }
+  }
+
+  /// Register FCM token for a user in Firestore
+  Future<void> registerTokenForUser(String userId) async {
+    try {
+      final token = await _firebaseMessaging.getToken();
+      if (token == null) {
+        print('[FCM] No token available to register');
+        return;
+      }
+
+      await _firestore.collection('users').doc(userId).set({
+        'fcmTokens': FieldValue.arrayUnion([token]),
+        'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      print('[FCM] Token registered for user: $userId');
+
+      // Listen for token refresh
+      _firebaseMessaging.onTokenRefresh.listen((newToken) async {
+        await _firestore.collection('users').doc(userId).set({
+          'fcmTokens': FieldValue.arrayUnion([newToken]),
+          'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+        print('[FCM] Token refreshed and updated for user: $userId');
+      });
+    } catch (e) {
+      print('[FCM] Error registering token for user: $e');
     }
   }
 }

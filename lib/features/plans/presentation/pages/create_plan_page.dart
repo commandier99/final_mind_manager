@@ -99,7 +99,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _selectedStyle,
+                initialValue: _selectedStyle,
                 decoration: InputDecoration(
                   labelText: 'Technique',
                   border: OutlineInputBorder(

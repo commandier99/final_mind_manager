@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/user_services.dart';
+import 'package:mind_manager_final/features/notifications/datasources/services/push_messaging_service.dart';
 
 class UserProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -26,6 +27,7 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     } else {
       await loadUserData(firebaseUser.uid);
+      await PushMessagingService().registerTokenForUser(firebaseUser.uid);
     }
   }
 
@@ -62,19 +64,36 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> togglePublicProfile(bool isPublic) async {
     if (_currentUser == null) return;
+    
+    // Store the previous state in case we need to revert
+    final previousState = _currentUser!.userIsPublic;
+    
     try {
-      await _userService.updateUserFields(_currentUser!.userId, {
-        'userIsPublic': isPublic,
-        'userAllowSearch': isPublic,
-      });
+      // Optimistically update the UI
       _currentUser = _currentUser!.copyWith(
         userIsPublic: isPublic,
         userAllowSearch: isPublic,
       );
       notifyListeners();
+      
+      // Then update the database
+      await _userService.updateUserFields(_currentUser!.userId, {
+        'userIsPublic': isPublic,
+        'userAllowSearch': isPublic,
+      });
+      
       if (kDebugMode) print('🌐 [UserProvider] Public visibility updated → $isPublic');
     } catch (e) {
       if (kDebugMode) print('⚠️ [UserProvider] Error toggling public profile: $e');
+      
+      // Revert to previous state on failure
+      _currentUser = _currentUser!.copyWith(
+        userIsPublic: previousState,
+        userAllowSearch: previousState,
+      );
+      notifyListeners();
+      
+      rethrow;
     }
   }
 

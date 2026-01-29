@@ -272,7 +272,7 @@ class _TaskApplicationsPageState extends State<TaskApplicationsPage> {
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
-                                    if ((user?.userEmail?.isNotEmpty ?? false))
+                                    if ((user?.userEmail.isNotEmpty ?? false))
                                       Text(
                                         user!.userEmail,
                                         style: TextStyle(
@@ -373,7 +373,7 @@ class _TaskApplicationsPageState extends State<TaskApplicationsPage> {
                       ),
                     ),
                   );
-                }).toList(),
+                }),
               ],
             ),
     );

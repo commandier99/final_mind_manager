@@ -8,7 +8,6 @@ import 'package:provider/provider.dart';
 import '../widgets/sections/plan_details_section.dart';
 import '../widgets/sections/plan_tasks_section.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
-import '../../datasources/providers/plan_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class PlanDetailsPage extends StatefulWidget {
