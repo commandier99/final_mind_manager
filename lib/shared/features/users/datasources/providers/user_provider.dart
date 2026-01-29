@@ -27,7 +27,11 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     } else {
       await loadUserData(firebaseUser.uid);
-      await PushMessagingService().registerTokenForUser(firebaseUser.uid);
+      
+      // Only register FCM token if user document exists (prevents creating empty user docs)
+      if (_currentUser != null) {
+        await PushMessagingService().registerTokenForUser(firebaseUser.uid);
+      }
     }
   }
 

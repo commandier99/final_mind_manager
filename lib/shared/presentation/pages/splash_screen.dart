@@ -92,15 +92,21 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       if (firebaseUser != null) {
         await userProvider.loadUserData(firebaseUser.uid);
         
-        if (userProvider.currentUser?.userId != null) {
+        // Only register FCM token if user document exists in database
+        if (userProvider.currentUser != null) {
           print('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
+          
+          // Register FCM token only for existing users (prevents creating empty user docs)
           FirebaseMessagingService().registerTokenForUser(userProvider.currentUser!.userId);
           
           // Check for deadline reminders when app opens
-          await DeadlineReminderService(FirebaseMessagingService().localNotifications)
-              .checkAndSendReminders();
+            final deadlineReminderService = DeadlineReminderService(
+              FirebaseMessagingService().localNotifications,
+            );
+            await deadlineReminderService.checkAndSendReminders();
+            deadlineReminderService.startPeriodicReminders();
         } else {
-          print('[SplashScreen] ⚠️ User not loaded after await');
+          print('[SplashScreen] ⚠️ User document not found in database - skipping FCM registration');
         }
       }
       Navigator.pushReplacementNamed(context, '/home');

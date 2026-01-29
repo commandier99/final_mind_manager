@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../services/deadline_reminder_service.dart';
+import '../../services/firebase_messaging_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/app_bottom_navigation.dart';
 import '../widgets/app_side_menu.dart';
@@ -22,7 +24,7 @@ class MainScreen extends StatefulWidget {
   State<MainScreen> createState() => _MainScreenState();
 }
 
-class _MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   VoidCallback? _boardsSearchToggle;
   VoidCallback? _plansSearchToggle;
@@ -73,6 +75,34 @@ class _MainScreenState extends State<MainScreen> {
         const AboutPage(),
       ];
 
+  final DeadlineReminderService _deadlineReminderService =
+      DeadlineReminderService(FirebaseMessagingService().localNotifications);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+
+    // Start periodic reminders after first frame
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _deadlineReminderService.checkAndSendReminders();
+      _deadlineReminderService.startPeriodicReminders();
+    });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _deadlineReminderService.checkAndSendReminders();
+    }
+  }
+
   void _openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
   }
@@ -99,6 +129,7 @@ class _MainScreenState extends State<MainScreen> {
     final navigation = context.watch<NavigationProvider>();
     final selectedIndex = navigation.selectedIndex;
     final isNotificationsPage = selectedIndex == 5;
+    _deadlineReminderService.startPeriodicReminders();
     final showNotificationButton =
       !isNotificationsPage && (selectedIndex == 0 || navigation.sideMenuIndex != null);
 

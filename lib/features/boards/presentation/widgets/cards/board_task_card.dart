@@ -560,13 +560,41 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                   const SizedBox(width: 4),
                                   Text(
                                     widget.task.taskDeadline != null
-                                        ? _formatDate(widget.task.taskDeadline!)
+                                        ? '${_formatDate(widget.task.taskDeadline!)} • ${_formatTime(widget.task.taskDeadline!)}'
                                         : 'No deadline',
                                     style: const TextStyle(
                                       fontSize: 11,
                                       color: Colors.grey,
                                     ),
                                   ),
+                                  if (_getDeadlineTag(widget.task.taskDeadline) != null) ...[
+                                    const SizedBox(width: 8),
+                                    Builder(
+                                      builder: (context) {
+                                        final tag = _getDeadlineTag(widget.task.taskDeadline)!;
+                                        final color = _getDeadlineTagColor(tag);
+                                        return Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: color.withOpacity(0.12),
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: color, width: 1),
+                                          ),
+                                          child: Text(
+                                            tag,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: color,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
                                 ],
                               ),
                             ],
@@ -725,6 +753,38 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
 
   String _formatDate(DateTime date) {
     return "${date.month}/${date.day}";
+  }
+
+  String _formatTime(DateTime date) {
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final minute = date.minute.toString().padLeft(2, '0');
+    final period = date.hour >= 12 ? 'PM' : 'AM';
+    return "$hour:$minute $period";
+  }
+
+  String? _getDeadlineTag(DateTime? deadline) {
+    if (deadline == null) return null;
+    final now = DateTime.now();
+    final isSameDay = deadline.year == now.year &&
+        deadline.month == now.month &&
+        deadline.day == now.day;
+
+    if (deadline.isBefore(now)) return 'Missed';
+    if (isSameDay) return 'Today';
+    return 'Upcoming';
+  }
+
+  Color _getDeadlineTagColor(String tag) {
+    switch (tag) {
+      case 'Missed':
+        return Colors.red;
+      case 'Today':
+        return Colors.orange;
+      case 'Upcoming':
+        return Colors.blue;
+      default:
+        return Colors.grey;
+    }
   }
 
 

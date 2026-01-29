@@ -45,10 +45,10 @@ class BoardRequestService {
         userId: userId,
         userName: userData?['userName'] ?? 'Unknown User',
         userProfilePicture: userData?['userProfilePicture'],
-        requestStatus: 'pending',
-        requestType: 'invitation',
-        requestMessage: message ?? 'You have been invited to join this board',
-        requestCreatedAt: DateTime.now(),
+        boardReqStatus: 'pending',
+        boardReqType: 'recruitment',
+        boardReqMessage: message ?? 'You have been invited to join this board',
+        boardReqCreatedAt: DateTime.now(),
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
@@ -95,10 +95,10 @@ class BoardRequestService {
         userId: currentUser.uid,
         userName: userData?['userName'] ?? 'Unknown User',
         userProfilePicture: userData?['userProfilePicture'],
-        requestStatus: 'pending',
-        requestType: 'join_request',
-        requestMessage: message,
-        requestCreatedAt: DateTime.now(),
+        boardReqStatus: 'pending',
+        boardReqType: 'application',
+        boardReqMessage: message,
+        boardReqCreatedAt: DateTime.now(),
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
@@ -118,8 +118,8 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamPendingRequestsForBoard(String boardId) {
     return _requestsCollection
         .where('boardId', isEqualTo: boardId)
-        .where('requestStatus', isEqualTo: 'pending')
-        .orderBy('requestCreatedAt', descending: true)
+        .where('boardReqStatus', isEqualTo: 'pending')
+        .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -137,9 +137,9 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamPendingInvitationsForBoard(String boardId) {
     return _requestsCollection
         .where('boardId', isEqualTo: boardId)
-        .where('requestStatus', isEqualTo: 'pending')
-        .where('requestType', isEqualTo: 'invitation')
-        .orderBy('requestCreatedAt', descending: true)
+        .where('boardReqStatus', isEqualTo: 'pending')
+        .where('boardReqType', isEqualTo: 'recruitment')
+        .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -157,9 +157,9 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamPendingJoinRequestsForBoard(String boardId) {
     return _requestsCollection
         .where('boardId', isEqualTo: boardId)
-        .where('requestStatus', isEqualTo: 'pending')
-        .where('requestType', isEqualTo: 'join_request')
-        .orderBy('requestCreatedAt', descending: true)
+        .where('boardReqStatus', isEqualTo: 'pending')
+        .where('boardReqType', isEqualTo: 'application')
+        .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
@@ -177,8 +177,8 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamInvitationsByUser(String userId) {
     return _requestsCollection
         .where('userId', isEqualTo: userId)
-        .where('requestType', isEqualTo: 'invitation')
-        .orderBy('requestCreatedAt', descending: true)
+        .where('boardReqType', isEqualTo: 'recruitment')
+        .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs.map((doc) {
@@ -194,8 +194,8 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamJoinRequestsByUser(String userId) {
     return _requestsCollection
         .where('userId', isEqualTo: userId)
-        .where('requestType', isEqualTo: 'join_request')
-        .orderBy('requestCreatedAt', descending: true)
+        .where('boardReqType', isEqualTo: 'application')
+        .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs.map((doc) {
@@ -213,7 +213,7 @@ class BoardRequestService {
     try {
       return _requestsCollection
           .where('userId', isEqualTo: userId)
-          .orderBy('requestCreatedAt', descending: true)
+          .orderBy('boardReqCreatedAt', descending: true)
           .snapshots()
           .handleError((error) {
             print('[BoardRequestService] ERROR in stream: $error');
@@ -243,7 +243,7 @@ class BoardRequestService {
         await _requestsCollection
             .where('boardId', isEqualTo: boardId)
             .where('userId', isEqualTo: userId)
-            .where('requestStatus', isEqualTo: 'pending')
+            .where('boardReqStatus', isEqualTo: 'pending')
             .get();
 
     return snapshot.docs.isNotEmpty;
@@ -270,10 +270,10 @@ class BoardRequestService {
 
       // Update request status
       await _requestsCollection.doc(request.boardRequestId).update({
-        'requestStatus': 'approved',
-        'requestRespondedAt': Timestamp.fromDate(DateTime.now()),
-        'requestRespondedBy': currentUser.uid,
-        if (responseMessage != null) 'requestResponseMessage': responseMessage,
+        'boardReqStatus': 'approved',
+        'boardReqRespondedAt': Timestamp.fromDate(DateTime.now()),
+        'boardReqRespondedBy': currentUser.uid,
+        if (responseMessage != null) 'boardReqResponseMessage': responseMessage,
       });
 
       print('✅ Join request approved for user ${request.userId}');
@@ -293,10 +293,10 @@ class BoardRequestService {
       if (currentUser == null) throw Exception('User not authenticated');
 
       await _requestsCollection.doc(request.boardRequestId).update({
-        'requestStatus': 'rejected',
-        'requestRespondedAt': Timestamp.fromDate(DateTime.now()),
-        'requestRespondedBy': currentUser.uid,
-        if (responseMessage != null) 'requestResponseMessage': responseMessage,
+        'boardReqStatus': 'rejected',
+        'boardReqRespondedAt': Timestamp.fromDate(DateTime.now()),
+        'boardReqRespondedBy': currentUser.uid,
+        if (responseMessage != null) 'boardReqResponseMessage': responseMessage,
       });
 
       print('✅ Join request rejected for user ${request.userId}');

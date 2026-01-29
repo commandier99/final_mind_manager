@@ -5,413 +5,383 @@ import '../../../datasources/models/in_app_notif_model.dart';
 import '../../../datasources/models/push_notif_model.dart';
 import '../../../datasources/providers/in_app_notif_provider.dart';
 import '../../../datasources/providers/push_notif_provider.dart';
-import '../../../../boards/datasources/providers/board_request_provider.dart';
 
-/// Reusable notification card widget that handles all notification types
-class NotificationCard extends StatefulWidget {
+/// Reusable notification card widget that displays basic info
+/// Navigates to NotificationDetailsPage on tap where full details and actions are available
+class NotificationCard extends StatelessWidget {
   final dynamic notification;
   final InAppNotificationProvider? inAppProvider;
   final PushNotificationProvider? pushProvider;
-  final BoardRequestProvider? boardProvider;
-  final VoidCallback? onAcceptInvite;
-  final VoidCallback? onDeclineInvite;
 
   const NotificationCard({
     required this.notification,
     this.inAppProvider,
     this.pushProvider,
-    this.boardProvider,
-    this.onAcceptInvite,
-    this.onDeclineInvite,
     super.key,
   });
 
   @override
-  State<NotificationCard> createState() => _NotificationCardState();
-}
-
-class _NotificationCardState extends State<NotificationCard> {
-  bool _isExpanded = false;
-
-  @override
   Widget build(BuildContext context) {
-    if (widget.notification is BoardRequest) {
-      return _buildBoardRequestCard(context, widget.notification as BoardRequest);
-    } else if (widget.notification is InAppNotification) {
-      return _buildInAppNotifCard(context, widget.notification as InAppNotification);
-    } else if (widget.notification is PushNotification) {
-      return _buildPushNotifCard(context, widget.notification as PushNotification);
+    if (notification is BoardRequest) {
+      return _buildBoardRequestCard(context, notification as BoardRequest);
+    } else if (notification is InAppNotification) {
+      return _buildInAppNotifCard(context, notification as InAppNotification);
+    } else if (notification is PushNotification) {
+      return _buildPushNotifCard(context, notification as PushNotification);
     }
     return const SizedBox.shrink();
   }
 
-  // Board Request Card - Expandable version
-  Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
-    final isInvitation = request.requestType == 'invitation';
-    final isPending = request.requestStatus == 'pending';
+  /// Navigate to details page and mark as read if applicable
+  Future<void> _navigateToDetails(BuildContext context) async {
+    // Mark as read when viewing details
+    if (notification is InAppNotification) {
+      final notif = notification as InAppNotification;
+      if (!notif.isRead && inAppProvider != null) {
+        await inAppProvider!.markAsRead(notif.notificationId);
+      }
+    }
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: isPending ? () => setState(() => _isExpanded = !_isExpanded) : null,
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Row - Always visible
-              Row(
-                children: [
-                  Icon(
-                    isInvitation ? Icons.mail : Icons.send,
-                    color: isInvitation ? Colors.blue : Colors.green,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isInvitation ? 'Board Invitation' : 'Join Request',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(
-                          request.boardTitle,
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _buildStatusChip(request.requestStatus),
-                  if (isPending) ...[
-                    const SizedBox(width: 8),
-                    Icon(
-                      _isExpanded ? Icons.expand_less : Icons.expand_more,
-                      color: Colors.grey[600],
-                    ),
-                  ],
-                ],
-              ),
+    if (context.mounted) {
+      // Use the page route to avoid import issues at top level
+      // The NotificationDetailsPage will handle different notification types
+      _showDetailsPage(context);
+    }
+  }
 
-              // Expanded Content
-              if (_isExpanded) ...[
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                
-                // From/Requester info
-                if (isInvitation)
-                  Text(
-                    'From: ${request.boardManagerName}',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                
-                // Message
-                if (request.requestMessage != null &&
-                    request.requestMessage!.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      request.requestMessage!,
-                      style: TextStyle(color: Colors.grey[800], fontSize: 14),
-                    ),
-                  ),
-                ],
-
-                // Timestamp
-                const SizedBox(height: 12),
-                Text(
-                  timeago.format(request.requestCreatedAt),
-                  style: TextStyle(color: Colors.grey[500], fontSize: 12),
-                ),
-
-                // Action Buttons
-                if (isPending && isInvitation) ...[
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: widget.onAcceptInvite,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text('Accept'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _showDeclineDialog(context, request),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.red,
-                          ),
-                          child: const Text('Decline'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ],
-          ),
-        ),
-      ),
+  /// Show the details page for this notification
+  void _showDetailsPage(BuildContext context) {
+    // Create a custom route that loads the details page on demand
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (BuildContext sheetContext) {
+        return _buildDetailsContent(sheetContext);
+      },
     );
   }
 
-  /// Show dialog to get decline reason
-  void _showDeclineDialog(BuildContext context, BoardRequest request) {
-    final reasonController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Decline Invitation'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Are you sure you want to decline the invitation to ${request.boardTitle}?',
-              style: const TextStyle(fontSize: 14),
+  /// Build details content based on notification type
+  /// This will be expanded later as a full page
+  Widget _buildDetailsContent(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.9,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        children: [
+          AppBar(
+            title: const Text('Notification Details'),
+            automaticallyImplyLeading: false,
+            leading: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => Navigator.pop(context),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Optional: Tell them why you\'re declining',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: reasonController,
-              minLines: 2,
-              maxLines: 4,
-              decoration: InputDecoration(
-                hintText: 'E.g., "Too busy right now" or "Not interested in this project"',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: _buildNotificationDetails(),
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-              _submitDecline(context, request, reasonController.text);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Decline'),
           ),
         ],
       ),
     );
   }
 
-  /// Submit the decline with reason
-  Future<void> _submitDecline(
-    BuildContext context,
-    BoardRequest request,
-    String reason,
-  ) async {
-    try {
-      final boardProvider = widget.boardProvider;
-      if (boardProvider == null) return;
-
-      await boardProvider.rejectRequest(
-        request,
-        responseMessage: reason.isNotEmpty ? reason : 'Declined without reason',
-      );
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Invitation declined'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        setState(() => _isExpanded = false);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error declining invitation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+  /// Build the specific notification details
+  Widget _buildNotificationDetails() {
+    if (notification is BoardRequest) {
+      return _buildBoardRequestDetails(notification as BoardRequest);
+    } else if (notification is InAppNotification) {
+      return _buildInAppNotificationDetails(notification as InAppNotification);
+    } else if (notification is PushNotification) {
+      return _buildPushNotificationDetails(notification as PushNotification);
     }
+    return const SizedBox.shrink();
   }
 
-  // In-App Notification Card
-  Widget _buildInAppNotifCard(BuildContext context, InAppNotification notif) {
+  /// TODO: Implement board request details view
+  Widget _buildBoardRequestDetails(BoardRequest request) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          request.boardTitle,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Status: ${request.boardReqStatus}',
+          style: const TextStyle(fontSize: 14),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Message: ${request.boardReqMessage ?? 'No message'}',
+          style: const TextStyle(fontSize: 14),
+        ),
+        // More details to be implemented
+      ],
+    );
+  }
+
+  /// TODO: Implement in-app notification details view
+  Widget _buildInAppNotificationDetails(InAppNotification notif) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          notif.title,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          notif.message,
+          style: const TextStyle(fontSize: 14),
+        ),
+        const SizedBox(height: 16),
+        // TODO: Implement mark as unread and log activity
+        ElevatedButton.icon(
+          onPressed: () {
+            // Mark as unread action and log as user activity
+          },
+          icon: const Icon(Icons.mail_outline),
+          label: const Text('Mark as Unread'),
+        ),
+        // More details to be implemented
+      ],
+    );
+  }
+
+  /// TODO: Implement push notification details view
+  Widget _buildPushNotificationDetails(PushNotification notif) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          notif.title,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          notif.body,
+          style: const TextStyle(fontSize: 14),
+        ),
+        // More details to be implemented
+      ],
+    );
+  }
+
+  // Board Request Card - Basic version
+  Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
+    final isRecruitment = request.boardReqType == 'recruitment';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.notifications_active,
-                  color: notif.isRead ? Colors.grey : Colors.blue,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    notif.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+      child: InkWell(
+        onTap: () => _navigateToDetails(context),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(
+                isRecruitment ? Icons.mail : Icons.send,
+                color: isRecruitment ? Colors.blue : Colors.green,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      isRecruitment ? 'Recruitment' : 'Application',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: notif.isRead ? Colors.grey[200] : Colors.blue[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    notif.isRead ? 'Read' : 'Unread',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: notif.isRead
-                          ? Colors.grey[600]
-                          : Colors.blue[700],
+                    const SizedBox(height: 4),
+                    Text(
+                      request.boardTitle,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              notif.message,
-              style: TextStyle(color: Colors.grey[800], fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              timeago.format(notif.createdAt),
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-            ),
-            if (!notif.isRead && widget.inAppProvider != null) ...[
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: () =>
-                    widget.inAppProvider!.markAsRead(notif.notificationId),
-                icon: const Icon(Icons.check, size: 16),
-                label: const Text('Mark as Read'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue,
-                  foregroundColor: Colors.white,
+                    const SizedBox(height: 4),
+                    Text(
+                      timeago.format(request.boardReqCreatedAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
                 ),
               ),
+              const SizedBox(width: 12),
+              _buildStatusChip(request.boardReqStatus),
             ],
-          ],
+          ),
         ),
       ),
     );
   }
 
-  // Push Notification Card
-  Widget _buildPushNotifCard(BuildContext context, PushNotification notif) {
+  // In-App Notification Card - Basic version
+  Widget _buildInAppNotifCard(BuildContext context, InAppNotification notif) {
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.notifications,
-                  color: notif.isSent ? Colors.green : Colors.orange,
-                  size: 20,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    notif.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
+      child: InkWell(
+        onTap: () => _navigateToDetails(context),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(
+                Icons.notifications_active,
+                color: notif.isRead ? Colors.grey : Colors.blue,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      notif.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: notif.isSent
-                        ? Colors.green[100]
-                        : Colors.orange[100],
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    notif.isSent ? 'Sent' : 'Pending',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: notif.isSent
-                          ? Colors.green[700]
-                          : Colors.orange[700],
+                    const SizedBox(height: 4),
+                    Text(
+                      notif.message,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    Text(
+                      timeago.format(notif.createdAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              notif.body,
-              style: TextStyle(color: Colors.grey[800], fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              timeago.format(notif.createdAt),
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-            ),
-            if (notif.lastError != null) ...[
-              const SizedBox(height: 8),
+              ),
+              const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.red[50],
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.red[200]!),
+                  color: notif.isRead ? Colors.grey[200] : Colors.blue[100],
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  'Error: ${notif.lastError}',
-                  style: TextStyle(color: Colors.red[700], fontSize: 12),
+                  notif.isRead ? 'Read' : 'Unread',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: notif.isRead
+                        ? Colors.grey[600]
+                        : Colors.blue[700],
+                  ),
                 ),
               ),
             ],
-          ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Push Notification Card - Basic version
+  Widget _buildPushNotifCard(BuildContext context, PushNotification notif) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: InkWell(
+        onTap: () => _navigateToDetails(context),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Icon(
+                Icons.notifications,
+                color: notif.isSent ? Colors.green : Colors.orange,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      notif.title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      notif.body,
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey[600],
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      timeago.format(notif.createdAt),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: notif.isSent
+                      ? Colors.green[100]
+                      : Colors.orange[100],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  notif.isSent ? 'Sent' : 'Pending',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: notif.isSent
+                        ? Colors.green[700]
+                        : Colors.orange[700],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

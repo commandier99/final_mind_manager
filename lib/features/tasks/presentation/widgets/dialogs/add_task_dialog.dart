@@ -246,6 +246,12 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: isRepeating ? repeatTimeStr : null,
+        // Set acceptance status to 'pending' if assigning to someone else
+        taskAcceptanceStatus: (assignedToId.isNotEmpty && 
+                               assignedToId != 'None' && 
+                               assignedToId != widget.userId) 
+            ? 'pending' 
+            : null,
       );
 
       await taskProvider.addTask(newTask);

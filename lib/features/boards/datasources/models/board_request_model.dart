@@ -9,13 +9,13 @@ class BoardRequest {
   final String userId;
   final String userName;
   final String? userProfilePicture;
-  final String requestStatus; // 'pending', 'approved', 'rejected'
-  final String requestType; // 'invitation' or 'join_request'
-  final String? requestMessage; // User's message with the request
-  final DateTime requestCreatedAt;
-  final DateTime? requestRespondedAt;
-  final String? requestRespondedBy; // Manager who approved/rejected
-  final String? requestResponseMessage; // Manager's response message
+  final String boardReqStatus; // 'pending', 'approved', 'rejected'
+  final String boardReqType; // 'recruitment' or 'application'
+  final String? boardReqMessage; // User's message with the request
+  final DateTime boardReqCreatedAt;
+  final DateTime? boardReqRespondedAt;
+  final String? boardReqRespondedBy; // Manager who approved/rejected
+  final String? boardReqResponseMessage; // Manager's response message
 
   BoardRequest({
     required this.boardRequestId,
@@ -26,13 +26,13 @@ class BoardRequest {
     required this.userId,
     required this.userName,
     this.userProfilePicture,
-    required this.requestStatus,
-    this.requestType = 'invitation', // Default to invitation for backward compatibility
-    this.requestMessage,
-    required this.requestCreatedAt,
-    this.requestRespondedAt,
-    this.requestRespondedBy,
-    this.requestResponseMessage,
+    required this.boardReqStatus,
+    this.boardReqType = 'recruitment', // Default to recruitment for backward compatibility
+    this.boardReqMessage,
+    required this.boardReqCreatedAt,
+    this.boardReqRespondedAt,
+    this.boardReqRespondedBy,
+    this.boardReqResponseMessage,
   });
 
   factory BoardRequest.fromMap(
@@ -48,14 +48,14 @@ class BoardRequest {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? 'Unknown',
       userProfilePicture: data['userProfilePicture'] as String?,
-      requestStatus: data['requestStatus'] ?? 'pending',
-      requestType: data['requestType'] ?? 'invitation', // Default to invitation for backward compatibility
-      requestMessage: data['requestMessage'] as String?,
-      requestCreatedAt:
-          (data['requestCreatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      requestRespondedAt: (data['requestRespondedAt'] as Timestamp?)?.toDate(),
-      requestRespondedBy: data['requestRespondedBy'] as String?,
-      requestResponseMessage: data['requestResponseMessage'] as String?,
+      boardReqStatus: data['boardReqStatus'] ?? data['requestStatus'] ?? 'pending',
+      boardReqType: data['boardReqType'] ?? data['requestType'] ?? 'recruitment', // Handle migration from old field names
+      boardReqMessage: data['boardReqMessage'] ?? data['requestMessage'] as String?,
+      boardReqCreatedAt:
+          (data['boardReqCreatedAt'] as Timestamp?)?.toDate() ?? (data['requestCreatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      boardReqRespondedAt: (data['boardReqRespondedAt'] as Timestamp?)?.toDate() ?? (data['requestRespondedAt'] as Timestamp?)?.toDate(),
+      boardReqRespondedBy: data['boardReqRespondedBy'] ?? data['requestRespondedBy'] as String?,
+      boardReqResponseMessage: data['boardReqResponseMessage'] ?? data['requestResponseMessage'] as String?,
     );
   }
 
@@ -69,15 +69,15 @@ class BoardRequest {
       'userId': userId,
       'userName': userName,
       if (userProfilePicture != null) 'userProfilePicture': userProfilePicture,
-      'requestStatus': requestStatus,
-      'requestType': requestType,
-      if (requestMessage != null) 'requestMessage': requestMessage,
-      'requestCreatedAt': Timestamp.fromDate(requestCreatedAt),
-      if (requestRespondedAt != null)
-        'requestRespondedAt': Timestamp.fromDate(requestRespondedAt!),
-      if (requestRespondedBy != null) 'requestRespondedBy': requestRespondedBy,
-      if (requestResponseMessage != null)
-        'requestResponseMessage': requestResponseMessage,
+      'boardReqStatus': boardReqStatus,
+      'boardReqType': boardReqType,
+      if (boardReqMessage != null) 'boardReqMessage': boardReqMessage,
+      'boardReqCreatedAt': Timestamp.fromDate(boardReqCreatedAt),
+      if (boardReqRespondedAt != null)
+        'boardReqRespondedAt': Timestamp.fromDate(boardReqRespondedAt!),
+      if (boardReqRespondedBy != null) 'boardReqRespondedBy': boardReqRespondedBy,
+      if (boardReqResponseMessage != null)
+        'boardReqResponseMessage': boardReqResponseMessage,
     };
   }
 
@@ -90,13 +90,13 @@ class BoardRequest {
     String? userId,
     String? userName,
     String? userProfilePicture,
-    String? requestStatus,
-    String? requestType,
-    String? requestMessage,
-    DateTime? requestCreatedAt,
-    DateTime? requestRespondedAt,
-    String? requestRespondedBy,
-    String? requestResponseMessage,
+    String? boardReqStatus,
+    String? boardReqType,
+    String? boardReqMessage,
+    DateTime? boardReqCreatedAt,
+    DateTime? boardReqRespondedAt,
+    String? boardReqRespondedBy,
+    String? boardReqResponseMessage,
   }) {
     return BoardRequest(
       boardRequestId: boardRequestId ?? this.boardRequestId,
@@ -107,14 +107,14 @@ class BoardRequest {
       userId: userId ?? this.userId,
       userName: userName ?? this.userName,
       userProfilePicture: userProfilePicture ?? this.userProfilePicture,
-      requestStatus: requestStatus ?? this.requestStatus,
-      requestType: requestType ?? this.requestType,
-      requestMessage: requestMessage ?? this.requestMessage,
-      requestCreatedAt: requestCreatedAt ?? this.requestCreatedAt,
-      requestRespondedAt: requestRespondedAt ?? this.requestRespondedAt,
-      requestRespondedBy: requestRespondedBy ?? this.requestRespondedBy,
-      requestResponseMessage:
-          requestResponseMessage ?? this.requestResponseMessage,
+      boardReqStatus: boardReqStatus ?? this.boardReqStatus,
+      boardReqType: boardReqType ?? this.boardReqType,
+      boardReqMessage: boardReqMessage ?? this.boardReqMessage,
+      boardReqCreatedAt: boardReqCreatedAt ?? this.boardReqCreatedAt,
+      boardReqRespondedAt: boardReqRespondedAt ?? this.boardReqRespondedAt,
+      boardReqRespondedBy: boardReqRespondedBy ?? this.boardReqRespondedBy,
+      boardReqResponseMessage:
+          boardReqResponseMessage ?? this.boardReqResponseMessage,
     );
   }
 }

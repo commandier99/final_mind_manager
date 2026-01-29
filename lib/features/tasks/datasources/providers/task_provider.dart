@@ -190,27 +190,36 @@ class TaskProvider extends ChangeNotifier {
       // Add task to Firestore using TaskService
       await _taskService.addTask(newTask);
 
-      // Send task assignment notification if task is assigned to someone
+      // Send task assignment notification if task is assigned to someone other than creator
       print('[DEBUG] TaskProvider: Task assigned to = "${newTask.taskAssignedTo}", isEmpty = ${newTask.taskAssignedTo.isEmpty}');
       
-      // Create deadline notification if task has a deadline
-      if (newTask.taskDeadline != null && newTask.taskAssignedTo.isNotEmpty && newTask.taskAssignedTo != 'None') {
+      // Create task assignment notification for any assigned task (with or without deadline)
+      if (newTask.taskAssignedTo.isNotEmpty && 
+          newTask.taskAssignedTo != 'None' && 
+          newTask.taskAssignedTo != newTask.taskOwnerId) {
         try {
+          final deadlineInfo = newTask.taskDeadline != null 
+              ? ' with a deadline on ${newTask.taskDeadline!.toString().split(' ')[0]}' 
+              : '';
+          
           await NotificationHelper.createNotificationPair(
             userId: newTask.taskAssignedTo,
-            title: 'Task Assigned: ${newTask.taskTitle}',
-            message: 'A new task "${newTask.taskTitle}" has been assigned to you with a deadline',
+            title: 'Task Assignment Request',
+            message: '${newTask.taskAssignedBy} wants to assign you the task "${newTask.taskTitle}"$deadlineInfo',
             category: NotificationHelper.categoryTaskAssigned,
             relatedId: newTask.taskId,
             metadata: {
               'boardTitle': newTask.taskBoardTitle,
-              'deadline': newTask.taskDeadline.toString(),
+              'taskTitle': newTask.taskTitle,
+              if (newTask.taskDeadline != null)
+                'deadline': newTask.taskDeadline.toString(),
               'assignedBy': newTask.taskAssignedBy,
+              'taskId': newTask.taskId,
             },
           );
-          print('✅ Notification created for task assignment: ${newTask.taskId}');
+          print('✅ Task assignment notification created for: ${newTask.taskId}');
         } catch (e) {
-          print('⚠️ Error creating notification for task: $e');
+          print('⚠️ Error creating notification for task assignment: $e');
         }
       }
 
