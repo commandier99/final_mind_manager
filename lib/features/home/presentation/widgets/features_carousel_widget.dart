@@ -5,7 +5,7 @@ import '../../../tasks/datasources/models/task_model.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import 'dart:async';
 import 'feature_card_widget.dart';
-import '../pages/mind_set_page.dart';
+import '../features/Mind_Set/pages/mind_set_page.dart';
 
 class FeaturesCarouselWidget extends StatefulWidget {
   const FeaturesCarouselWidget({super.key});

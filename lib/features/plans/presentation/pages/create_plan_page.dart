@@ -6,9 +6,7 @@ import '../../datasources/models/plans_model.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
 
 class CreatePlanPage extends StatefulWidget {
-  final String initialTechnique;
-
-  const CreatePlanPage({super.key, this.initialTechnique = 'quick_todo'});
+  const CreatePlanPage({super.key});
 
   @override
   State<CreatePlanPage> createState() => _CreatePlanPageState();
@@ -17,7 +15,7 @@ class CreatePlanPage extends StatefulWidget {
 class _CreatePlanPageState extends State<CreatePlanPage> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  late String _selectedStyle;
+  final _benefitController = TextEditingController();
   DateTime? _scheduledDate;
   bool _isSaving = false;
   final Set<String> _selectedTaskIds = {};
@@ -52,7 +50,6 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   @override
   void initState() {
     super.initState();
-    _selectedStyle = widget.initialTechnique;
     _selectedFilters = Set.from(taskStatuses); // Show all by default
   }
 
@@ -60,6 +57,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   void dispose() {
     _titleController.dispose();
     _descriptionController.dispose();
+    _benefitController.dispose();
     super.dispose();
   }
 
@@ -79,7 +77,8 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 controller: _titleController,
                 decoration: InputDecoration(
                   labelText: 'Plan Title',
-                  hintText: 'e.g., Monday Study Session',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText: 'Ex. Monday study session for Algebra II',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -90,7 +89,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 controller: _descriptionController,
                 decoration: InputDecoration(
                   labelText: 'Description',
-                  hintText: 'What is this plan for?',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText:
+                      'Ex. Review chapters 5-7, practice problems, and summarize notes',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -98,33 +99,18 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 maxLines: 3,
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                initialValue: _selectedStyle,
+              TextField(
+                controller: _benefitController,
                 decoration: InputDecoration(
-                  labelText: 'Technique',
+                  labelText: 'Benefit',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                  hintText:
+                      'Ex. Feel prepared for the quiz and reduce last-minute stress',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'quick_todo',
-                    child: Text('Quick To-Do'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'pomodoro',
-                    child: Text('Pomodoro'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'eat_the_frog',
-                    child: Text('Eat the Frog'),
-                  ),
-                ],
-                onChanged: (value) {
-                  setState(() {
-                    _selectedStyle = value ?? 'quick_todo';
-                  });
-                },
+                maxLines: 3,
               ),
               Row(
                 children: [
@@ -208,7 +194,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           padding: const EdgeInsets.symmetric(vertical: 24),
                           child: Center(
                             child: Text(
-                              'No Tasks',
+                              'No tasks available. Create tasks first, then select at least one to make a plan.',
                               style: TextStyle(
                                 color: Colors.grey.shade600,
                                 fontSize: 14,
@@ -272,7 +258,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _savePlan,
+                  onPressed: _isSaving || _selectedTaskIds.isEmpty
+                      ? null
+                      : _savePlan,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 16,
@@ -313,6 +301,13 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   }
 
   Future<void> _savePlan() async {
+    if (_selectedTaskIds.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one task for the plan.')),
+      );
+      return;
+    }
+
     if (_titleController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a plan title')),
@@ -340,7 +335,8 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
           userName: userName,
           title: _titleController.text.trim(),
           description: _descriptionController.text.trim(),
-          style: _selectedStyle,
+          benefit: _benefitController.text.trim(),
+          style: 'Checklist',
           scheduledFor: _scheduledDate,
           taskIds: _collectTaskIds(),
         );

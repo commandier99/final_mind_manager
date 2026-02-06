@@ -6,6 +6,7 @@ class Plan {
   final String planOwnerName;
   final String planTitle;
   final String planDescription;
+  final String planBenefit;
   final DateTime planCreatedAt;
   final DateTime? planDeletedAt;
   final bool planIsDeleted;
@@ -29,6 +30,7 @@ class Plan {
     required this.planOwnerName,
     required this.planTitle,
     required this.planDescription,
+    this.planBenefit = '',
     required this.planCreatedAt,
     this.planDeletedAt,
     this.planIsDeleted = false,
@@ -53,6 +55,7 @@ class Plan {
       planOwnerName: data['planOwnerName'] as String? ?? 'Unknown',
       planTitle: data['planTitle'] as String? ?? 'Untitled Plan',
       planDescription: data['planDescription'] as String? ?? '',
+      planBenefit: data['planBenefit'] as String? ?? '',
       planCreatedAt: (data['planCreatedAt'] as Timestamp).toDate(),
       planDeletedAt: data['planDeletedAt'] != null
           ? (data['planDeletedAt'] as Timestamp).toDate()
@@ -78,6 +81,7 @@ class Plan {
       'planOwnerName': planOwnerName,
       'planTitle': planTitle,
       'planDescription': planDescription,
+      'planBenefit': planBenefit,
       'planCreatedAt': Timestamp.fromDate(planCreatedAt),
       if (planDeletedAt != null) 'planDeletedAt': Timestamp.fromDate(planDeletedAt!),
       'planIsDeleted': planIsDeleted,
@@ -97,6 +101,7 @@ class Plan {
     String? planOwnerName,
     String? planTitle,
     String? planDescription,
+    String? planBenefit,
     DateTime? planCreatedAt,
     DateTime? planDeletedAt,
     bool? planIsDeleted,
@@ -114,6 +119,7 @@ class Plan {
       planOwnerName: planOwnerName ?? this.planOwnerName,
       planTitle: planTitle ?? this.planTitle,
       planDescription: planDescription ?? this.planDescription,
+      planBenefit: planBenefit ?? this.planBenefit,
       planCreatedAt: planCreatedAt ?? this.planCreatedAt,
       planDeletedAt: planDeletedAt ?? this.planDeletedAt,
       planIsDeleted: planIsDeleted ?? this.planIsDeleted,

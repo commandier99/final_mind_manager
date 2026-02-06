@@ -40,8 +40,10 @@ class _PlansPageState extends State<PlansPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final userId = context.read<UserProvider>().userId;
-    if (userId != null) {
-      _userId = userId;
+    if (userId != null && userId != _userId) {
+      setState(() {
+        _userId = userId;
+      });
     }
   }
 
@@ -92,13 +94,10 @@ class _PlansPageState extends State<PlansPage> {
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'plans_page_fab',
         onPressed: () async {
-          final template = await _showTemplateDialog(context);
-          if (template == null) return;
-
           final createdPlan = await Navigator.push<Plan?>(
             context,
             MaterialPageRoute(
-              builder: (context) => CreatePlanPage(initialTechnique: template),
+              builder: (context) => const CreatePlanPage(),
             ),
           );
 
@@ -236,52 +235,4 @@ class _PlansPageState extends State<PlansPage> {
     );
   }
 
-  Future<String?> _showTemplateDialog(BuildContext context) {
-    final templates = [
-      (
-        'quick_todo',
-        'Quick To-Do',
-        'Compile tasks you want to do together.',
-      ),
-      (
-        'pomodoro',
-        'Pomodoro',
-        'Work in focused intervals with short breaks in-between.',
-      ),
-      (
-        'eat_the_frog',
-        'Eat the Frog',
-        'Identify the hardest tasks, the Frog/s, and tackle them first.',
-      ),
-    ];
-
-    return showDialog<String>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Choose a template'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final (value, title, desc) in templates)
-                  ListTile(
-                    title: Text(title),
-                    subtitle: Text(desc),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: () => Navigator.pop(context, value),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 }
