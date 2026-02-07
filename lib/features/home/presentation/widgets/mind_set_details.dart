@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../features/Mind_Set/widgets/mind_set_timer.dart';
+import '../features/mind_set/widgets/mind_set_timer.dart';
 
 class MindSetDetails extends StatelessWidget {
   final String title;

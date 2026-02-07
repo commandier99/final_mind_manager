@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../features/Mind_Set/widgets/on_the_spot_task_stream.dart';
+import '../features/mind_set/widgets/on_the_spot_task_stream.dart';
 
 class OnTheSpotSection extends StatefulWidget {
   final VoidCallback onCancelSet;

@@ -460,7 +460,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
       return;
     }
 
-    await _sessionService.updateSession(
+    await _sessionService.startSession(
       MindSetSession(
         sessionId: _createdSessionId!,
         sessionUserId: userId,

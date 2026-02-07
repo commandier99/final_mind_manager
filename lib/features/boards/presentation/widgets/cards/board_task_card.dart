@@ -17,6 +17,8 @@ class BoardTaskCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
   final ValueChanged<bool?>? onToggleDone;
+  final bool showCheckbox;
+  final bool isDisabled;
 
   const BoardTaskCard({
     super.key,
@@ -26,6 +28,8 @@ class BoardTaskCard extends StatefulWidget {
     this.onTap,
     this.onDelete,
     this.onToggleDone,
+    this.showCheckbox = false,
+    this.isDisabled = false,
   });
 
   @override
@@ -333,405 +337,396 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     final canHaveUnassigned = _shouldAllowUnassigned();
     
     // Only allow delete for board manager or task owner
-    final canDelete = widget.board != null && widget.currentUserId != null &&
+    final canDelete =
+        !widget.isDisabled &&
+        widget.board != null &&
+        widget.currentUserId != null &&
         (widget.board!.boardManagerId == widget.currentUserId ||
          widget.task.taskOwnerId == widget.currentUserId);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-      child: Slidable(
-        key: ValueKey(widget.task.taskId),
-        endActionPane: canDelete
-            ? ActionPane(
-                motion: const DrawerMotion(),
-                extentRatio: 0.25,
-                children: [
-                  Expanded(
-                    child: Container(
-                      alignment: Alignment.center,
-                      child: Container(
-                        width: 60,
-                        height: 60,
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade400,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => _handleDelete(context),
-                            borderRadius: BorderRadius.circular(8),
-                            child: const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.delete, color: Colors.white, size: 20),
-                                SizedBox(height: 2),
-                                Text(
-                                  'Delete',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+      child: Opacity(
+        opacity: widget.isDisabled ? 0.5 : 1,
+        child: IgnorePointer(
+          ignoring: widget.isDisabled,
+          child: Slidable(
+            key: ValueKey(widget.task.taskId),
+            endActionPane: canDelete
+                ? ActionPane(
+                    motion: const DrawerMotion(),
+                    extentRatio: 0.25,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade400,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _handleDelete(context),
+                                borderRadius: BorderRadius.circular(8),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.delete, color: Colors.white, size: 20),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Delete',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
+                    ],
+                  )
+                : null,
+            child: Builder(
+              builder: (context) => GestureDetector(
+                onTap: () {
+                  if (widget.isDisabled) return;
+                  Slidable.of(context)?.close();
+                  // If task is unassigned, go to applications page first
+                  // But only if user is the board manager
+                  final isUnassigned = widget.task.taskAssignedTo.isEmpty || widget.task.taskAssignedTo == 'None';
+                  final isManager = widget.board?.boardManagerId == _currentUserId;
+                  
+                  if (isUnassigned && isManager) {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => TaskApplicationsPage(task: widget.task),
+                      ),
+                    );
+                  } else {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => TaskDetailsPage(task: widget.task),
+                      ),
+                    );
+                  }
+                },
+                child: Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                    side: BorderSide(
+                      color: isUnassigned ? Colors.grey.shade300 : memberColor,
+                      width: isUnassigned ? 1 : 2,
                     ),
                   ),
-                ],
-              )
-            : null,
-        child: Builder(
-          builder: (context) => GestureDetector(
-            onTap: () {
-              Slidable.of(context)?.close();
-              // If task is unassigned, go to applications page first
-              // But only if user is the board manager
-              final isUnassigned = widget.task.taskAssignedTo.isEmpty || widget.task.taskAssignedTo == 'None';
-              final isManager = widget.board?.boardManagerId == _currentUserId;
-              
-              if (isUnassigned && isManager) {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => TaskApplicationsPage(task: widget.task),
-                  ),
-                );
-              } else {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (context) => TaskDetailsPage(task: widget.task),
-                  ),
-                );
-              }
-            },
-            child: Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.zero,
-              side: BorderSide(
-                color: isUnassigned ? Colors.grey.shade300 : memberColor,
-                width: isUnassigned ? 1 : 2,
-              ),
-            ),
-            child: Container(
-              color: Colors.transparent,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-                child: Column(
-                  children: [
-                    // Top row: Assigned to + Priority (left) and Status (right)
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        // Assigned to + Priority badge
-                        Row(
-                          children: [
-                            if (!isUnassigned)
-                              Icon(
-                                Icons.person_outline,
-                                size: 12,
-                                color: memberColor,
-                              ),
-                            if (!isUnassigned) const SizedBox(width: 4),
-                            Text(
-                              _getDisplayAssignedName(),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color:
-                                    isUnassigned
-                                        ? Colors.grey[400]
-                                        : memberColor,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(width: 8),
-                            // Priority badge
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _getPriorityBackgroundColor(
-                                  widget.task.taskPriorityLevel,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                widget.task.taskPriorityLevel,
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: priorityColor,
-                                ),
-                              ),
-                            ),
-                            if (widget.task.taskHelpers.isNotEmpty) ...[
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '+${widget.task.taskHelpers.length}',
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: Colors.blue[700],
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                        // Status badge on the right
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(
-                              color: _getStatusColor(widget.task.taskStatus),
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
+                  child: Container(
+                    color: Colors.transparent,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        children: [
+                          // Top row: Assigned to + Priority (left) and Status (right)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Icon(
-                                _getStatusIcon(widget.task.taskStatus),
-                                size: 12,
-                                color: _getStatusColor(widget.task.taskStatus),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                widget.task.taskStatus,
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: _getStatusColor(widget.task.taskStatus),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        // Main content
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.task.taskTitle,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 4),
+                              // Assigned to + Priority badge
                               Row(
                                 children: [
-                                  const Icon(
-                                    Icons.calendar_today,
-                                    size: 12,
-                                    color: Colors.grey,
-                                  ),
-                                  const SizedBox(width: 4),
+                                  if (!isUnassigned)
+                                    Icon(
+                                      Icons.person_outline,
+                                      size: 12,
+                                      color: memberColor,
+                                    ),
+                                  if (!isUnassigned) const SizedBox(width: 4),
                                   Text(
-                                    widget.task.taskDeadline != null
-                                        ? '${_formatDate(widget.task.taskDeadline!)} • ${_formatTime(widget.task.taskDeadline!)}'
-                                        : 'No deadline',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey,
+                                    _getDisplayAssignedName(),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color:
+                                          isUnassigned
+                                              ? Colors.grey[400]
+                                              : memberColor,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Priority badge
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: _getPriorityBackgroundColor(
+                                        widget.task.taskPriorityLevel,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      widget.task.taskPriorityLevel,
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                        color: priorityColor,
+                                      ),
                                     ),
                                   ),
-                                  if (_getDeadlineTag(widget.task.taskDeadline) != null) ...[
-                                    const SizedBox(width: 8),
-                                    Builder(
-                                      builder: (context) {
-                                        final tag = _getDeadlineTag(widget.task.taskDeadline)!;
-                                        final color = _getDeadlineTagColor(tag);
-                                        return Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: color.withOpacity(0.12),
-                                            borderRadius: BorderRadius.circular(8),
-                                            border: Border.all(color: color, width: 1),
-                                          ),
-                                          child: Text(
-                                            tag,
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontWeight: FontWeight.w600,
-                                              color: color,
-                                            ),
-                                          ),
-                                        );
-                                      },
+                                  if (widget.task.taskHelpers.isNotEmpty) ...[
+                                    const SizedBox(width: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 4,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue[100],
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: Text(
+                                        '+${widget.task.taskHelpers.length}',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.blue[700],
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ],
                               ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Show interest buttons only if task is unassigned AND unassigned is allowed
-                        if (_isTaskUnassigned() && canHaveUnassigned)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Tooltip(
-                                message: _isInterested ? 'Not interested' : 'Interested',
-                                child: GestureDetector(
-                                  onTap: () {
-                                    if (_isInterested) {
-                                      _removeInterest();
-                                    } else {
-                                      _toggleInterest(true);
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 6,
+                              // Status badge on the right
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                    color: _getStatusColor(widget.task.taskStatus),
+                                    width: 1.5,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _getStatusIcon(widget.task.taskStatus),
+                                      size: 12,
+                                      color: _getStatusColor(widget.task.taskStatus),
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: _isInterested
-                                          ? Colors.green.shade100
-                                          : Colors.grey.shade100,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: _isInterested
-                                            ? Colors.green
-                                            : Colors.grey.shade400,
-                                        width: 1.5,
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      widget.task.taskStatus,
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: _getStatusColor(widget.task.taskStatus),
                                       ),
                                     ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          _isInterested
-                                              ? Icons.thumb_up
-                                              : Icons.thumb_up_outlined,
-                                          size: 16,
-                                          color: _isInterested
-                                              ? Colors.green
-                                              : Colors.grey,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          _isInterested ? 'Interested' : 'Interest?',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                            color: _isInterested
-                                                ? Colors.green.shade700
-                                                : Colors.grey.shade700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                                  ],
                                 ),
                               ),
                             ],
-                          )
-                        else if (_hasSubtasks())
-                          const SizedBox(width: 8),
-                        // Circular progress indicator
-                        if (_hasSubtasks())
-                          SizedBox(
-                            width: 40,
-                            height: 40,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                CircularProgressIndicator(
-                                  value: _getProgress(),
-                                  strokeWidth: 2.5,
-                                  backgroundColor: const Color(0xFFCFD8DC),
-                                  color:
-                                      widget.task.taskIsDone
-                                          ? const Color(0xFF66BB6A)
-                                          : const Color(0xFF5B9BD5),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              if (widget.showCheckbox) ...[
+                                Checkbox(
+                                  value: widget.task.taskIsDone,
+                                  onChanged: widget.isDisabled
+                                      ? null
+                                      : (value) => widget.onToggleDone?.call(value),
                                 ),
-                                Text(
-                                  _getProgressPercent(),
-                                  style: const TextStyle(
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
+                                const SizedBox(width: 8),
+                              ],
+                              // Main content
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      widget.task.taskTitle,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        const Icon(
+                                          Icons.calendar_today,
+                                          size: 12,
+                                          color: Colors.grey,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          widget.task.taskDeadline != null
+                                              ? '${_formatDate(widget.task.taskDeadline!)} • ${_formatTime(widget.task.taskDeadline!)}'
+                                              : 'No deadline',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                        if (_getDeadlineTag(widget.task.taskDeadline) != null) ...[
+                                          const SizedBox(width: 8),
+                                          Builder(
+                                            builder: (context) {
+                                              final tag = _getDeadlineTag(widget.task.taskDeadline)!;
+                                              final color = _getDeadlineTagColor(tag);
+                                              return Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 2,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: color.withOpacity(0.12),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                  border: Border.all(color: color, width: 1),
+                                                ),
+                                                child: Text(
+                                                  tag,
+                                                  style: TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: color,
+                                                  ),
+                                                ),
+                                              );
+                                            },
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Show interest buttons only if task is unassigned AND unassigned is allowed
+                              if (_isTaskUnassigned() && canHaveUnassigned)
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Tooltip(
+                                      message: _isInterested ? 'Not interested' : 'Interested',
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          if (_isInterested) {
+                                            _removeInterest();
+                                          } else {
+                                            _toggleInterest(true);
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 6,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: _isInterested
+                                                ? Colors.green.shade100
+                                                : Colors.grey.shade100,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: _isInterested
+                                                  ? Colors.green
+                                                  : Colors.grey.shade400,
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                _isInterested
+                                                    ? Icons.thumb_up
+                                                    : Icons.thumb_up_outlined,
+                                                size: 16,
+                                                color: _isInterested
+                                                    ? Colors.green
+                                                    : Colors.grey,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Text(
+                                                _isInterested ? 'Interested' : 'Interest?',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: _isInterested
+                                                      ? Colors.green.shade700
+                                                      : Colors.grey.shade700,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              else if (_hasSubtasks())
+                                const SizedBox(width: 8),
+                              // Circular progress indicator
+                              if (_hasSubtasks())
+                                SizedBox(
+                                  width: 40,
+                                  height: 40,
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      CircularProgressIndicator(
+                                        value: _getProgress(),
+                                        strokeWidth: 2.5,
+                                        backgroundColor: const Color(0xFFCFD8DC),
+                                        color:
+                                            widget.task.taskIsDone
+                                                ? const Color(0xFF66BB6A)
+                                                : const Color(0xFF5B9BD5),
+                                      ),
+                                      Text(
+                                        _getProgressPercent(),
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
+                              const SizedBox(width: 8),
+                            ],
                           ),
-                        const SizedBox(width: 8),
-                        // const SizedBox(width: 8),
-                        // // Focus button - Commented out
-                        // Tooltip(
-                        //   message: _isFocused ? 'Unfocus' : 'Set as current task',
-                        //   child: GestureDetector(
-                        //     onTap: () {
-                        //       setState(() {
-                        //         _isFocused = !_isFocused;
-                        //       });
-                        //     },
-                        //     child: Container(
-                        //       padding: const EdgeInsets.all(8),
-                        //       decoration: BoxDecoration(
-                        //         color: _isFocused ? Colors.blue : Colors.blue.shade50,
-                        //         borderRadius: BorderRadius.circular(8),
-                        //         border: Border.all(
-                        //           color: Colors.blue,
-                        //           width: 1.5,
-                        //         ),
-                        //       ),
-                        //       child: Icon(
-                        //         Icons.adjust,
-                        //         size: 20,
-                        //         color: _isFocused ? Colors.white : Colors.blue,
-                        //       ),
-                        //     ),
-                        //   ),
-                        // ),
-                      ],
+                        ],
+                      ),
                     ),
-
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ));
+    );
   }
 
   double _getProgress() {

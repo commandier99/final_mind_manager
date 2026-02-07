@@ -383,12 +383,7 @@ class _MindSetPageState extends State<MindSetPage> {
   }
 
   Future<void> _startSession(MindSetSession session) async {
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStatus: 'active',
-        sessionStartedAt: DateTime.now(),
-      ),
-    );
+    await _sessionService.startSession(session);
   }
 
   Future<void> _endSession(String sessionId) async {

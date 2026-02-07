@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../features/Mind_Set/pages/mind_set_page.dart';
+import '../features/mind_set/pages/mind_set_page.dart';
 
 class QuickActionsWidget extends StatelessWidget {
   const QuickActionsWidget({super.key});

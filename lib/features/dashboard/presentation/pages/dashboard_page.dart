@@ -5,6 +5,7 @@ import '../../../../shared/features/users/datasources/providers/activity_event_p
 import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../../boards/datasources/providers/board_request_provider.dart';
 import '../widgets/task_engagement_section.dart';
+import '../widgets/mind_set_activity_section.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -49,6 +50,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
             // Task Engagement Section
             const TaskEngagementSection(),
+            const SizedBox(height: 16),
+
+            // Mind:Set Sessions Section
+            const MindSetActivitySection(),
           ],
         ),
       ),

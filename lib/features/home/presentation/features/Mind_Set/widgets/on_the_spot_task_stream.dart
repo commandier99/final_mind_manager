@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../../../tasks/presentation/widgets/cards/task_card.dart';
-import '../../../../../tasks/datasources/models/task_model.dart';
-import '../../../../../tasks/datasources/models/task_stats_model.dart';
+import 'package:provider/provider.dart';
+import '../../../../../boards/datasources/models/board_model.dart';
+import '../../../../../boards/datasources/providers/board_provider.dart';
+import '../../../../../boards/presentation/widgets/cards/board_task_card.dart';
+import '../../../../../boards/presentation/widgets/dialogs/add_task_to_board_dialog.dart';
+import '../../../../../tasks/datasources/providers/task_provider.dart';
 
 class OnTheSpotTaskStream extends StatefulWidget {
   final String mode;
@@ -19,12 +22,93 @@ class OnTheSpotTaskStream extends StatefulWidget {
 }
 
 class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
-  String? _taskInProgress; // Track which task is currently in progress
-  final List<Task> _tasks = []; // Task list
+  Board? _personalBoard;
+  bool _isLoadingBoard = true;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensurePersonalBoard();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_personalBoard == null) {
+      final boardProvider = context.read<BoardProvider>();
+      final existing = _findPersonalBoard(boardProvider);
+      if (existing != null) {
+        _setPersonalBoard(existing);
+      }
+    }
+  }
+
+  Board? _findPersonalBoard(BoardProvider boardProvider) {
+    try {
+      return boardProvider.boards.firstWhere(
+        (board) => board.boardTitle.toLowerCase() == 'personal',
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _ensurePersonalBoard() async {
+    final boardProvider = context.read<BoardProvider>();
+    final existing = _findPersonalBoard(boardProvider);
+    if (existing != null) {
+      _setPersonalBoard(existing);
+      return;
+    }
+
+    setState(() {
+      _isLoadingBoard = true;
+    });
+
+    await boardProvider.addBoard(
+      title: 'Personal',
+      goal: 'Personal Tasks',
+      description: 'Personal tasks created from Mind:Set.',
+    );
+    await boardProvider.refreshBoards();
+
+    final created = _findPersonalBoard(boardProvider);
+    if (created != null) {
+      _setPersonalBoard(created);
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoadingBoard = false;
+      });
+    }
+  }
+
+  void _setPersonalBoard(Board board) {
+    if (!mounted) return;
+    setState(() {
+      _personalBoard = board;
+      _isLoadingBoard = false;
+    });
+    context.read<TaskProvider>().streamTasksByBoard(board.boardId);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_isLoadingBoard) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_personalBoard == null) {
+      return const Center(
+        child: Text('Unable to load Personal board.'),
+      );
+    }
+
     return Column(
       children: [
         // Tasks Header
@@ -40,9 +124,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
             ),
             IconButton(
               icon: const Icon(Icons.add),
-              onPressed: () {
-                _addNewTask();
-              },
+              onPressed: widget.isSessionActive ? _showAddTaskDialog : null,
             ),
           ],
         ),
@@ -61,8 +143,15 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
         
         // Tasks List
         Expanded(
-          child: _tasks.isEmpty
-              ? const Center(
+          child: Consumer<TaskProvider>(
+            builder: (context, taskProvider, _) {
+              if (taskProvider.isLoading && taskProvider.tasks.isEmpty) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              final tasks = taskProvider.tasks;
+              if (tasks.isEmpty) {
+                return const Center(
                   child: Padding(
                     padding: EdgeInsets.all(4.0),
                     child: Text(
@@ -74,68 +163,49 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                )
-              : ListView.builder(
-                  itemCount: _tasks.length,
-                  itemBuilder: (context, index) {
-                    final task = _tasks[index];
-                    return TaskCard(
-                      task: task,
-                      onDelete: () {
-                        setState(() {
-                          _tasks.removeAt(index);
-                          if (_taskInProgress == task.taskId) {
-                            _taskInProgress = null;
+                );
+              }
+
+              return ListView.builder(
+                itemCount: tasks.length,
+                itemBuilder: (context, index) {
+                  final task = tasks[index];
+                  return BoardTaskCard(
+                    task: task,
+                    board: _personalBoard,
+                    currentUserId: _currentUserId,
+                    showCheckbox: true,
+                    isDisabled: !widget.isSessionActive,
+                    onToggleDone: widget.isSessionActive
+                        ? (isDone) {
+                            final provider = context.read<TaskProvider>();
+                            provider.toggleTaskDone(
+                              task.copyWith(
+                                taskIsDone: isDone ?? false,
+                                taskStatus:
+                                    (isDone ?? false) ? 'COMPLETED' : 'To Do',
+                              ),
+                            );
                           }
-                        });
-                      },
-                      onToggleDone: widget.isSessionActive
-                          ? (isDone) {
-                              if (widget.mode == 'Checklist' && isDone == true) {
-                                setState(() {
-                                  _tasks[index] = task.copyWith(
-                                    taskIsDone: true,
-                                    taskIsDoneAt: DateTime.now(),
-                                    taskStatus: 'Completed',
-                                  );
-                                  _taskInProgress = null;
-                                });
-                              }
-                            }
-                          : null,
-                    );
-                  },
-                ),
+                        : null,
+                  );
+                },
+              );
+            },
+          ),
         ),
       ],
     );
   }
 
-  void _addNewTask() {
-    // Create a new task with minimal data for Mind:Set
-    final newTask = Task(
-      taskId: DateTime.now().millisecondsSinceEpoch.toString(),
-      taskBoardId: '', // Personal task, no board
-      taskBoardTitle: 'Mind:Set',
-      taskOwnerId: _currentUserId,
-      taskOwnerName: 'Me',
-      taskAssignedBy: _currentUserId,
-      taskAssignedTo: _currentUserId,
-      taskAssignedToName: 'Me',
-      taskPriorityLevel: 'Medium',
-      taskCreatedAt: DateTime.now(),
-      taskTitle: 'New Task ${_tasks.length + 1}',
-      taskDescription: 'Task created in Mind:Set',
-      taskStats: TaskStats(
-        taskSubtasksCount: 0,
-        taskSubtasksDoneCount: 0,
+  void _showAddTaskDialog() {
+    if (_personalBoard == null) return;
+    showDialog(
+      context: context,
+      builder: (context) => AddTaskToBoardDialog(
+        userId: _currentUserId,
+        board: _personalBoard!,
       ),
-      taskStatus: 'To Do',
-      taskIsDone: false,
     );
-
-    setState(() {
-      _tasks.add(newTask);
-    });
   }
 }

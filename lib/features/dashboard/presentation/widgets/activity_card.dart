@@ -97,6 +97,9 @@ class ActivityCard extends StatelessWidget {
     } else if (activity.ActEvMetadata!.containsKey('boardName')) {
       label = activity.ActEvMetadata!['boardName'] as String?;
       color = Colors.indigo.shade50;
+    } else if (activity.ActEvMetadata!.containsKey('sessionTitle')) {
+      label = activity.ActEvMetadata!['sessionTitle'] as String?;
+      color = Colors.teal.shade50;
     }
 
     if (label == null || label.isEmpty) return null;
@@ -151,6 +154,14 @@ class ActivityCard extends StatelessWidget {
         return '👋';
       case 'board_created':
         return '🎯';
+      case 'mindset_session_created':
+        return '🧠';
+      case 'mindset_session_started':
+        return '⚡';
+      case 'mindset_session_completed':
+        return '🏁';
+      case 'mindset_session_cancelled':
+        return '🛑';
       default:
         return '•';
     }
@@ -187,6 +198,13 @@ class ActivityCard extends StatelessWidget {
         return Colors.teal;
       case 'board_created':
         return Colors.indigo;
+      case 'mindset_session_created':
+      case 'mindset_session_started':
+        return Colors.deepPurple;
+      case 'mindset_session_completed':
+        return Colors.green;
+      case 'mindset_session_cancelled':
+        return Colors.red;
       default:
         return Colors.grey;
     }
