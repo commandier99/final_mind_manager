@@ -8,25 +8,6 @@ import '../datasources/models/mind_set_session_model.dart';
 import '../datasources/models/mind_set_session_stats_model.dart';
 import '../datasources/services/mind_set_session_service.dart';
 
-class MindSetCreatePage extends StatelessWidget {
-  final String sessionType; // on_the_spot, go_with_flow, follow_through
-
-  const MindSetCreatePage({
-    super.key,
-    required this.sessionType,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Mind:Set'),
-      ),
-      body: MindSetCreateForm(sessionType: sessionType),
-    );
-  }
-}
-
 class MindSetCreateForm extends StatefulWidget {
   final String sessionType; // on_the_spot, go_with_flow, follow_through
 
@@ -54,20 +35,50 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   Plan? _selectedPlan;
 
   @override
+  void initState() {
+    super.initState();
+    _titleController.addListener(_onFieldChanged);
+    _goalController.addListener(_onFieldChanged);
+    _whyController.addListener(_onFieldChanged);
+  }
+
+  @override
   void dispose() {
+    _titleController.removeListener(_onFieldChanged);
+    _goalController.removeListener(_onFieldChanged);
+    _whyController.removeListener(_onFieldChanged);
     _titleController.dispose();
     _goalController.dispose();
     _whyController.dispose();
     super.dispose();
   }
 
+  void _onFieldChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  bool get _isGoWithFlow => widget.sessionType == 'go_with_flow';
+  bool get _isFollowThrough => widget.sessionType == 'follow_through';
+  bool get _isOnTheSpot => widget.sessionType == 'on_the_spot';
+
+  bool get _areOnTheSpotFieldsFilled {
+    return _titleController.text.trim().isNotEmpty &&
+        _goalController.text.trim().isNotEmpty &&
+        _whyController.text.trim().isNotEmpty;
+  }
+
+  bool get _isCreateEnabled {
+    if (_isSaving) return false;
+    if (_isFollowThrough) return _selectedPlan != null;
+    if (_isOnTheSpot) return _areOnTheSpotFieldsFilled;
+    return true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final sessionLabel = _getSessionLabel(widget.sessionType);
     final sessionPurpose = _getSessionPurpose(widget.sessionType);
-    final isGoWithFlow = widget.sessionType == 'go_with_flow';
-    final isFollowThrough = widget.sessionType == 'follow_through';
-    final isOnTheSpot = widget.sessionType == 'on_the_spot';
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -99,11 +110,11 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
               ),
             ),
             const SizedBox(height: 16),
-            if (isFollowThrough) ...[
+            if (_isFollowThrough) ...[
               _buildPlanSelector(context),
               const SizedBox(height: 12),
             ],
-            if (!isGoWithFlow && !isFollowThrough) ...[
+            if (!_isGoWithFlow && !_isFollowThrough) ...[
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
@@ -143,9 +154,19 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
                 ),
                 maxLines: 3,
               ),
+              if (_isOnTheSpot) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'All fields are required to create an On the Spot session.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
             ],
-            if (!isFollowThrough) ...[
+            if (!_isFollowThrough) ...[
               DropdownButtonFormField<String>(
                 value: _selectedMode,
                 decoration: InputDecoration(
@@ -179,9 +200,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: _isSaving || (isFollowThrough && _selectedPlan == null)
-                    ? null
-                    : _createSession,
+                onPressed: _isCreateEnabled ? _createSession : null,
                 icon: _isSaving
                     ? const SizedBox(
                         width: 16,
@@ -199,10 +218,10 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: _hasCreatedSession &&
-                        (!isFollowThrough || _selectedPlan != null)
-                    ? _startSession
-                    : null,
+                onPressed:
+                    _hasCreatedSession && (!_isFollowThrough || _selectedPlan != null)
+                        ? _startSession
+                        : null,
                 icon: const Icon(Icons.play_arrow),
                 label: const Text('Start Session'),
               ),
@@ -338,21 +357,18 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   }
 
   Future<void> _createSession() async {
-    final isGoWithFlow = widget.sessionType == 'go_with_flow';
-    final isFollowThrough = widget.sessionType == 'follow_through';
-    final isOnTheSpot = widget.sessionType == 'on_the_spot';
     const flowSessionTitle = 'Flow';
     const flowSessionGoal = 'Do What I Can';
     const flowSessionBenefit = 'Make Progress In Any Way';
 
-    if (isFollowThrough && _selectedPlan == null) {
+    if (_isFollowThrough && _selectedPlan == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please select a plan')),
       );
       return;
     }
 
-    if (!isGoWithFlow && !isFollowThrough) {
+    if (!_isGoWithFlow && !_isFollowThrough) {
       if (_titleController.text.trim().isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Please enter a session title')),
@@ -395,33 +411,43 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
       sessionUserId: userId,
       sessionType: widget.sessionType,
       sessionMode: _selectedMode,
-      sessionTitle: isGoWithFlow
+      sessionModeHistory: [
+        MindSetModeChange(mode: _selectedMode, changedAt: DateTime.now()),
+      ],
+      sessionTitle: _isGoWithFlow
           ? flowSessionTitle
-          : isFollowThrough
+          : _isFollowThrough
               ? (followThroughPlan?.planTitle ?? _titleController.text.trim())
               : _titleController.text.trim(),
-      sessionPurpose: isGoWithFlow
+      sessionPurpose: _isGoWithFlow
           ? flowSessionGoal
-          : isFollowThrough
-              ? (followThroughPlan?.planDescription ?? _goalController.text.trim())
+          : _isFollowThrough
+              ? (followThroughPlan?.planDescription ??
+                  _goalController.text.trim())
               : _goalController.text.trim(),
-      sessionWhy: isGoWithFlow
+      sessionWhy: _isGoWithFlow
           ? flowSessionBenefit
-          : isFollowThrough
+          : _isFollowThrough
               ? (followThroughPlan?.planBenefit ?? _whyController.text.trim())
               : _whyController.text.trim(),
-        sessionStatus: 'created',
+      sessionStatus: _isOnTheSpot ? 'active' : 'created',
       sessionCreatedAt: DateTime.now(),
-        sessionStartedAt: null,
-      sessionTaskIds: isFollowThrough
-          ? (followThroughPlan?.taskIds ?? const [])
-          : const [],
+      sessionStartedAt: _isOnTheSpot ? DateTime.now() : null,
+      sessionTaskIds:
+          _isFollowThrough ? (followThroughPlan?.taskIds ?? const []) : const [],
       sessionStats: const MindSetSessionStats(
         tasksTotalCount: 0,
         tasksDoneCount: 0,
         sessionFocusDurationMinutes: 0,
         sessionFocusDurationSeconds: 0,
         pomodoroCount: 0,
+        pomodoroTargetCount: 4,
+        pomodoroBreakMinutes: 5,
+        pomodoroLongBreakMinutes: 60,
+        pomodoroIsRunning: false,
+        pomodoroIsOnBreak: false,
+        pomodoroIsLongBreak: false,
+        pomodoroMotivation: 'focused',
       ),
     );
 
@@ -429,7 +455,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
 
     if (!mounted) return;
 
-    if (isOnTheSpot) {
+    if (_isOnTheSpot) {
       Navigator.pop(context, true);
       return;
     }
@@ -444,8 +470,6 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
 
   Future<void> _startSession() async {
     if (_createdSessionId == null || _createdSessionAt == null) return;
-    final isGoWithFlow = widget.sessionType == 'go_with_flow';
-    final isFollowThrough = widget.sessionType == 'follow_through';
     const flowSessionTitle = 'Flow Session';
     const flowSessionGoal = 'Do What I Can';
     const flowSessionBenefit = 'Make Progress In Any Way';
@@ -466,25 +490,29 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
         sessionUserId: userId,
         sessionType: widget.sessionType,
         sessionMode: _selectedMode,
-        sessionTitle: isGoWithFlow
+        sessionModeHistory: [
+          MindSetModeChange(mode: _selectedMode, changedAt: DateTime.now()),
+        ],
+        sessionTitle: _isGoWithFlow
             ? flowSessionTitle
-            : isFollowThrough
+            : _isFollowThrough
                 ? (followThroughPlan?.planTitle ?? _titleController.text.trim())
                 : _titleController.text.trim(),
-        sessionPurpose: isGoWithFlow
+        sessionPurpose: _isGoWithFlow
             ? flowSessionGoal
-            : isFollowThrough
-                ? (followThroughPlan?.planDescription ?? _goalController.text.trim())
+            : _isFollowThrough
+                ? (followThroughPlan?.planDescription ??
+                    _goalController.text.trim())
                 : _goalController.text.trim(),
-        sessionWhy: isGoWithFlow
+        sessionWhy: _isGoWithFlow
             ? flowSessionBenefit
-            : isFollowThrough
+            : _isFollowThrough
                 ? (followThroughPlan?.planBenefit ?? _whyController.text.trim())
                 : _whyController.text.trim(),
         sessionStatus: 'active',
         sessionCreatedAt: _createdSessionAt!,
         sessionStartedAt: DateTime.now(),
-        sessionTaskIds: isFollowThrough
+        sessionTaskIds: _isFollowThrough
             ? (followThroughPlan?.taskIds ?? const [])
             : const [],
         sessionStats: const MindSetSessionStats(
@@ -493,6 +521,13 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
           sessionFocusDurationMinutes: 0,
           sessionFocusDurationSeconds: 0,
           pomodoroCount: 0,
+          pomodoroTargetCount: 4,
+          pomodoroBreakMinutes: 5,
+          pomodoroLongBreakMinutes: 60,
+          pomodoroIsRunning: false,
+          pomodoroIsOnBreak: false,
+          pomodoroIsLongBreak: false,
+          pomodoroMotivation: 'focused',
         ),
       ),
     );

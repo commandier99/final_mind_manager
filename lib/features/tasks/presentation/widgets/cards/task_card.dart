@@ -14,6 +14,13 @@ class TaskCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
   final ValueChanged<bool?>? onToggleDone;
+  final bool showFocusAction;
+  final VoidCallback? onFocus;
+  final VoidCallback? onPause;
+  final bool showBoardLabel;
+  final bool showFocusInMainRow;
+  final bool showCheckboxWhenFocusedOnly;
+  final bool useStatusColor;
 
   const TaskCard({
     super.key,
@@ -21,6 +28,13 @@ class TaskCard extends StatefulWidget {
     this.onTap,
     this.onDelete,
     this.onToggleDone,
+    this.showFocusAction = false,
+    this.onFocus,
+    this.onPause,
+    this.showBoardLabel = true,
+    this.showFocusInMainRow = false,
+    this.showCheckboxWhenFocusedOnly = false,
+    this.useStatusColor = true,
   });
 
   @override
@@ -228,19 +242,27 @@ class _TaskCardState extends State<TaskCard> {
     }
   }
 
+  String _normalizeStatus(String status) {
+    return status.toUpperCase().replaceAll(' ', '_');
+  }
+
+  bool _isInProgressStatus(String status) {
+    return _normalizeStatus(status) == 'IN_PROGRESS';
+  }
+
   Color _getStatusColor(String status) {
-    switch (status.toUpperCase()) {
+    switch (_normalizeStatus(status)) {
       case 'OVERDUE':
         return Colors.red;
+      case 'TO_DO':
       case 'TODO':
         return Colors.grey;
       case 'IN_PROGRESS':
-        return Colors.blue;
       case 'IN_REVIEW':
-        return Colors.yellow;
-      case 'ON_PAUSE':
-        return const Color.fromARGB(255, 0, 225, 255);
       case 'UNDER_REVISION':
+        return Colors.blue;
+      case 'PAUSED':
+      case 'ON_PAUSE':
         return Colors.orange;
       case 'COMPLETED':
         return Colors.green;
@@ -250,19 +272,19 @@ class _TaskCardState extends State<TaskCard> {
   }
 
   IconData _getStatusIcon(String status) {
-    switch (status.toUpperCase()) {
+    switch (_normalizeStatus(status)) {
       case 'OVERDUE':
         return Icons.error;
+      case 'TO_DO':
       case 'TODO':
         return Icons.circle_outlined;
       case 'IN_PROGRESS':
-        return Icons.autorenew;
       case 'IN_REVIEW':
-        return Icons.visibility;
+      case 'UNDER_REVISION':
+        return Icons.autorenew;
+      case 'PAUSED':
       case 'ON_PAUSE':
         return Icons.pause_circle;
-      case 'UNDER_REVISION':
-        return Icons.edit;
       case 'COMPLETED':
         return Icons.check_circle;
       default:
@@ -306,25 +328,66 @@ class _TaskCardState extends State<TaskCard> {
         widget.task.taskIsDone
             ? 100
             : (total > 0 ? (progress * 100).round() : 0);
+    final isFocused = _isInProgressStatus(widget.task.taskStatus);
+    final isCompleted = widget.task.taskIsDone ||
+      _normalizeStatus(widget.task.taskStatus) == 'COMPLETED';
+    final showFocusAction = widget.showFocusAction && !isCompleted;
+    final showFocusInMainRow = showFocusAction && widget.showFocusInMainRow;
+    final showFocusInHeader = showFocusAction && !widget.showFocusInMainRow;
+    final showCheckbox =
+      !widget.showCheckboxWhenFocusedOnly || (isFocused && !isCompleted);
+    final statusColor = widget.useStatusColor
+      ? _getStatusColor(widget.task.taskStatus)
+      : Theme.of(context).colorScheme.onSurfaceVariant;
+
+    final cardBaseColor = Theme.of(context).cardColor;
+    final borderColor = isFocused ? statusColor : Colors.grey.shade300;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       child: Slidable(
         key: ValueKey(widget.task.taskId),
         endActionPane: ActionPane(
           motion: const DrawerMotion(),
           extentRatio: 0.25,
           children: [
-            SlidableAction(
-              onPressed: (_) => widget.onDelete?.call(),
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-              icon: Icons.delete,
-              label: 'Delete',
-              borderRadius: BorderRadius.circular(12),
+            Expanded(
+              child: Container(
+                alignment: Alignment.center,
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade400,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onDelete,
+                      borderRadius: BorderRadius.circular(8),
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.delete, color: Colors.white, size: 20),
+                          SizedBox(height: 2),
+                          Text(
+                            'Delete',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
-              ],
-            ),
+          ],
+        ),
             child: GestureDetector(
               onTap: () {
                 // If task is unassigned, go to applications page first
@@ -358,12 +421,13 @@ class _TaskCardState extends State<TaskCard> {
                 }
               },
               child: Card(
-                elevation: 3,
+                elevation: isFocused ? 3 : 2,
+                color: cardBaseColor,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.zero,
                   side: BorderSide(
-                    color: Colors.grey.shade300,
-                    width: 1.5,
+                    color: borderColor,
+                    width: 1,
                   ),
                 ),
                 child: Container(
@@ -381,8 +445,8 @@ class _TaskCardState extends State<TaskCard> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 4,
+                        horizontal: 4,
+                        vertical: 2,
                       ),
                       child: Column(
                         children: [
@@ -391,21 +455,23 @@ class _TaskCardState extends State<TaskCard> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.label,
-                                    size: 14,
-                                    color: Colors.grey[600],
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    widget.task.taskBoardTitle ?? 'Personal',
-                                    style: TextStyle(
-                                      fontSize: 12,
+                                  if (widget.showBoardLabel) ...[
+                                    Icon(
+                                      Icons.label,
+                                      size: 14,
                                       color: Colors.grey[600],
                                     ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(width: 8),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      widget.task.taskBoardTitle ?? 'Personal',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[600],
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
                                   // Priority badge
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -421,7 +487,7 @@ class _TaskCardState extends State<TaskCard> {
                                     child: Text(
                                       widget.task.taskPriorityLevel,
                                       style: TextStyle(
-                                        fontSize: 10,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.bold,
                                         color: _getPriorityColor(
                                           widget.task.taskPriorityLevel,
@@ -432,45 +498,82 @@ class _TaskCardState extends State<TaskCard> {
                                 ],
                               ),
                               const Spacer(),
-                              // Right side - just status
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: _getStatusColor(
-                                      widget.task.taskStatus,
+                              // Right side - status + focus action
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 2,
                                     ),
-                                    width: 1.5,
-                                  ),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'Status: ${widget.task.taskStatus}',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.bold,
-                                    color: _getStatusColor(
-                                      widget.task.taskStatus,
+                                    decoration: BoxDecoration(
+                                      border: Border.all(
+                                        color: statusColor,
+                                        width: 1.5,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _getStatusIcon(widget.task.taskStatus),
+                                          size: 12,
+                                          color: statusColor,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          widget.task.taskStatus,
+                                          style: TextStyle(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                            color: statusColor,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ),
+                                  if (showFocusInHeader) ...[
+                                    const SizedBox(width: 6),
+                                    OutlinedButton.icon(
+                                      onPressed: isFocused
+                                          ? widget.onPause
+                                          : widget.onFocus,
+                                      icon: Icon(
+                                        isFocused ? Icons.pause : Icons.play_arrow,
+                                        size: 14,
+                                      ),
+                                      label: Text(
+                                        isFocused ? 'Pause' : 'Focus',
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        visualDensity: VisualDensity.compact,
+                                        tapTargetSize:
+                                            MaterialTapTargetSize.shrinkWrap,
+                                        minimumSize: const Size(0, 0),
+                                      ),
+                                    ),
+                                  ],
+                                ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Divider(height: 1, color: Colors.grey.shade300),
+                              const SizedBox(height: 6),
                           // Additional badges row (approval, acceptance, helpers)
                           if (widget.task.taskRequiresApproval ||
                               widget.task.taskAcceptanceStatus != null ||
                               widget.task.taskHelpers.isNotEmpty)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 4,
+                                  ),
                               child: Row(
                                 children: [
                                   // Approval indicator
@@ -532,7 +635,7 @@ class _TaskCardState extends State<TaskCard> {
                                                   .taskAcceptanceStatus,
                                             ),
                                             style: TextStyle(
-                                              fontSize: 8,
+                                              fontSize: 9,
                                               fontWeight: FontWeight.bold,
                                               color:
                                                   _getAcceptanceStatusColor(
@@ -578,7 +681,7 @@ class _TaskCardState extends State<TaskCard> {
                                                 widget.task.taskHelpers.length
                                                     .toString(),
                                                 style: TextStyle(
-                                                  fontSize: 9,
+                                                  fontSize: 10,
                                                   fontWeight: FontWeight.bold,
                                                   color: Colors.teal.shade700,
                                                 ),
@@ -596,18 +699,20 @@ class _TaskCardState extends State<TaskCard> {
                     ),
                     Padding(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        horizontal: 4,
+                        vertical: 6,
                       ),
                       child: Row(
                         children: [
-                          Checkbox(
-                            value: widget.task.taskIsDone,
-                            onChanged: (bool? newValue) {
-                              widget.onToggleDone?.call(newValue);
-                            },
-                          ),
-                          const SizedBox(width: 12),
+                          if (showCheckbox) ...[
+                            Checkbox(
+                              value: widget.task.taskIsDone,
+                              onChanged: (bool? newValue) {
+                                widget.onToggleDone?.call(newValue);
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                          ],
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,12 +722,12 @@ class _TaskCardState extends State<TaskCard> {
                                   widget.task.taskTitle,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 14,
+                                    fontSize: 15,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 4),
+                                const SizedBox(height: 3),
                                 Flexible(
                                   child: SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
@@ -643,7 +748,7 @@ class _TaskCardState extends State<TaskCard> {
                                               : 'No deadline',
                                           style: const TextStyle(
                                             color: Colors.grey,
-                                            fontSize: 11,
+                                            fontSize: 12,
                                           ),
                                         ),
                                         if (widget.task.taskIsRepeating) ...[
@@ -660,7 +765,7 @@ class _TaskCardState extends State<TaskCard> {
                                             ),
                                             style: const TextStyle(
                                               color: Colors.grey,
-                                              fontSize: 11,
+                                              fontSize: 12,
                                             ),
                                           ),
                                         ],
@@ -671,6 +776,23 @@ class _TaskCardState extends State<TaskCard> {
                               ],
                             ),
                           ),
+                          if (showFocusInMainRow) ...[
+                            const SizedBox(width: 8),
+                            IconButton(
+                              onPressed:
+                                  isFocused ? widget.onPause : widget.onFocus,
+                              icon: Icon(
+                                isFocused ? Icons.pause : Icons.adjust,
+                                size: 34,
+                              ),
+                              padding: const EdgeInsets.all(10),
+                              constraints: const BoxConstraints(
+                                minWidth: 56,
+                                minHeight: 56,
+                              ),
+                              splashRadius: 28,
+                            ),
+                          ],
                           const SizedBox(width: 8),
                           // Show interest buttons only if task is unassigned AND unassigned is allowed
                           if (_isTaskUnassigned() && _shouldAllowUnassigned())
@@ -720,7 +842,7 @@ class _TaskCardState extends State<TaskCard> {
                                           Text(
                                             _isInterested ? 'Interested' : 'Interest?',
                                             style: TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 13,
                                               fontWeight: FontWeight.w600,
                                               color: _isInterested
                                                   ? Colors.green.shade700

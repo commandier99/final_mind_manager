@@ -85,6 +85,17 @@ class MindSetSessionService {
     }
   }
 
+  Future<void> addTaskToSession(String sessionId, String taskId) async {
+    try {
+      await _sessions.doc(sessionId).update({
+        'sessionTaskIds': FieldValue.arrayUnion([taskId]),
+      });
+      print('✅ Mind:Set session $sessionId linked to task $taskId');
+    } catch (e) {
+      print('⚠️ Error adding task $taskId to session $sessionId: $e');
+    }
+  }
+
   Stream<List<MindSetSession>> streamUserSessions(String userId) {
     return _sessions
       .where('sessionUserId', isEqualTo: userId)

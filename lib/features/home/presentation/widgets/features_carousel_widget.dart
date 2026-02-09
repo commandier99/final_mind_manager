@@ -18,6 +18,9 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
   late PageController _pageController;
   int _currentPage = 0;
   late Timer _autoScrollTimer;
+  static const int _initialPageMultiplier = 1000;
+  static const Duration _autoScrollInterval = Duration(seconds: 6);
+  static const int _loopMultiplier = 1000;
 
   final List<FeatureCard> features = [
     FeatureCard(
@@ -55,16 +58,17 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController();
+    _pageController = PageController(
+      initialPage: features.length * _initialPageMultiplier,
+    );
+    _currentPage = _pageController.initialPage;
     _startAutoScroll();
   }
 
   void _startAutoScroll() {
-    _autoScrollTimer = Timer.periodic(const Duration(seconds: 4), (timer) {
+    _autoScrollTimer = Timer.periodic(_autoScrollInterval, (timer) {
       if (mounted && _pageController.hasClients) {
-        // Get the total number of pages from the current context
-        int totalPages = features.length + 2; // +2 for the overdue and today cards
-        _currentPage = (_currentPage + 1) % totalPages;
+        _currentPage += 1;
         _pageController.animateToPage(
           _currentPage,
           duration: const Duration(milliseconds: 800),
@@ -131,6 +135,8 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
             cardColor: Colors.orange.shade400,
           ),
         ];
+        final totalFeatures = dynamicFeatures.length;
+        final currentIndex = _currentPage % totalFeatures;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,17 +158,18 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
                     _currentPage = index;
                   });
                 },
-                itemCount: dynamicFeatures.length,
+                itemCount: totalFeatures * _loopMultiplier,
                 itemBuilder: (context, index) {
+                  final feature = dynamicFeatures[index % totalFeatures];
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                    child: FeatureCardWidget(feature: dynamicFeatures[index]),
+                    child: FeatureCardWidget(feature: feature),
                   );
                 },
               ),
             ),
             const SizedBox(height: 16),
-            _buildDotIndicators(dynamicFeatures.length),
+            _buildDotIndicators(totalFeatures, currentIndex),
           ],
         );
       },
@@ -215,22 +222,46 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
     return tasks.map((task) => task.taskBoardId).toSet().length;
   }
 
-  Widget _buildDotIndicators(int length) {
+  Widget _buildDotIndicators(int length, int currentIndex) {
+    if (length <= 1) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.blue.shade600,
+            ),
+          ),
+        ],
+      );
+    }
+
+    final leftIndex = (currentIndex - 1 + length) % length;
+    final rightIndex = (currentIndex + 1) % length;
+    final indicatorOrder = [leftIndex, currentIndex, rightIndex];
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(
-        length,
-        (index) => Container(
+        indicatorOrder.length,
+        (index) {
+          final dotIndex = indicatorOrder[index];
+          final isActive = dotIndex == currentIndex;
+          return Container(
           margin: const EdgeInsets.symmetric(horizontal: 4),
-          width: _currentPage == index ? 12 : 8,
-          height: _currentPage == index ? 12 : 8,
+          width: isActive ? 12 : 8,
+          height: isActive ? 12 : 8,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: _currentPage == index
+            color: isActive
                 ? Colors.blue.shade600
                 : Colors.grey.shade400,
           ),
-        ),
+        );
+        },
       ),
     );
   }

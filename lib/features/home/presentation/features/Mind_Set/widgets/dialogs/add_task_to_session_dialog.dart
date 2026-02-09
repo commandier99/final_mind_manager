@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../tasks/datasources/providers/task_provider.dart';
-import '../../../../tasks/datasources/models/task_model.dart';
-import '../../../../tasks/datasources/models/task_stats_model.dart';
-import '../../../datasources/models/board_model.dart';
-import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import 'package:uuid/uuid.dart';
+import '/features/tasks/datasources/models/task_model.dart';
+import '/features/tasks/datasources/models/task_stats_model.dart';
+import '/features/tasks/datasources/providers/task_provider.dart';
+import '/features/boards/datasources/models/board_model.dart';
+import '/shared/features/users/datasources/services/user_services.dart';
 
-class AddTaskToBoardDialog extends StatefulWidget {
+class AddTaskToSessionDialog extends StatefulWidget {
   final String userId;
   final Board board;
   final ValueChanged<String>? onTaskCreated;
 
-  const AddTaskToBoardDialog({
+  const AddTaskToSessionDialog({
     super.key,
     required this.userId,
     required this.board,
@@ -20,10 +20,10 @@ class AddTaskToBoardDialog extends StatefulWidget {
   });
 
   @override
-  State<AddTaskToBoardDialog> createState() => _AddTaskToBoardDialogState();
+  State<AddTaskToSessionDialog> createState() => _AddTaskToSessionDialogState();
 }
 
-class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
+class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
   String _priorityLevel = 'Low';
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -33,12 +33,8 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   final List<String> _repeatDays = [];
   DateTime? _repeatEndDate;
   TimeOfDay? _repeatTime;
-  String? _assignedToUserId;
-  String? _assignedToUserName;
-  Map<String, String> _boardMembers = {};
-  bool _loadingMembers = true;
-  String _currentUserName = 'Unknown'; // Store current user's name
-  bool _isLoading = false; // Loading state for task creation
+  String _currentUserName = 'Unknown';
+  bool _isLoading = false;
 
   static const List<String> _daysOfWeek = [
     'Monday',
@@ -53,59 +49,21 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   @override
   void initState() {
     super.initState();
-    _loadBoardMembers();
+    _loadCurrentUserName();
   }
 
-  Future<void> _loadBoardMembers() async {
-    setState(() => _loadingMembers = true);
-
-    final members = <String, String>{};
-
-    // Add the manager (current user) with their actual name
+  Future<void> _loadCurrentUserName() async {
     try {
-      final currentUserData = await UserService().getUserById(widget.userId);
-      if (currentUserData != null && currentUserData.userName.isNotEmpty) {
-        _currentUserName = currentUserData.userName;
-        members[widget.userId] = currentUserData.userName;
-      } else {
-        members[widget.userId] = 'Manager';
+      final userData = await UserService().getUserById(widget.userId);
+      if (userData != null && userData.userName.isNotEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _currentUserName = userData.userName;
+        });
       }
-    } catch (e) {
-      members[widget.userId] = 'Manager';
+    } catch (_) {
+      // Keep default name on failure.
     }
-
-    // Add all board members
-    for (String memberId in widget.board.memberIds) {
-      if (memberId != widget.userId) {
-        // Skip inspectors - they cannot be assigned tasks
-        final role = widget.board.memberRoles[memberId] ?? 'member';
-        if (role == 'inspector') continue;
-
-        try {
-          final userData = await UserService().getUserById(memberId);
-          if (userData != null && userData.userName.isNotEmpty) {
-            members[memberId] = userData.userName;
-          } else {
-            members[memberId] = 'Unknown User';
-          }
-        } catch (e) {
-          members[memberId] = 'Unknown User';
-        }
-      }
-    }
-
-    setState(() {
-      _boardMembers = members;
-      // If only one member in board, auto-assign to them
-      if (members.length == 1) {
-        _assignedToUserId = members.keys.first;
-        _assignedToUserName = members.values.first;
-      } else {
-        _assignedToUserId = null;  // Default to None for multi-member boards
-        _assignedToUserName = null;
-      }
-      _loadingMembers = false;
-    });
   }
 
   @override
@@ -115,7 +73,6 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
     super.dispose();
   }
 
-  /// Get the next untitled task number based on existing tasks
   String _getNextUntitledTaskNumber(List<Task> existingTasks) {
     int maxNumber = 0;
     final regex = RegExp(r'^Task (\d+)$');
@@ -135,8 +92,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
 
   Future<void> _submit() async {
     setState(() => _isLoading = true);
-    
-    // Show loading modal
+
     if (mounted) {
       showDialog(
         context: context,
@@ -167,13 +123,10 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
       final taskProvider = context.read<TaskProvider>();
 
       String taskTitle = _titleController.text.trim();
-
-      // If title is empty, generate default "Task XX" title
       if (taskTitle.isEmpty) {
         taskTitle = _getNextUntitledTaskNumber(taskProvider.tasks);
       }
 
-      // Merge deadline date with time
       DateTime? finalDeadline = _deadline;
       if (finalDeadline != null && _deadlineTime != null) {
         finalDeadline = DateTime(
@@ -184,14 +137,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           _deadlineTime!.minute,
         );
       }
-      
-      // Debug logging
-      print('📋 [TaskDialog] Creating task with deadline: $finalDeadline');
-      if (finalDeadline == null) {
-        print('⚠️ [TaskDialog] No deadline set for this task');
-      }
 
-      // Convert repeat time to HH:mm format
       String? repeatTimeStr;
       if (_repeatTime != null) {
         repeatTimeStr =
@@ -205,8 +151,8 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        taskAssignedTo: _assignedToUserId ?? 'None',
-        taskAssignedToName: _assignedToUserName ?? 'Unassigned',
+        taskAssignedTo: widget.userId,
+        taskAssignedToName: _currentUserName,
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),
@@ -224,19 +170,14 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: repeatTimeStr,
-        // Set acceptance status to 'pending' if assigned to someone else
-        taskAcceptanceStatus:
-            (_assignedToUserId != null && _assignedToUserId != widget.userId)
-                ? 'pending'
-                : null,
       );
 
       await taskProvider.addTask(newTask);
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {
-        Navigator.pop(context); // Close loading modal
-        Navigator.pop(context); // Close dialog
+        Navigator.pop(context);
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -246,9 +187,8 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         );
       }
     } catch (e) {
-      print('Error creating task: $e');
       if (mounted) {
-        Navigator.pop(context); // Close loading modal
+        Navigator.pop(context);
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error creating task: $e')),
@@ -260,7 +200,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Add Task to ${widget.board.boardTitle}'),
+      title: const Text('Add Task to Session'),
       content: SingleChildScrollView(
         child: ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 650),
@@ -268,7 +208,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
@@ -306,69 +246,10 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                     DropdownMenuItem(value: 'Medium', child: Text('Medium')),
                     DropdownMenuItem(value: 'High', child: Text('High')),
                   ],
-                  onChanged:
-                      (val) => setState(() => _priorityLevel = val ?? 'Low'),
+                  onChanged: (val) =>
+                      setState(() => _priorityLevel = val ?? 'Low'),
                 ),
               ),
-              const SizedBox(height: 12),
-              if (!_loadingMembers && _boardMembers.isNotEmpty) ...[
-                if (_boardMembers.length > 1)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8.0),
-                    child: DropdownButtonFormField<String?>(
-                      initialValue: _assignedToUserId,
-                      decoration: const InputDecoration(
-                        labelText: 'Assign To',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        // "None" option for unassigned tasks
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('None'),
-                        ),
-                        // All board members
-                        ..._boardMembers.entries.map((entry) {
-                          return DropdownMenuItem<String?>(
-                            value: entry.key,
-                            child: Text(entry.value),
-                          );
-                        }).toList(),
-                      ],
-                      onChanged: (val) {
-                        setState(() {
-                          _assignedToUserId = val;
-                          _assignedToUserName = val != null ? _boardMembers[val] : null;
-                        });
-                      },
-                    ),
-                  )
-                else
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      border: Border.all(color: Colors.blue[200]!),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.blue[700], size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Task will be assigned to ${_assignedToUserName ?? 'the board member'}',
-                            style: TextStyle(
-                              color: Colors.blue[700],
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -393,18 +274,17 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
-                    onPressed:
-                        _deadline == null
-                            ? null
-                            : () async {
-                              final picked = await showTimePicker(
-                                context: context,
-                                initialTime: _deadlineTime ?? TimeOfDay.now(),
-                              );
-                              if (picked != null) {
-                                setState(() => _deadlineTime = picked);
-                              }
-                            },
+                    onPressed: _deadline == null
+                        ? null
+                        : () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: _deadlineTime ?? TimeOfDay.now(),
+                            );
+                            if (picked != null) {
+                              setState(() => _deadlineTime = picked);
+                            }
+                          },
                     icon: const Icon(Icons.access_time),
                     label: Text(
                       _deadlineTime == null
@@ -432,33 +312,30 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children:
-                        _daysOfWeek
-                            .map(
-                              (day) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(day.substring(0, 3)),
-                                  selected: _repeatDays.contains(day),
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        _repeatDays.add(day);
-                                        // Sort days by week order
-                                        _repeatDays.sort(
-                                          (a, b) =>
-                                              _daysOfWeek.indexOf(a) -
-                                              _daysOfWeek.indexOf(b),
-                                        );
-                                      } else {
-                                        _repeatDays.remove(day);
-                                      }
-                                    });
-                                  },
-                                ),
-                              ),
-                            )
-                            .toList(),
+                    children: _daysOfWeek
+                        .map(
+                          (day) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(day.substring(0, 3)),
+                              selected: _repeatDays.contains(day),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    _repeatDays.add(day);
+                                    _repeatDays.sort(
+                                      (a, b) => _daysOfWeek.indexOf(a) -
+                                          _daysOfWeek.indexOf(b),
+                                    );
+                                  } else {
+                                    _repeatDays.remove(day);
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -516,7 +393,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton.icon(
-          onPressed: _submit,
+          onPressed: _isLoading ? null : _submit,
           icon: const Icon(Icons.add),
           label: const Text('Add Task'),
         ),

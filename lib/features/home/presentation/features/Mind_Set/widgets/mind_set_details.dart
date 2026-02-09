@@ -12,6 +12,8 @@ class MindSetDetails extends StatelessWidget {
   final Duration? timerElapsed;
   final ValueChanged<Duration>? onTimerPersist;
   final bool isTimerEnabled;
+  final bool showTimerControls;
+  final bool showTimer;
 
   const MindSetDetails({
     super.key,
@@ -25,6 +27,8 @@ class MindSetDetails extends StatelessWidget {
     this.timerElapsed,
     this.onTimerPersist,
     this.isTimerEnabled = true,
+    this.showTimerControls = true,
+    this.showTimer = true,
   });
 
   @override
@@ -78,7 +82,7 @@ class MindSetDetails extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           Text(
-            'Purpose:',
+            'Goal:',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w600,
@@ -87,7 +91,7 @@ class MindSetDetails extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            description.isEmpty ? 'No purpose set' : description,
+            description.isEmpty ? 'No goal set' : description,
             style: TextStyle(
               fontSize: 13,
               color: Theme.of(context).colorScheme.onSurface,
@@ -102,12 +106,15 @@ class MindSetDetails extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: MindSetTimer(
-                    initialElapsed: timerElapsed ?? Duration.zero,
-                    onPersist: onTimerPersist,
-                    isEnabled: isTimerEnabled,
-                    autoStart: isTimerEnabled,
-                  ),
+                  child: showTimer
+                      ? MindSetTimer(
+                          initialElapsed: timerElapsed ?? Duration.zero,
+                          onPersist: onTimerPersist,
+                          isEnabled: isTimerEnabled,
+                          autoStart: isTimerEnabled,
+                          showControls: showTimerControls,
+                        )
+                      : const SizedBox.shrink(),
                 ),
                 SizedBox(
                   width: 160,

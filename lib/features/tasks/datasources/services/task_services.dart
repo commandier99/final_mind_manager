@@ -138,10 +138,11 @@ class TaskService {
   /// Toggle task done status
   Future<void> toggleTaskDone(Task task) async {
     try {
-      final newIsDone = !task.taskIsDone;
+      final newIsDone = task.taskIsDone;
       await _tasks.doc(task.taskId).update({
         'taskIsDone': newIsDone,
         'taskIsDoneAt': newIsDone ? Timestamp.now() : null,
+        'taskStatus': task.taskStatus,
       });
 
       // Update task stats if needed (e.g., task edits count, etc.)

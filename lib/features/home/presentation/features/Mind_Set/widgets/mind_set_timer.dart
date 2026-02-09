@@ -7,6 +7,7 @@ class MindSetTimer extends StatefulWidget {
   final Duration persistInterval;
   final bool isEnabled;
   final bool autoStart;
+  final bool showControls;
 
   const MindSetTimer({
     super.key,
@@ -15,6 +16,7 @@ class MindSetTimer extends StatefulWidget {
     this.persistInterval = const Duration(seconds: 5),
     this.isEnabled = true,
     this.autoStart = false,
+    this.showControls = true,
   });
 
   @override
@@ -162,19 +164,21 @@ class _MindSetTimerState extends State<MindSetTimer> {
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              iconSize: 20,
-              visualDensity: VisualDensity.compact,
-              onPressed: widget.isEnabled ? _toggleTimer : null,
-              icon: Icon(_isRunning ? Icons.pause : Icons.play_arrow),
-            ),
-            IconButton(
-              iconSize: 20,
-              visualDensity: VisualDensity.compact,
-              onPressed: widget.isEnabled ? _resetTimer : null,
-              icon: const Icon(Icons.restart_alt),
-            ),
+            if (widget.showControls) ...[
+              const SizedBox(width: 8),
+              IconButton(
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.isEnabled ? _toggleTimer : null,
+                icon: Icon(_isRunning ? Icons.pause : Icons.play_arrow),
+              ),
+              IconButton(
+                iconSize: 20,
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.isEnabled ? _resetTimer : null,
+                icon: const Icon(Icons.restart_alt),
+              ),
+            ],
           ],
         ),
       ],

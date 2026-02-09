@@ -6,6 +6,7 @@ class MindSetSession {
   final String sessionUserId;
   final String sessionType; // on_the_spot, go_with_flow, follow_through
   final String sessionMode; // Checklist, Pomodoro, Eat the Frog
+  final List<MindSetModeChange> sessionModeHistory;
   final String sessionTitle;
   final String sessionPurpose;
   final String sessionWhy;
@@ -22,6 +23,7 @@ class MindSetSession {
     required this.sessionUserId,
     required this.sessionType,
     required this.sessionMode,
+    this.sessionModeHistory = const [],
     required this.sessionTitle,
     required this.sessionPurpose,
     required this.sessionWhy,
@@ -35,11 +37,20 @@ class MindSetSession {
   });
 
   factory MindSetSession.fromMap(Map<String, dynamic> data) {
+    final historyData = data['sessionModeHistory'] as List<dynamic>?;
     return MindSetSession(
       sessionId: data['sessionId'] as String,
       sessionUserId: data['sessionUserId'] as String,
       sessionType: data['sessionType'] as String,
       sessionMode: data['sessionMode'] as String,
+      sessionModeHistory: historyData
+              ?.map(
+                (entry) => MindSetModeChange.fromMap(
+                  Map<String, dynamic>.from(entry as Map),
+                ),
+              )
+              .toList() ??
+          const [],
       sessionTitle: data['sessionTitle'] as String? ?? '',
       sessionPurpose: data['sessionPurpose'] as String? ?? '',
       sessionWhy: data['sessionWhy'] as String? ?? '',
@@ -67,6 +78,9 @@ class MindSetSession {
       'sessionUserId': sessionUserId,
       'sessionType': sessionType,
       'sessionMode': sessionMode,
+      'sessionModeHistory': sessionModeHistory
+          .map((entry) => entry.toMap())
+          .toList(),
       'sessionTitle': sessionTitle,
       'sessionPurpose': sessionPurpose,
       'sessionWhy': sessionWhy,
@@ -91,6 +105,7 @@ class MindSetSession {
     String? sessionUserId,
     String? sessionType,
     String? sessionMode,
+    List<MindSetModeChange>? sessionModeHistory,
     String? sessionTitle,
     String? sessionPurpose,
     String? sessionWhy,
@@ -107,6 +122,7 @@ class MindSetSession {
       sessionUserId: sessionUserId ?? this.sessionUserId,
       sessionType: sessionType ?? this.sessionType,
       sessionMode: sessionMode ?? this.sessionMode,
+      sessionModeHistory: sessionModeHistory ?? this.sessionModeHistory,
       sessionTitle: sessionTitle ?? this.sessionTitle,
       sessionPurpose: sessionPurpose ?? this.sessionPurpose,
       sessionWhy: sessionWhy ?? this.sessionWhy,
@@ -118,5 +134,30 @@ class MindSetSession {
       sessionTaskIds: sessionTaskIds ?? this.sessionTaskIds,
       sessionStats: sessionStats ?? this.sessionStats,
     );
+  }
+}
+
+class MindSetModeChange {
+  final String mode;
+  final DateTime changedAt;
+
+  const MindSetModeChange({
+    required this.mode,
+    required this.changedAt,
+  });
+
+  factory MindSetModeChange.fromMap(Map<String, dynamic> data) {
+    return MindSetModeChange(
+      mode: data['mode'] as String? ?? 'Checklist',
+      changedAt:
+          (data['changedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'mode': mode,
+      'changedAt': Timestamp.fromDate(changedAt),
+    };
   }
 }
