@@ -20,6 +20,8 @@ class NotificationHelper {
     Map<String, dynamic>? metadata,
   }) async {
     try {
+      print('[NotificationHelper] Starting createNotificationPair for userId: $userId, category: $category');
+      
       // Create in-app notification
       final inAppNotif = InAppNotification(
         notificationId: '', // Will be set by Firestore
@@ -33,7 +35,9 @@ class NotificationHelper {
         metadata: metadata,
       );
 
+      print('[NotificationHelper] Creating in-app notification...');
       final inAppId = await _inAppService.createNotification(inAppNotif);
+      print('[NotificationHelper] ✅ In-app notification created with ID: $inAppId');
 
       // Create push notification (triggers immediately)
       final pushNotif = PushNotification(
@@ -51,11 +55,13 @@ class NotificationHelper {
         },
       );
 
+      print('[NotificationHelper] Creating push notification...');
       final pushId = await _pushService.createNotification(pushNotif);
+      print('[NotificationHelper] ✅ Push notification created with ID: $pushId');
 
       print('✅ Notification pair created: in-app=$inAppId, push=$pushId');
     } catch (e) {
-      print('⚠️ Error creating notification pair: $e');
+      print('[NotificationHelper] ❌ Error in createNotificationPair: $e');
       rethrow;
     }
   }

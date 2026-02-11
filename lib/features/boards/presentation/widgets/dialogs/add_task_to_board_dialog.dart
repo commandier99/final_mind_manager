@@ -205,8 +205,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        taskAssignedTo: _assignedToUserId ?? 'None',
-        taskAssignedToName: _assignedToUserName ?? 'Unassigned',
+        // Always create as unassigned - assignment is pending member acceptance
+        taskAssignedTo: 'None',
+        taskAssignedToName: 'Unassigned',
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),
@@ -224,35 +225,56 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: repeatTimeStr,
-        // Set acceptance status to 'pending' if assigned to someone else
-        taskAcceptanceStatus:
-            (_assignedToUserId != null && _assignedToUserId != widget.userId)
-                ? 'pending'
-                : null,
+        // No pending acceptance status needed since task starts unassigned
+        taskAcceptanceStatus: null,
       );
 
-      await taskProvider.addTask(newTask);
+      // Pass the selected member for assignment notification, not the task itself
+      await taskProvider.addTask(newTask, selectedAssigneeId: _assignedToUserId, selectedAssigneeName: _assignedToUserName);
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {
         Navigator.pop(context); // Close loading modal
         Navigator.pop(context); // Close dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Task "${newTask.taskTitle}" added to ${widget.board.boardTitle}',
-            ),
-          ),
-        );
+        
+        // Show snackbar after dialogs are closed and widget tree is stable
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Task "${newTask.taskTitle}" added to ${widget.board.boardTitle}',
+                ),
+              ),
+            );
+          }
+        });
       }
     } catch (e) {
       print('Error creating task: $e');
       if (mounted) {
-        Navigator.pop(context); // Close loading modal
+        // Close loading modal only
+        Navigator.pop(context);
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating task: $e')),
-        );
+        
+        // Close dialog after a brief delay to ensure stable widget tree
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted) {
+            Navigator.pop(context);
+          }
+        });
+        
+        // Show error snackbar after dialog is closed
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Error creating task: ${e.toString()}'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        });
       }
     }
   }

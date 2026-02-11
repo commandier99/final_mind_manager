@@ -148,11 +148,50 @@ class _AddBoardButtonState extends State<AddBoardButton> {
   @override
   Widget build(BuildContext context) {
     print('[DEBUG] AddBoardButton: build called');
-    return FloatingActionButton(
-      onPressed: _showAddBoardDialog,
-      tooltip: 'Add New Board',
-      shape: const CircleBorder(),
-      child: const Icon(Icons.add),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFF1565C0), // Dark Blue
+            Color(0xFF42A5F5), // Light Blue
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF1565C0).withOpacity(0.4),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _showAddBoardDialog,
+          borderRadius: BorderRadius.circular(16),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                Icon(Icons.add_circle_outline, color: Colors.white, size: 24),
+                SizedBox(width: 8),
+                Text(
+                  'New Board',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

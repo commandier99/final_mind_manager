@@ -27,43 +27,37 @@ Widget buildRemindersSection(
       });
 
       if (displayList.isEmpty) {
-        return RefreshIndicator(
-          onRefresh: refreshNotifications,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.6,
-                child: buildEmptyState(),
-              ),
-            ],
-          ),
+        return ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            SizedBox(
+              height: MediaQuery.of(context).size.height * 0.6,
+              child: buildEmptyState(),
+            ),
+          ],
         );
       }
 
-      return RefreshIndicator(
-        onRefresh: refreshNotifications,
-        child: ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: displayList.length,
-          itemBuilder: (context, index) {
-            final item = displayList[index];
-            
-            if (item is InAppNotification) {
-              return NotificationCard(
-                notification: item,
-                inAppProvider: inAppProvider,
-              );
-            } else if (item is PushNotification) {
-              return NotificationCard(
-                notification: item,
-                pushProvider: pushProvider,
-              );
-            }
-            
-            return const SizedBox.shrink();
-          },
-        ),
+      return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: displayList.length,
+        itemBuilder: (context, index) {
+          final item = displayList[index];
+
+          if (item is InAppNotification) {
+            return NotificationCard(
+              notification: item,
+              inAppProvider: inAppProvider,
+            );
+          } else if (item is PushNotification) {
+            return NotificationCard(
+              notification: item,
+              pushProvider: pushProvider,
+            );
+          }
+
+          return const SizedBox.shrink();
+        },
       );
     },
   );

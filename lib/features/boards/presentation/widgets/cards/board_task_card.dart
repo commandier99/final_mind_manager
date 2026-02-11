@@ -345,7 +345,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
          widget.task.taskOwnerId == widget.currentUserId);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Opacity(
         opacity: widget.isDisabled ? 0.5 : 1,
         child: IgnorePointer(

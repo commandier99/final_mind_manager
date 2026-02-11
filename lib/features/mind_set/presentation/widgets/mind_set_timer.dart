@@ -8,15 +8,19 @@ class MindSetTimer extends StatefulWidget {
   final bool isEnabled;
   final bool autoStart;
   final bool showControls;
+  final bool showLabel;
+  final bool centerContent;
 
   const MindSetTimer({
     super.key,
     this.initialElapsed = Duration.zero,
     this.onPersist,
-    this.persistInterval = const Duration(seconds: 5),
+    this.persistInterval = const Duration(seconds: 1),
     this.isEnabled = true,
     this.autoStart = false,
     this.showControls = true,
+    this.showLabel = true,
+    this.centerContent = false,
   });
 
   @override
@@ -42,10 +46,6 @@ class _MindSetTimerState extends State<MindSetTimer> {
   @override
   void didUpdateWidget(covariant MindSetTimer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_isRunning && oldWidget.initialElapsed != widget.initialElapsed) {
-      _elapsed = widget.initialElapsed;
-      _lastPersistSecond = _elapsed.inSeconds;
-    }
     if (!widget.isEnabled && _isRunning) {
       _stopTimer();
       return;
@@ -69,16 +69,6 @@ class _MindSetTimerState extends State<MindSetTimer> {
       return;
     }
     _startTimer();
-  }
-
-  void _resetTimer() {
-    if (!widget.isEnabled) return;
-    _timer?.cancel();
-    setState(() {
-      _elapsed = Duration.zero;
-      _isRunning = false;
-    });
-    _persistElapsed();
   }
 
   void _startTimer() {
@@ -144,18 +134,23 @@ class _MindSetTimerState extends State<MindSetTimer> {
     final timeText = _formatDuration(_elapsed);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          widget.centerContent ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
-        Text(
-          'Timer',
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+        if (widget.showLabel) ...[
+          Text(
+            'Timer',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
+          const SizedBox(height: 4),
+        ],
         Row(
+          mainAxisAlignment:
+              widget.centerContent ? MainAxisAlignment.center : MainAxisAlignment.start,
           children: [
             Text(
               timeText,
@@ -171,12 +166,6 @@ class _MindSetTimerState extends State<MindSetTimer> {
                 visualDensity: VisualDensity.compact,
                 onPressed: widget.isEnabled ? _toggleTimer : null,
                 icon: Icon(_isRunning ? Icons.pause : Icons.play_arrow),
-              ),
-              IconButton(
-                iconSize: 20,
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.isEnabled ? _resetTimer : null,
-                icon: const Icon(Icons.restart_alt),
               ),
             ],
           ],

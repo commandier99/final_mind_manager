@@ -90,9 +90,9 @@ class NotificationDispatchService {
       final notificationDoc = {
         'userId': userId,
         'title': title,
-        'body': body,
+        'message': body,
         'category': category,
-        'data': data ?? {},
+        'metadata': data ?? {},
         'createdAt': FieldValue.serverTimestamp(),
         'isRead': false,
       };

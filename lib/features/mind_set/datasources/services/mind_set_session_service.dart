@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/mind_set_session_model.dart';
-import '../../../../../../../shared/features/users/datasources/services/activity_event_services.dart';
+import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 
 class MindSetSessionService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;

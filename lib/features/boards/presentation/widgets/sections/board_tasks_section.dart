@@ -25,6 +25,7 @@ class BoardTasksSection extends StatefulWidget {
 class _BoardTasksSectionState extends State<BoardTasksSection> {
   late Set<String> _selectedFilters;
   bool _isLoading = true;
+  String _sortBy = 'created_desc'; // format: 'field_direction'
 
   // Special filter
   static const String allFilter = 'All';
@@ -134,7 +135,17 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
   void _showAddTaskDialog() {
     final user = FirebaseAuth.instance.currentUser;
+    final isManager = widget.board.boardManagerId == user?.uid;
     if (user != null) {
+      if (!isManager) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Only board managers can create tasks.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
       showDialog(
         context: context,
         builder: (context) => AddTaskToBoardDialog(
@@ -167,6 +178,68 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       return 'Deadline: ${deadlineLabels[filter] ?? filter}';
     }
     return filter;
+  }
+
+  int _priorityToInt(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return 3;
+      case 'medium':
+        return 2;
+      case 'low':
+        return 1;
+      default:
+        return 0;
+    }
+  }
+
+  List<dynamic> _applySorting(List<dynamic> tasks) {
+    final sortedTasks = List<dynamic>.from(tasks);
+    
+    switch (_sortBy) {
+      case 'priority_asc':
+        sortedTasks.sort((a, b) => _priorityToInt(a.taskPriorityLevel)
+            .compareTo(_priorityToInt(b.taskPriorityLevel)));
+        break;
+      case 'priority_desc':
+        sortedTasks.sort((a, b) => _priorityToInt(b.taskPriorityLevel)
+            .compareTo(_priorityToInt(a.taskPriorityLevel)));
+        break;
+      case 'alphabetical_asc':
+        sortedTasks.sort((a, b) => a.taskTitle
+            .toLowerCase()
+            .compareTo(b.taskTitle.toLowerCase()));
+        break;
+      case 'alphabetical_desc':
+        sortedTasks.sort((a, b) => b.taskTitle
+            .toLowerCase()
+            .compareTo(a.taskTitle.toLowerCase()));
+        break;
+      case 'created_asc':
+        sortedTasks.sort((a, b) => a.taskCreatedAt.compareTo(b.taskCreatedAt));
+        break;
+      case 'created_desc':
+        sortedTasks.sort((a, b) => b.taskCreatedAt.compareTo(a.taskCreatedAt));
+        break;
+      case 'deadline_asc':
+        sortedTasks.sort((a, b) {
+          final aDeadline = a.taskDeadline ?? DateTime(2099);
+          final bDeadline = b.taskDeadline ?? DateTime(2099);
+          return aDeadline.compareTo(bDeadline);
+        });
+        break;
+      case 'deadline_desc':
+        sortedTasks.sort((a, b) {
+          final aDeadline = a.taskDeadline ?? DateTime(1970);
+          final bDeadline = b.taskDeadline ?? DateTime(1970);
+          return bDeadline.compareTo(aDeadline);
+        });
+        break;
+      default:
+        break;
+    }
+    
+    return sortedTasks;
   }
 
   @override
@@ -216,6 +289,12 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
           }).toList();
         }
 
+        // Apply sorting to filtered tasks
+        final sortedTasks = _applySorting(filteredTasks);
+
+        final canAddTask =
+            widget.board.boardManagerId == FirebaseAuth.instance.currentUser?.uid;
+
         return Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -237,6 +316,145 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                       height: 1,
                       color: Colors.grey[300],
                     ),
+                  ),
+                  const SizedBox(width: 4),
+                  // Sort Button
+                  PopupMenuButton<String>(
+                    tooltip: 'Sort tasks',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.sort, size: 16, color: Colors.grey[700]),
+                    ),
+                    onSelected: (value) {
+                      setState(() {
+                        _sortBy = value;
+                      });
+                    },
+                    itemBuilder: (context) => [
+                      // Priority
+                      const PopupMenuItem(
+                        enabled: false,
+                        child: Text(
+                          'Priority',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'priority_asc',
+                        child: Text(
+                          'Low → High',
+                          style: TextStyle(
+                            color: _sortBy == 'priority_asc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'priority_desc',
+                        child: Text(
+                          'High → Low',
+                          style: TextStyle(
+                            color: _sortBy == 'priority_desc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      // Alphabetical
+                      const PopupMenuItem(
+                        enabled: false,
+                        child: Text(
+                          'Alphabetical',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'alphabetical_asc',
+                        child: Text(
+                          'A → Z',
+                          style: TextStyle(
+                            color: _sortBy == 'alphabetical_asc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'alphabetical_desc',
+                        child: Text(
+                          'Z → A',
+                          style: TextStyle(
+                            color: _sortBy == 'alphabetical_desc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      // Created Date
+                      const PopupMenuItem(
+                        enabled: false,
+                        child: Text(
+                          'Created Date',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'created_asc',
+                        child: Text(
+                          'Oldest',
+                          style: TextStyle(
+                            color: _sortBy == 'created_asc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'created_desc',
+                        child: Text(
+                          'Newest',
+                          style: TextStyle(
+                            color: _sortBy == 'created_desc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      // Deadline
+                      const PopupMenuItem(
+                        enabled: false,
+                        child: Text(
+                          'Deadline',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'deadline_asc',
+                        child: Text(
+                          'Soonest',
+                          style: TextStyle(
+                            color: _sortBy == 'deadline_asc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'deadline_desc',
+                        child: Text(
+                          'Latest',
+                          style: TextStyle(
+                            color: _sortBy == 'deadline_desc' ? Colors.blue : null,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(width: 4),
                   PopupMenuButton<String>(
@@ -279,21 +497,22 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                     },
                   ),
                   const SizedBox(width: 4),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey[300]!),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: _showAddTaskDialog,
-                        borderRadius: BorderRadius.circular(4),
-                        child: const Icon(Icons.add, size: 16),
+                  if (canAddTask)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: _showAddTaskDialog,
+                          borderRadius: BorderRadius.circular(4),
+                          child: const Icon(Icons.add, size: 16),
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
               // Selected Filters as Chips
@@ -336,7 +555,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                 ),
               const SizedBox(height: 4),
               // No tasks message (if empty)
-              if (filteredTasks.isEmpty)
+              if (sortedTasks.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Column(
@@ -368,10 +587,10 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
               else
                 const SizedBox.shrink(),
               // Tasks List
-              if (filteredTasks.isNotEmpty)
+              if (sortedTasks.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: filteredTasks
+                  children: sortedTasks
                       .map((task) => BoardTaskCard(
                             task: task,
                             board: widget.board,

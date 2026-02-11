@@ -2,14 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import '../../../../../../boards/datasources/models/board_model.dart';
-import '../../../../../../boards/datasources/providers/board_provider.dart';
+import '../../../../boards/datasources/models/board_model.dart';
+import '../../../../boards/datasources/providers/board_provider.dart';
 import '../dialogs/add_task_to_session_dialog.dart';
-import '../../../../../../tasks/datasources/models/task_model.dart';
-import '../../../../../../tasks/datasources/providers/task_provider.dart';
-import '../../../../../../tasks/presentation/widgets/cards/task_card.dart';
-import '../../datasources/services/mind_set_session_service.dart';
-import '../../datasources/models/mind_set_session_model.dart';
+import '../../../../tasks/datasources/models/task_model.dart';
+import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../tasks/presentation/widgets/cards/task_card.dart';
+import '../../../datasources/services/mind_set_session_service.dart';
+import '../../../datasources/models/mind_set_session_model.dart';
 
 class OnTheSpotTaskStream extends StatefulWidget {
   final String sessionId;
@@ -37,10 +37,19 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   final MindSetSessionService _sessionService = MindSetSessionService();
   bool _isUpdatingFrog = false;
+  String _sortBy = 'created_desc'; // format: 'field_direction'
+  late Set<String> _selectedFilters;
+  
+  // Filter options
+  static const String allFilter = 'All';
+  static const List<String> taskStatuses = ['To Do', 'In Progress', 'Paused', 'COMPLETED'];
+  static const List<String> deadlineFilters = ['Overdue', 'Today', 'Upcoming', 'None'];
+  static final List<String> allFilters = [allFilter, ...taskStatuses, ...deadlineFilters];
 
   @override
   void initState() {
     super.initState();
+    _selectedFilters = {allFilter};
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ensurePersonalBoard();
       _streamTasks();
@@ -128,6 +137,37 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
   bool _isInProgressStatus(String status) {
     return _normalizeStatus(status) == 'IN_PROGRESS';
+  }
+
+  bool _matchesDeadlineFilter(Task task, String filter) {
+    switch (filter) {
+      case 'Overdue':
+        return task.taskDeadline != null &&
+            task.taskDeadline!.isBefore(DateTime.now()) &&
+            !task.taskIsDone;
+      case 'Today':
+        final today = DateTime.now();
+        return task.taskDeadline != null &&
+            task.taskDeadline!.year == today.year &&
+            task.taskDeadline!.month == today.month &&
+            task.taskDeadline!.day == today.day;
+      case 'Upcoming':
+        return task.taskDeadline != null &&
+            task.taskDeadline!.isAfter(DateTime.now());
+      case 'None':
+        return task.taskDeadline == null;
+      default:
+        return false;
+    }
+  }
+
+  String _getFilterLabel(String filter) {
+    if (taskStatuses.contains(filter)) {
+      return 'Status: $filter';
+    } else if (deadlineFilters.contains(filter)) {
+      return 'Deadline: $filter';
+    }
+    return filter;
   }
 
   bool _isPomodoroMode() {
@@ -329,35 +369,138 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
     return Column(
       children: [
-        // Tasks Header
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Tasks',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            children: [
+              // Tasks Header with Divider
+              Row(
+                children: [
+                  const Text(
+                    'Tasks',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: Colors.grey[300],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    tooltip: 'Add filters',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.filter_list, size: 16, color: Colors.grey[700]),
+                    ),
+                    onSelected: (filter) {
+                      setState(() {
+                        if (filter == allFilter) {
+                          _selectedFilters = {allFilter};
+                        } else {
+                          _selectedFilters.remove(allFilter);
+                          _selectedFilters.add(filter);
+                          if (_selectedFilters.isEmpty) {
+                            _selectedFilters.add(filter);
+                          }
+                        }
+                      });
+                    },
+                    itemBuilder: (context) {
+                      return allFilters
+                          .where((f) => !_selectedFilters.contains(f))
+                          .map((filter) {
+                        final label = _getFilterLabel(filter);
+                        return PopupMenuItem<String>(
+                          value: filter,
+                          child: Text(label),
+                        );
+                      }).toList();
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _showSortMenu(),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Icon(Icons.swap_vert, size: 16, color: Colors.grey[700]),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: canAddTask ? _showAddTaskDialog : null,
+                        borderRadius: BorderRadius.circular(4),
+                        child: Icon(Icons.add, size: 16, color: canAddTask ? Colors.grey[700] : Colors.grey[400]),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.add),
-              onPressed: canAddTask ? _showAddTaskDialog : null,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        if (!widget.isSessionActive)
-          const Padding(
-            padding: EdgeInsets.only(bottom: 6),
-            child: Text(
-              'Start the session to begin working on tasks.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey,
-              ),
-            ),
+              const SizedBox(height: 4),
+              if (!widget.isSessionActive)
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 6),
+                  child: Text(
+                    'Start the session to begin working on tasks.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+              // Active filters display
+              if (!_selectedFilters.contains(allFilter))
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Wrap(
+                    spacing: 4,
+                    runSpacing: 4,
+                    children: _selectedFilters.map((filter) {
+                      return Chip(
+                        label: Text(_getFilterLabel(filter)),
+                        onDeleted: () {
+                          setState(() {
+                            _selectedFilters.remove(filter);
+                            if (_selectedFilters.isEmpty) {
+                              _selectedFilters.add(allFilter);
+                            }
+                          });
+                        },
+                        backgroundColor: Colors.grey[400],
+                        deleteIconColor: Colors.white,
+                        side: BorderSide.none,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      );
+                    }).toList(),
+                  ),
+                ),
+            ],
           ),
+        ),
         
         // Tasks List
         Expanded(
@@ -382,8 +525,32 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                       ? tasks
                       : (frogTask == null ? <Task>[] : <Task>[frogTask]))
                   : tasks;
+              
+              // Apply filtering
+              final List<Task> filteredTasks;
+              if (_selectedFilters.contains(allFilter)) {
+                filteredTasks = visibleTasks;
+              } else {
+                final selectedStatuses = _selectedFilters
+                    .where((f) => taskStatuses.contains(f))
+                    .toSet();
+                final selectedDeadlineFilters = _selectedFilters
+                    .where((f) => deadlineFilters.contains(f))
+                    .toSet();
+                filteredTasks = visibleTasks
+                    .where((task) {
+                  if (selectedStatuses.isEmpty) return false;
+                  final statusMatch = selectedStatuses.contains(task.taskStatus);
+                  if (selectedDeadlineFilters.isEmpty) return statusMatch;
+                  final deadlineMatch = selectedDeadlineFilters.any((filter) =>
+                      _matchesDeadlineFilter(task, filter));
+                  return statusMatch && deadlineMatch;
+                }).toList();
+              }
+              
+              final sortedTasks = _applySorting(filteredTasks);
 
-              if (visibleTasks.isEmpty) {
+              if (sortedTasks.isEmpty) {
                 final emptyMessage = isEatTheFrog && frogId != null
                     ? 'Frog completed. Pick your next one.'
                     : 'No tasks yet. Tap the + button to create one!';
@@ -424,9 +591,9 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                     ),
                   Expanded(
                     child: ListView.builder(
-                      itemCount: visibleTasks.length,
+                      itemCount: sortedTasks.length,
                       itemBuilder: (context, index) {
-                        final task = visibleTasks[index];
+                        final task = sortedTasks[index];
                         final canComplete =
                             isChecklist && _isInProgressStatus(task.taskStatus);
                         final canPickFrog = isEatTheFrog && frogId == null;
@@ -440,7 +607,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                                   (canPickFrog || isFrogTask)),
                           showFocusInMainRow: (isChecklist || isPomodoro) ||
                               (isEatTheFrog && (canPickFrog || isFrogTask)),
-                          showCheckboxWhenFocusedOnly: isChecklist,
+                          showCheckboxWhenFocusedOnly: true,
                           showBoardLabel: false,
                           useStatusColor: true,
                           onFocus: (isChecklist || isPomodoro)
@@ -505,5 +672,128 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
     final updatedIds = {...widget.sessionTaskIds, taskId}.toList();
     context.read<TaskProvider>().streamTasksByIds(updatedIds);
+  }
+
+  int _priorityToInt(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'low':
+        return 1;
+      case 'medium':
+        return 2;
+      case 'high':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  List<Task> _applySorting(List<Task> tasks) {
+    final sorted = [...tasks];
+    
+    try {
+      switch (_sortBy) {
+        case 'priority_asc':
+          sorted.sort((a, b) => _priorityToInt(a.taskPriorityLevel)
+              .compareTo(_priorityToInt(b.taskPriorityLevel)));
+          break;
+        case 'priority_desc':
+          sorted.sort((a, b) => _priorityToInt(b.taskPriorityLevel)
+              .compareTo(_priorityToInt(a.taskPriorityLevel)));
+          break;
+        case 'alphabetical_asc':
+          sorted.sort((a, b) => a.taskTitle
+              .toLowerCase()
+              .compareTo(b.taskTitle.toLowerCase()));
+          break;
+        case 'alphabetical_desc':
+          sorted.sort((a, b) => b.taskTitle
+              .toLowerCase()
+              .compareTo(a.taskTitle.toLowerCase()));
+          break;
+        case 'created_asc':
+          sorted.sort((a, b) => a.taskCreatedAt.compareTo(b.taskCreatedAt));
+          break;
+        case 'created_desc':
+          sorted.sort((a, b) => b.taskCreatedAt.compareTo(a.taskCreatedAt));
+          break;
+        case 'deadline_asc':
+          sorted.sort((a, b) {
+            final aDeadline = a.taskDeadline ?? DateTime(2099);
+            final bDeadline = b.taskDeadline ?? DateTime(2099);
+            return aDeadline.compareTo(bDeadline);
+          });
+          break;
+        case 'deadline_desc':
+          sorted.sort((a, b) {
+            final aDeadline = a.taskDeadline ?? DateTime(1970);
+            final bDeadline = b.taskDeadline ?? DateTime(1970);
+            return bDeadline.compareTo(aDeadline);
+          });
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      // If sorting fails, return unsorted list
+      return tasks;
+    }
+
+    return sorted;
+  }
+
+  void _showSortMenu() {
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 100,
+        kToolbarHeight + 50,
+        0,
+        0,
+      ),
+      items: [
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'priority_asc',
+          child: Text('Priority (Low→High)'),
+        ),
+        const PopupMenuItem(
+          value: 'priority_desc',
+          child: Text('Priority (High→Low)'),
+        ),
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'alphabetical_asc',
+          child: Text('Title (A→Z)'),
+        ),
+        const PopupMenuItem(
+          value: 'alphabetical_desc',
+          child: Text('Title (Z→A)'),
+        ),
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'created_asc',
+          child: Text('Created (Oldest)'),
+        ),
+        const PopupMenuItem(
+          value: 'created_desc',
+          child: Text('Created (Newest)'),
+        ),
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'deadline_asc',
+          child: Text('Deadline (Soonest)'),
+        ),
+        const PopupMenuItem(
+          value: 'deadline_desc',
+          child: Text('Deadline (Latest)'),
+        ),
+      ],
+    ).then((value) {
+      if (value != null) {
+        setState(() {
+          _sortBy = value;
+        });
+      }
+    });
   }
 }

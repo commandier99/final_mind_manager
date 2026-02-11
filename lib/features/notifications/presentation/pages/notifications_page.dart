@@ -21,36 +21,17 @@ class NotificationsPage extends StatefulWidget {
 
 class _NotificationsPageState extends State<NotificationsPage> {
   String _selectedTab = 'all'; // 'all', 'reminders', 'invites', 'assignments'
+  bool _hasInitializedStreams = false;
 
   @override
   void initState() {
     super.initState();
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    print('[NotificationsPage] initState: userId = $userId');
-    
-    if (userId != null) {
-      // Defer stream setup to after build completes to avoid setState during build
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        
-        // Stream board requests (invitations and join requests)
-        print('[NotificationsPage] Streaming board requests...');
-        context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
-        context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
-        
-        // Stream in-app notifications
-        print('[NotificationsPage] Streaming in-app notifications...');
-        context.read<InAppNotificationProvider>().streamNotificationsByUser(userId);
-        
-        // Stream push notifications
-        print('[NotificationsPage] Streaming push notifications...');
-        context.read<PushNotificationProvider>().streamNotificationsByUser(userId);
-      });
-    }
+    _ensureStreamsStarted();
   }
 
   @override
   Widget build(BuildContext context) {
+    _ensureStreamsStarted();
     return Scaffold(
       body: Column(
         children: [
@@ -66,11 +47,42 @@ class _NotificationsPageState extends State<NotificationsPage> {
             ),
           ),
           Expanded(
-            child: _buildBody(context),
+            child: RefreshIndicator(
+              onRefresh: () => _refreshNotifications(context),
+              child: _buildBody(context),
+            ),
           ),
         ],
       ),
     );
+  }
+
+  void _ensureStreamsStarted() {
+    if (_hasInitializedStreams) return;
+
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    print('[NotificationsPage] ensureStreams: userId = $userId');
+
+    if (userId == null) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _hasInitializedStreams) return;
+
+      _hasInitializedStreams = true;
+
+      // Stream board requests (invitations and join requests)
+      print('[NotificationsPage] Streaming board requests...');
+      context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
+      context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
+
+      // Stream in-app notifications
+      print('[NotificationsPage] Streaming in-app notifications...');
+      context.read<InAppNotificationProvider>().streamNotificationsByUser(userId);
+
+      // Stream push notifications
+      print('[NotificationsPage] Streaming push notifications...');
+      context.read<PushNotificationProvider>().streamNotificationsByUser(userId);
+    });
   }
 
 

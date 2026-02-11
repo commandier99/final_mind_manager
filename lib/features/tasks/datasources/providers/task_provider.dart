@@ -176,9 +176,10 @@ class TaskProvider extends ChangeNotifier {
   // CRUD ACTIONS
   // ------------------------
 
-  Future<void> addTask(Task task) async {
+  Future<void> addTask(Task task, {String? selectedAssigneeId, String? selectedAssigneeName}) async {
     try {
       print('[DEBUG] TaskProvider: addTask called for taskId = ${task.taskId}');
+      print('[DEBUG] TaskProvider: selectedAssigneeId = $selectedAssigneeId, selectedAssigneeName = $selectedAssigneeName');
       // Ensure taskStats is initialized (fallback to empty TaskStats)
       final newTask = task.copyWith(taskStats: task.taskStats);
 
@@ -190,37 +191,44 @@ class TaskProvider extends ChangeNotifier {
       // Add task to Firestore using TaskService
       await _taskService.addTask(newTask);
 
-      // Send task assignment notification if task is assigned to someone other than creator
-      print('[DEBUG] TaskProvider: Task assigned to = "${newTask.taskAssignedTo}", isEmpty = ${newTask.taskAssignedTo.isEmpty}');
+      // Send task assignment notification if a specific member was selected
+      print('[TaskNotification] selectedAssigneeId = "$selectedAssigneeId", isEmpty = ${selectedAssigneeId?.isEmpty ?? true}');
       
-      // Create task assignment notification for any assigned task (with or without deadline)
-      if (newTask.taskAssignedTo.isNotEmpty && 
-          newTask.taskAssignedTo != 'None' && 
-          newTask.taskAssignedTo != newTask.taskOwnerId) {
+      // Create task assignment notification for the selected assignee
+      if (selectedAssigneeId != null && 
+          selectedAssigneeId.isNotEmpty && 
+          selectedAssigneeId != 'None' && 
+          selectedAssigneeId != task.taskOwnerId) {
+        print('[TaskNotification] ✅ Conditions met - creating notification for userId: $selectedAssigneeId');
         try {
-          final deadlineInfo = newTask.taskDeadline != null 
-              ? ' with a deadline on ${newTask.taskDeadline!.toString().split(' ')[0]}' 
+          final deadlineInfo = task.taskDeadline != null 
+              ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}' 
               : '';
           
-          await NotificationHelper.createNotificationPair(
-            userId: newTask.taskAssignedTo,
+          print('[TaskNotification] Calling NotificationHelper.createInAppOnly...');
+          await NotificationHelper.createInAppOnly(
+            userId: selectedAssigneeId,
             title: 'Task Assignment Request',
-            message: '${newTask.taskAssignedBy} wants to assign you the task "${newTask.taskTitle}"$deadlineInfo',
+            message: '${task.taskAssignedBy} wants to assign you the task "${task.taskTitle}"$deadlineInfo',
             category: NotificationHelper.categoryTaskAssigned,
-            relatedId: newTask.taskId,
+            relatedId: task.taskId,
             metadata: {
-              'boardTitle': newTask.taskBoardTitle,
-              'taskTitle': newTask.taskTitle,
-              if (newTask.taskDeadline != null)
-                'deadline': newTask.taskDeadline.toString(),
-              'assignedBy': newTask.taskAssignedBy,
-              'taskId': newTask.taskId,
+              'boardTitle': task.taskBoardTitle,
+              'taskTitle': task.taskTitle,
+              'assigneeName': selectedAssigneeName ?? 'Unknown',
+              if (task.taskDeadline != null)
+                'deadline': task.taskDeadline.toString(),
+              'assignedBy': task.taskAssignedBy,
+              'taskId': task.taskId,
             },
           );
-          print('✅ Task assignment notification created for: ${newTask.taskId}');
+          print('[TaskNotification] ✅ Task assignment notification created for: ${task.taskId}');
         } catch (e) {
-          print('⚠️ Error creating notification for task assignment: $e');
+          // Log error but don't fail task creation - notification is optional
+          print('[TaskNotification] ⚠️ Failed to create notification (non-critical): $e');
         }
+      } else {
+        print('[TaskNotification] ⚠️ Notification not created - no assignee selected');
       }
 
       // Track activity

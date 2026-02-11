@@ -4,9 +4,10 @@ import 'package:uuid/uuid.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
-import '../datasources/models/mind_set_session_model.dart';
-import '../datasources/models/mind_set_session_stats_model.dart';
-import '../datasources/services/mind_set_session_service.dart';
+import '/features/plans/presentation/widgets/cards/plan_card.dart';
+import '../../datasources/models/mind_set_session_model.dart';
+import '../../datasources/models/mind_set_session_stats_model.dart';
+import '../../datasources/services/mind_set_session_service.dart';
 
 class MindSetCreateForm extends StatefulWidget {
   final String sessionType; // on_the_spot, go_with_flow, follow_through
@@ -28,9 +29,6 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
 
   String _selectedMode = 'Checklist';
   bool _isSaving = false;
-  bool _hasCreatedSession = false;
-  String? _createdSessionId;
-  DateTime? _createdSessionAt;
   String? _selectedPlanId;
   Plan? _selectedPlan;
 
@@ -80,12 +78,18 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
     final sessionLabel = _getSessionLabel(widget.sessionType);
     final sessionPurpose = _getSessionPurpose(widget.sessionType);
 
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
     return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: AnimatedPadding(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        padding: EdgeInsets.only(bottom: bottomInset),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Container(
               width: 48,
               height: 4,
@@ -117,6 +121,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
             if (!_isGoWithFlow && !_isFollowThrough) ...[
               TextField(
                 controller: _titleController,
+                maxLength: 60,
                 decoration: InputDecoration(
                   labelText: 'Session Title',
                   floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -129,6 +134,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
               const SizedBox(height: 12),
               TextField(
                 controller: _goalController,
+                maxLength: 200,
                 decoration: InputDecoration(
                   labelText: 'Goal',
                   floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -143,6 +149,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
               const SizedBox(height: 12),
               TextField(
                 controller: _whyController,
+                maxLength: 200,
                 decoration: InputDecoration(
                   labelText: 'Benefit',
                   floatingLabelBehavior: FloatingLabelBehavior.always,
@@ -214,22 +221,10 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed:
-                    _hasCreatedSession && (!_isFollowThrough || _selectedPlan != null)
-                        ? _startSession
-                        : null,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Start Session'),
-              ),
-            ),
           ],
         ),
       ),
-    );
+    ));
   }
 
   String _getSessionLabel(String sessionType) {
@@ -279,53 +274,122 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
 
             final plans = snapshot.data ?? [];
             if (plans.isEmpty) {
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Text('No plans yet. Create a plan in '),
-                  Icon(Icons.event_note, size: 18),
-                ],
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.event_note,
+                      size: 56,
+                      color: Colors.grey.shade400,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No plans yet',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Create a plan to use Follow Through mode',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ),
               );
             }
 
-            final selectedPlan = _selectedPlanId == null
-                ? null
-                : plans.firstWhere(
-                    (plan) => plan.planId == _selectedPlanId,
-                    orElse: () => plans.first,
-                  );
-
-            if (_selectedPlanId != null && selectedPlan != null) {
-              _selectedPlan = selectedPlan;
-            }
-
-            return DropdownButtonFormField<String>(
-              value: selectedPlan?.planId,
-              decoration: InputDecoration(
-                labelText: 'Select a plan',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select a plan',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade800,
+                  ),
                 ),
-              ),
-              items: plans
-                  .map(
-                    (plan) => DropdownMenuItem(
-                      value: plan.planId,
-                      child: Text(plan.planTitle),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value == null) return;
-                final plan = plans.firstWhere(
-                  (plan) => plan.planId == value,
-                );
-                setState(() {
-                  _selectedPlanId = value;
-                  _selectedPlan = plan;
-                  _applyPlanToFields(plan);
-                });
-              },
+                const SizedBox(height: 8),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 400),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: plans.length,
+                    itemBuilder: (context, index) {
+                      final plan = plans[index];
+                      final isSelected = _selectedPlanId == plan.planId;
+                      
+                      return GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedPlanId = plan.planId;
+                            _selectedPlan = plan;
+                            _applyPlanToFields(plan);
+                          });
+                        },
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: isSelected 
+                                  ? Theme.of(context).primaryColor
+                                  : Colors.transparent,
+                              width: isSelected ? 3 : 0,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: isSelected 
+                                ? [
+                                    BoxShadow(
+                                      color: Theme.of(context).primaryColor.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Stack(
+                            children: [
+                              AbsorbPointer(
+                                child: PlanCard(plan: plan),
+                              ),
+                              if (isSelected)
+                                Positioned(
+                                  top: 12,
+                                  right: 12,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(context).primaryColor,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.2),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.check,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             );
           },
         );
@@ -430,9 +494,9 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
           : _isFollowThrough
               ? (followThroughPlan?.planBenefit ?? _whyController.text.trim())
               : _whyController.text.trim(),
-      sessionStatus: _isOnTheSpot ? 'active' : 'created',
+        sessionStatus: 'active',
       sessionCreatedAt: DateTime.now(),
-      sessionStartedAt: _isOnTheSpot ? DateTime.now() : null,
+        sessionStartedAt: DateTime.now(),
       sessionTaskIds:
           _isFollowThrough ? (followThroughPlan?.taskIds ?? const []) : const [],
       sessionStats: const MindSetSessionStats(
@@ -454,85 +518,9 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
     await _sessionService.addSession(session);
 
     if (!mounted) return;
-
-    if (_isOnTheSpot) {
-      Navigator.pop(context, true);
-      return;
-    }
-
     setState(() {
       _isSaving = false;
-      _hasCreatedSession = true;
-      _createdSessionId = sessionId;
-      _createdSessionAt = session.sessionCreatedAt;
     });
-  }
-
-  Future<void> _startSession() async {
-    if (_createdSessionId == null || _createdSessionAt == null) return;
-    const flowSessionTitle = 'Flow Session';
-    const flowSessionGoal = 'Do What I Can';
-    const flowSessionBenefit = 'Make Progress In Any Way';
-
-    final followThroughPlan = _selectedPlan;
-
-    final userId = context.read<UserProvider>().userId;
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not found. Please sign in again.')),
-      );
-      return;
-    }
-
-    await _sessionService.startSession(
-      MindSetSession(
-        sessionId: _createdSessionId!,
-        sessionUserId: userId,
-        sessionType: widget.sessionType,
-        sessionMode: _selectedMode,
-        sessionModeHistory: [
-          MindSetModeChange(mode: _selectedMode, changedAt: DateTime.now()),
-        ],
-        sessionTitle: _isGoWithFlow
-            ? flowSessionTitle
-            : _isFollowThrough
-                ? (followThroughPlan?.planTitle ?? _titleController.text.trim())
-                : _titleController.text.trim(),
-        sessionPurpose: _isGoWithFlow
-            ? flowSessionGoal
-            : _isFollowThrough
-                ? (followThroughPlan?.planDescription ??
-                    _goalController.text.trim())
-                : _goalController.text.trim(),
-        sessionWhy: _isGoWithFlow
-            ? flowSessionBenefit
-            : _isFollowThrough
-                ? (followThroughPlan?.planBenefit ?? _whyController.text.trim())
-                : _whyController.text.trim(),
-        sessionStatus: 'active',
-        sessionCreatedAt: _createdSessionAt!,
-        sessionStartedAt: DateTime.now(),
-        sessionTaskIds: _isFollowThrough
-            ? (followThroughPlan?.taskIds ?? const [])
-            : const [],
-        sessionStats: const MindSetSessionStats(
-          tasksTotalCount: 0,
-          tasksDoneCount: 0,
-          sessionFocusDurationMinutes: 0,
-          sessionFocusDurationSeconds: 0,
-          pomodoroCount: 0,
-          pomodoroTargetCount: 4,
-          pomodoroBreakMinutes: 5,
-          pomodoroLongBreakMinutes: 60,
-          pomodoroIsRunning: false,
-          pomodoroIsOnBreak: false,
-          pomodoroIsLongBreak: false,
-          pomodoroMotivation: 'focused',
-        ),
-      ),
-    );
-
-    if (!mounted) return;
     Navigator.pop(context, true);
   }
 }

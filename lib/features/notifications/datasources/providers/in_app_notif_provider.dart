@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import '../../../../shared/services/firebase_messaging_service.dart';
 import '../models/in_app_notif_model.dart';
 import '../services/in_app_notif_service.dart';
 
@@ -13,6 +15,8 @@ class InAppNotificationProvider extends ChangeNotifier {
   int _unreadCount = 0;
   bool _isLoading = false;
   String? _error;
+  bool _hasLoadedOnce = false;
+  final Set<String> _seenNotificationIds = {};
   
   StreamSubscription? _notificationSubscription;
   StreamSubscription? _unreadCountSubscription;
@@ -40,6 +44,7 @@ class InAppNotificationProvider extends ChangeNotifier {
         print('[InAppNotificationProvider] Received ${notifications.length} notifications');
         _notifications = notifications;
         _unreadCount = notifications.where((n) => !n.isRead).length;
+        _handleNewNotifications(notifications);
         _isLoading = false;
         _error = null;
         notifyListeners();
@@ -177,5 +182,65 @@ class InAppNotificationProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  void _handleNewNotifications(List<InAppNotification> notifications) {
+    if (!_hasLoadedOnce) {
+      _seenNotificationIds.addAll(
+        notifications.map((n) => n.notificationId),
+      );
+      _hasLoadedOnce = true;
+      return;
+    }
+
+    final newNotifications = notifications
+        .where((n) => !_seenNotificationIds.contains(n.notificationId))
+        .toList();
+
+    for (final notification in newNotifications) {
+      if (notification.category == 'task_assigned' && !notification.isRead) {
+        _showLocalNotification(notification);
+      }
+    }
+
+    _seenNotificationIds
+      ..clear()
+      ..addAll(notifications.map((n) => n.notificationId));
+  }
+
+  Future<void> _showLocalNotification(
+    InAppNotification notification,
+  ) async {
+    try {
+      final localNotifications = FirebaseMessagingService().localNotifications;
+
+      const androidDetails = AndroidNotificationDetails(
+        'high_importance_channel',
+        'High Importance Notifications',
+        channelDescription: 'This channel is used for important notifications.',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+
+      const notificationDetails = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+
+      await localNotifications.show(
+        notification.notificationId.hashCode,
+        notification.title,
+        notification.message,
+        notificationDetails,
+      );
+    } catch (e) {
+      print('[InAppNotificationProvider] Local notification error: $e');
+    }
   }
 }

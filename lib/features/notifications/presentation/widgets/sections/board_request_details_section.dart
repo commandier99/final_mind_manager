@@ -8,11 +8,12 @@ Widget buildBoardRequestDetailsSection(
   BuildContext context,
   BoardRequest request,
 ) {
-  final isRecruitment = request.boardReqType == 'recruitment';
-  final isPending = request.boardReqStatus == 'pending';
-
   return Consumer<BoardRequestProvider>(
     builder: (context, boardProvider, child) {
+      final currentRequest = _findLatestRequest(boardProvider, request);
+      final isRecruitment = currentRequest.boardReqType == 'recruitment';
+      final isPending = currentRequest.boardReqStatus == 'pending';
+      final isProcessing = boardProvider.isLoading;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -38,7 +39,7 @@ Widget buildBoardRequestDetailsSection(
                       ),
                     ),
                     Text(
-                      request.boardTitle,
+                      currentRequest.boardTitle,
                       style: const TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -47,7 +48,7 @@ Widget buildBoardRequestDetailsSection(
                   ],
                 ),
               ),
-              _buildStatusChip(request.boardReqStatus),
+              _buildStatusChip(currentRequest.boardReqStatus),
             ],
           ),
           const SizedBox(height: 24),
@@ -55,14 +56,16 @@ Widget buildBoardRequestDetailsSection(
           // From/To information
           _buildInfoSection(
             label: isRecruitment ? 'From Manager' : 'To Board',
-            value: isRecruitment ? request.boardManagerName : request.boardTitle,
+            value: isRecruitment
+                ? currentRequest.boardManagerName
+                : currentRequest.boardTitle,
             icon: Icons.person,
           ),
           const SizedBox(height: 16),
 
           // Message section
-          if (request.boardReqMessage != null &&
-              request.boardReqMessage!.isNotEmpty) ...[
+          if (currentRequest.boardReqMessage != null &&
+              currentRequest.boardReqMessage!.isNotEmpty) ...[
             const Text(
               'Message',
               style: TextStyle(
@@ -78,7 +81,7 @@ Widget buildBoardRequestDetailsSection(
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                request.boardReqMessage!,
+                currentRequest.boardReqMessage!,
                 style: TextStyle(color: Colors.grey[800], fontSize: 14),
               ),
             ),
@@ -86,7 +89,7 @@ Widget buildBoardRequestDetailsSection(
           ],
 
           // Timeline
-          _buildTimeline(request, isRecruitment),
+          _buildTimeline(currentRequest, isRecruitment),
           const SizedBox(height: 24),
 
           // Action buttons for pending recruitment
@@ -95,33 +98,67 @@ Widget buildBoardRequestDetailsSection(
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () => _handleAccept(context, request, boardProvider),
+                    onPressed: isProcessing
+                        ? null
+                        : () => _handleAccept(context, currentRequest, boardProvider),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: const Text('Accept'),
+                    child: Text(isProcessing ? 'Processing...' : 'Accept'),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => _handleDecline(context, request, boardProvider),
+                    onPressed: isProcessing
+                        ? null
+                        : () => _handleDecline(context, currentRequest, boardProvider),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: const Text('Decline'),
+                    child: Text(isProcessing ? 'Processing...' : 'Decline'),
                   ),
                 ),
               ],
             ),
           ],
 
+          // Response state for non-pending recruitment
+          if (!isPending && isRecruitment) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: currentRequest.boardReqStatus == 'approved'
+                    ? Colors.green[50]
+                    : Colors.red[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: currentRequest.boardReqStatus == 'approved'
+                      ? Colors.green[200]!
+                      : Colors.red[200]!,
+                ),
+              ),
+              child: Text(
+                currentRequest.boardReqStatus == 'approved'
+                    ? 'You have accepted this request.'
+                    : 'You have declined this request.',
+                style: TextStyle(
+                  color: currentRequest.boardReqStatus == 'approved'
+                      ? Colors.green[800]
+                      : Colors.red[800],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+
           // Response message if declined/approved
-          if (request.boardReqResponseMessage != null &&
-              request.boardReqResponseMessage!.isNotEmpty) ...[
+          if (currentRequest.boardReqResponseMessage != null &&
+              currentRequest.boardReqResponseMessage!.isNotEmpty) ...[
             const SizedBox(height: 24),
             const Text(
               'Response Message',
@@ -134,20 +171,20 @@ Widget buildBoardRequestDetailsSection(
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: request.boardReqStatus == 'approved'
+                color: currentRequest.boardReqStatus == 'approved'
                     ? Colors.green[50]
                     : Colors.red[50],
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: request.boardReqStatus == 'approved'
+                  color: currentRequest.boardReqStatus == 'approved'
                       ? Colors.green[300]!
                       : Colors.red[300]!,
                 ),
               ),
               child: Text(
-                request.boardReqResponseMessage!,
+                currentRequest.boardReqResponseMessage!,
                 style: TextStyle(
-                  color: request.boardReqStatus == 'approved'
+                  color: currentRequest.boardReqStatus == 'approved'
                       ? Colors.green[800]
                       : Colors.red[800],
                   fontSize: 14,
@@ -159,6 +196,26 @@ Widget buildBoardRequestDetailsSection(
       );
     },
   );
+}
+
+BoardRequest _findLatestRequest(
+  BoardRequestProvider provider,
+  BoardRequest fallback,
+) {
+  final allRequests = <BoardRequest>[
+    ...provider.invitations,
+    ...provider.joinRequests,
+    ...provider.pendingRequests,
+    ...provider.userRequests,
+  ];
+
+  for (final request in allRequests) {
+    if (request.boardRequestId == fallback.boardRequestId) {
+      return request;
+    }
+  }
+
+  return fallback;
 }
 
 Widget _buildInfoSection({

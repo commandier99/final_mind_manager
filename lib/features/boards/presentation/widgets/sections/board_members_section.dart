@@ -146,8 +146,9 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                         },
                       );
                     }),
-                  // Add Member Button at the end (only for non-personal boards)
-                  if (widget.board.boardTitle.toLowerCase() != 'personal')
+                  // Add Member Button at the end (managers only, non-personal boards)
+                  if (widget.board.boardTitle.toLowerCase() != 'personal' &&
+                      widget.currentUserId == widget.board.boardManagerId)
                     Padding(
                       padding: const EdgeInsets.only(right: 12.0),
                       child: Column(

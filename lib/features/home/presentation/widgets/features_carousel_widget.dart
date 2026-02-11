@@ -5,7 +5,7 @@ import '../../../tasks/datasources/models/task_model.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import 'dart:async';
 import 'feature_card_widget.dart';
-import '../features/mind_set/pages/mind_set_page.dart';
+import '../../../mind_set/presentation/pages/mind_set_page.dart';
 
 class FeaturesCarouselWidget extends StatefulWidget {
   const FeaturesCarouselWidget({super.key});
@@ -20,7 +20,6 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
   late Timer _autoScrollTimer;
   static const int _initialPageMultiplier = 1000;
   static const Duration _autoScrollInterval = Duration(seconds: 6);
-  static const int _loopMultiplier = 1000;
 
   final List<FeatureCard> features = [
     FeatureCard(
@@ -158,7 +157,6 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
                     _currentPage = index;
                   });
                 },
-                itemCount: totalFeatures * _loopMultiplier,
                 itemBuilder: (context, index) {
                   final feature = dynamicFeatures[index % totalFeatures];
                   return Padding(

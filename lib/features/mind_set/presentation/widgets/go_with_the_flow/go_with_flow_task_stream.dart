@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../../../tasks/datasources/models/task_model.dart';
-import '../../../../../../tasks/datasources/providers/task_provider.dart';
-import '../../../../../../tasks/presentation/widgets/cards/task_card.dart';
-import '../../datasources/models/mind_set_session_model.dart';
-import '../../datasources/services/mind_set_session_service.dart';
+import '../../../../tasks/datasources/models/task_model.dart';
+import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../tasks/presentation/widgets/cards/task_card.dart';
+import '../../../datasources/models/mind_set_session_model.dart';
+import '../../../datasources/services/mind_set_session_service.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
 
@@ -27,6 +27,7 @@ class GoWithFlowTaskStream extends StatefulWidget {
 class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   final MindSetSessionService _sessionService = MindSetSessionService();
   bool _isUpdatingFrog = false;
+  
   @override
   void initState() {
     super.initState();
@@ -238,19 +239,55 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text(
-              'Unplanned Tasks',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            children: [
+              // Tasks Header with Divider
+              Row(
+                children: [
+                  const Text(
+                    'Tasks',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: Colors.grey[300],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    tooltip: 'Filter',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.filter_list, size: 16, color: Colors.grey[700]),
+                    ),
+                    onSelected: (value) {
+                      // TODO: Implement filter
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'status',
+                        child: Text('Status'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+            ],
+          ),
         ),
-        const SizedBox(height: 4),
         Expanded(
           child: Consumer<PlanProvider>(
             builder: (context, planProvider, _) {

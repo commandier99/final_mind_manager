@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../datasources/models/in_app_notif_model.dart';
 import '../../../datasources/providers/in_app_notif_provider.dart';
+import '../../../../tasks/datasources/providers/task_provider.dart';
 
 Widget buildInAppNotificationDetailsSection(
   BuildContext context,
@@ -103,6 +104,14 @@ Widget buildInAppNotificationDetailsSection(
             value: timeago.format(notif.createdAt),
           ),
           const SizedBox(height: 24),
+
+          // Task assignment action buttons
+          if (_isTaskAssignmentNotification(notif)) ...[
+            _buildTaskAssignmentActions(context, notif),
+            const SizedBox(height: 24),
+          ] else ...[
+            _buildDebugInfo(notif),
+          ],
 
           // Actions
           Column(
@@ -223,4 +232,136 @@ Future<void> _handleMarkAsUnread(
       );
     }
   }
+}
+
+Widget _buildTaskAssignmentActions(
+  BuildContext context,
+  InAppNotification notif,
+) {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Text(
+        'Assignment Action',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      const SizedBox(height: 12),
+      Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              onPressed: () =>
+                  _handleAcceptTask(context, notif.relatedId!),
+              icon: const Icon(Icons.check),
+              label: const Text('Accept'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: () =>
+                  _handleDeclineTask(context, notif.relatedId!),
+              icon: const Icon(Icons.close),
+              label: const Text('Decline'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ],
+  );
+}
+
+Future<void> _handleAcceptTask(BuildContext context, String taskId) async {
+  final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+  try {
+    await taskProvider.acceptTask(taskId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Task accepted!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      // Close the details sheet
+      Navigator.pop(context);
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error accepting task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+Future<void> _handleDeclineTask(BuildContext context, String taskId) async {
+  final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+  try {
+    await taskProvider.declineTask(taskId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('❌ Task declined'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      // Close the details sheet
+      Navigator.pop(context);
+    }
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error declining task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+}
+
+bool _isTaskAssignmentNotification(InAppNotification notif) {
+  final isTaskAssigned = notif.category == 'task_assigned';
+  final hasTaskId = notif.relatedId != null && notif.relatedId!.isNotEmpty;
+  print('[DEBUG] _isTaskAssignmentNotification: category="${notif.category}", relatedId="${notif.relatedId}", isTaskAssigned=$isTaskAssigned, hasTaskId=$hasTaskId');
+  return isTaskAssigned && hasTaskId;
+}
+
+Widget _buildDebugInfo(InAppNotification notif) {
+  print('[DEBUG] Notification debug: category="${notif.category}", relatedId="${notif.relatedId}", title="${notif.title}"');
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.amber[50],
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: Colors.amber),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Debug Info:',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Text('Category: ${notif.category}'),
+        Text('RelatedId: ${notif.relatedId ?? "null"}'),
+        Text('Is Task Assignment: ${notif.category == "task_assigned"}'),
+      ],
+    ),
+  );
 }

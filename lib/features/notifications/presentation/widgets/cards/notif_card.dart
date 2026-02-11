@@ -5,9 +5,10 @@ import '../../../datasources/models/in_app_notif_model.dart';
 import '../../../datasources/models/push_notif_model.dart';
 import '../../../datasources/providers/in_app_notif_provider.dart';
 import '../../../datasources/providers/push_notif_provider.dart';
+import '../sheets/notif_details_sheet.dart';
 
 /// Reusable notification card widget that displays basic info
-/// Navigates to NotificationDetailsPage on tap where full details and actions are available
+/// Opens the notification details sheet on tap
 class NotificationCard extends StatelessWidget {
   final dynamic notification;
   final InAppNotificationProvider? inAppProvider;
@@ -32,7 +33,7 @@ class NotificationCard extends StatelessWidget {
     return const SizedBox.shrink();
   }
 
-  /// Navigate to details page and mark as read if applicable
+  /// Navigate to details sheet and mark as read if applicable
   Future<void> _navigateToDetails(BuildContext context) async {
     // Mark as read when viewing details
     if (notification is InAppNotification) {
@@ -43,136 +44,19 @@ class NotificationCard extends StatelessWidget {
     }
 
     if (context.mounted) {
-      // Use the page route to avoid import issues at top level
-      // The NotificationDetailsPage will handle different notification types
+      // The details sheet handles different notification types.
       _showDetailsPage(context);
     }
   }
 
-  /// Show the details page for this notification
+  /// Show the details sheet for this notification
   void _showDetailsPage(BuildContext context) {
-    // Create a custom route that loads the details page on demand
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       builder: (BuildContext sheetContext) {
-        return _buildDetailsContent(sheetContext);
+        return NotificationDetailsSheet(notification: notification);
       },
-    );
-  }
-
-  /// Build details content based on notification type
-  /// This will be expanded later as a full page
-  Widget _buildDetailsContent(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.9,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          AppBar(
-            title: const Text('Notification Details'),
-            automaticallyImplyLeading: false,
-            leading: IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
-          Expanded(
-            child: SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: _buildNotificationDetails(),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Build the specific notification details
-  Widget _buildNotificationDetails() {
-    if (notification is BoardRequest) {
-      return _buildBoardRequestDetails(notification as BoardRequest);
-    } else if (notification is InAppNotification) {
-      return _buildInAppNotificationDetails(notification as InAppNotification);
-    } else if (notification is PushNotification) {
-      return _buildPushNotificationDetails(notification as PushNotification);
-    }
-    return const SizedBox.shrink();
-  }
-
-  /// TODO: Implement board request details view
-  Widget _buildBoardRequestDetails(BoardRequest request) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          request.boardTitle,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Status: ${request.boardReqStatus}',
-          style: const TextStyle(fontSize: 14),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Message: ${request.boardReqMessage ?? 'No message'}',
-          style: const TextStyle(fontSize: 14),
-        ),
-        // More details to be implemented
-      ],
-    );
-  }
-
-  /// TODO: Implement in-app notification details view
-  Widget _buildInAppNotificationDetails(InAppNotification notif) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          notif.title,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          notif.message,
-          style: const TextStyle(fontSize: 14),
-        ),
-        const SizedBox(height: 16),
-        // TODO: Implement mark as unread and log activity
-        ElevatedButton.icon(
-          onPressed: () {
-            // Mark as unread action and log as user activity
-          },
-          icon: const Icon(Icons.mail_outline),
-          label: const Text('Mark as Unread'),
-        ),
-        // More details to be implemented
-      ],
-    );
-  }
-
-  /// TODO: Implement push notification details view
-  Widget _buildPushNotificationDetails(PushNotification notif) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          notif.title,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          notif.body,
-          style: const TextStyle(fontSize: 14),
-        ),
-        // More details to be implemented
-      ],
     );
   }
 

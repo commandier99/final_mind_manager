@@ -12,11 +12,18 @@ class InAppNotificationService {
   /// Create a new in-app notification
   Future<String> createNotification(InAppNotification notification) async {
     try {
+      print('[InAppNotifService] Creating notification for userId: ${notification.userId}');
+      print('[InAppNotifService] Notification data: title="${notification.title}", category="${notification.category}"');
+      
       final docRef = await _firestore.collection(_collectionPath).add(
             notification.toMap(),
           );
+      
+      print('[InAppNotifService] ✅ Notification created in Firestore with ID: ${docRef.id}');
       return docRef.id;
     } catch (e) {
+      print('[InAppNotifService] ❌ Error creating in-app notification: $e');
+      print('[InAppNotifService] Error type: ${e.runtimeType}');
       throw Exception('Error creating in-app notification: $e');
     }
   }

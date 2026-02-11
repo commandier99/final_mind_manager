@@ -93,10 +93,19 @@ class DeadlineReminderService {
         try {
           final taskData = Task.fromMap(doc.data(), doc.id);
           
-          if (taskData.taskDeadline == null) continue;
+          if (taskData.taskDeadline == null) {
+            print(
+              '[DeadlineReminder] Skipping ${taskData.taskTitle} (${taskData.taskId}): no deadline',
+            );
+            continue;
+          }
 
           final timeUntilDeadline = taskData.taskDeadline!.difference(now);
           final isPastDeadline = timeUntilDeadline.isNegative;
+
+          print(
+            '[DeadlineReminder] Task ${taskData.taskTitle} (${taskData.taskId}) | deadline=${taskData.taskDeadline} | timeUntil=${timeUntilDeadline.inMinutes}m | reminderSentAt=${taskData.taskReminderSentAt} | pastDue=$isPastDeadline',
+          );
 
           // Check 1: Missed deadline (deadline has passed)
           if (isPastDeadline) {

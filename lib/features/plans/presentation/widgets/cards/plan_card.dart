@@ -31,23 +31,8 @@ class PlanCard extends StatelessWidget {
     }
   }
 
-  Color _getStyleColor(String style) {
-    switch (style.toLowerCase()) {
-      case 'pomodoro':
-        return Colors.red.shade400;
-      case 'timeblocking':
-        return Colors.blue.shade400;
-      case 'gtd':
-        return Colors.purple.shade400;
-      default:
-        return Colors.teal.shade400;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final styleColor = _getStyleColor(plan.planStyle);
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Slidable(
@@ -104,138 +89,109 @@ class PlanCard extends StatelessWidget {
               color: Colors.grey.shade300,
               width: 1,
             ),
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(12),
-                bottomRight: Radius.circular(12),
-              ),
+              borderRadius: BorderRadius.circular(12),
               color: Colors.white,
             ),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                // Header: Title + Status Badge
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        plan.planTitle,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    // Style Badge - Top Right
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: styleColor.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        plan.planStyle.toUpperCase(),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: styleColor,
-                        ),
-                      ),
-                    ),
-                  ],
+                // Title
+                Text(
+                  plan.planTitle,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
 
                 const SizedBox(height: 12),
 
                 // Description
                 if (plan.planDescription.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Text(
-                      plan.planDescription,
+                  Text(
+                    plan.planDescription,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                      height: 1.4,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+
+                if (plan.planDescription.isNotEmpty)
+                  const SizedBox(height: 12),
+
+                // Task Progress
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 16,
+                      color: Colors.grey.shade600,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${plan.completedTasks}/${plan.totalTasks} tasks',
                       style: TextStyle(
                         fontSize: 13,
                         color: Colors.grey.shade700,
-                        height: 1.4,
+                        fontWeight: FontWeight.w500,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-
-                const SizedBox(height: 8),
-
-                // Task Progress
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Tasks: ${plan.completedTasks}/${plan.totalTasks}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade700,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        Text(
-                          '${plan.completionPercentage.toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade600,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: plan.completionPercentage / 100,
-                        minHeight: 6,
-                        backgroundColor: Colors.grey.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.blue.shade400,
-                        ),
+                    const Spacer(),
+                    Text(
+                      '${plan.completionPercentage.toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: plan.completionPercentage >= 100
+                            ? Colors.green.shade700
+                            : Colors.blue.shade700,
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: plan.completionPercentage / 100,
+                    minHeight: 6,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      plan.completionPercentage >= 100
+                          ? Colors.green.shade400
+                          : Colors.blue.shade400,
+                    ),
+                  ),
+                ),
 
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
-                // Deadline if exists
-                if (plan.planDeadline != null) ...[
-                  const SizedBox(height: 8),
+                // Scheduled date if exists
+                if (plan.planScheduledFor != null)
                   Row(
                     children: [
                       Icon(
                         Icons.calendar_today,
-                        size: 14,
+                        size: 16,
                         color: Colors.grey.shade600,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'Due: ${_formatDate(plan.planDeadline!)}',
+                        'Scheduled: ${_formatDate(plan.planScheduledFor!)}',
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 13,
                           color: Colors.grey.shade700,
                         ),
                       ),
                     ],
                   ),
-                ],
               ],
             ),
           ),

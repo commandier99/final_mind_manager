@@ -319,108 +319,147 @@ class _BoardsPageState extends State<BoardsPage> {
           ? const Center(child: Text('User not logged in.'))
           : Consumer<BoardProvider>(
               builder: (context, boardProvider, child) {
+                final statsProvider = context.read<BoardStatsProvider>();
+
+                Future<void> onRefresh() async {
+                  await boardProvider.refreshBoards();
+                  for (var board in boardProvider.boards) {
+                    statsProvider.streamStatsForBoard(board.boardId);
+                  }
+                }
+
+                Widget wrapWithRefresh(Widget content) {
+                  if (content is ScrollView) {
+                    return RefreshIndicator(
+                      onRefresh: onRefresh,
+                      child: content,
+                    );
+                  }
+
+                  return RefreshIndicator(
+                    onRefresh: onRefresh,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: [
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.6,
+                          child: content,
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
                 if (boardProvider.isLoading) {
                   print(
                     '[DEBUG] BoardsPage: BoardProvider is loading boards...',
                   );
-                  return const Center(child: CircularProgressIndicator());
+                  return wrapWithRefresh(
+                    const Center(child: CircularProgressIndicator()),
+                  );
                 }
 
                 final filteredBoards = _sortBoards(_filterBoards(boardProvider.boards));
 
                 if (filteredBoards.isEmpty && _searchQuery.isNotEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.search_off,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No boards found',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Try a different search term',
-                          style: TextStyle(color: Colors.grey[600]),
-                        ),
-                      ],
+                  return wrapWithRefresh(
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.search_off,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No boards found',
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Try a different search term',
+                            style: TextStyle(color: Colors.grey[600]),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
 
                 if (boardProvider.boards.isEmpty) {
                   print('[DEBUG] BoardsPage: No boards assigned.');
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.dashboard,
-                          size: 64,
-                          color: Colors.grey[400],
-                        ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'You have no boards!',
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(color: Colors.grey[600]),
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text('Press '),
-                            Icon(Icons.add, color: Colors.blue),
-                            const Text(' to create a board!'),
-                          ],
-                        ),
-                      ],
+                  return wrapWithRefresh(
+                    Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.dashboard,
+                            size: 64,
+                            color: Colors.grey[400],
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'You have no boards!',
+                            style: Theme.of(context).textTheme.headlineSmall
+                                ?.copyWith(color: Colors.grey[600]),
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('Press '),
+                              Icon(Icons.add, color: Colors.blue),
+                              const Text(' to create a board!'),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
 
-                return ListView.builder(
-                  itemCount: filteredBoards.length,
-                  itemBuilder: (context, index) {
-                    final board = filteredBoards[index];
-                    return Column(
-                      children: [
-                        BoardCard(
-                          board: board,
-                          onTap: () {
-                            print(
-                              '[DEBUG] BoardsPage: BoardCard tapped. boardId = ${board.boardId}',
-                            );
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    BoardDetailsPage(board: board),
-                              ),
-                            );
-                          },
-                          onDelete: () {
-                            print(
-                              '[DEBUG] BoardsPage: Deleting board. boardId = ${board.boardId}',
-                            );
-                            _handleBoardDeletion(board);
-                          },
-                        ),
-                        // Add divider after Personal board
-                        if (board.boardTitle.toLowerCase() == 'personal')
-                          Divider(
-                            height: 16,
-                            thickness: 1,
-                            color: Colors.grey[300],
+                return wrapWithRefresh(
+                  ListView.builder(
+                    itemCount: filteredBoards.length,
+                    itemBuilder: (context, index) {
+                      final board = filteredBoards[index];
+                      return Column(
+                        children: [
+                          BoardCard(
+                            board: board,
+                            onTap: () {
+                              print(
+                                '[DEBUG] BoardsPage: BoardCard tapped. boardId = ${board.boardId}',
+                              );
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      BoardDetailsPage(board: board),
+                                ),
+                              );
+                            },
+                            onDelete: () {
+                              print(
+                                '[DEBUG] BoardsPage: Deleting board. boardId = ${board.boardId}',
+                              );
+                              _handleBoardDeletion(board);
+                            },
                           ),
-                      ],
-                    );
-                  },
+                          // Add divider after Personal board
+                          if (board.boardTitle.toLowerCase() == 'personal')
+                            Divider(
+                              height: 16,
+                              thickness: 1,
+                              color: Colors.grey[300],
+                            ),
+                        ],
+                      );
+                    },
+                  ),
                 );
               },
             ),

@@ -1,11 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../../../tasks/datasources/models/task_model.dart';
-import '../../../../../../tasks/datasources/providers/task_provider.dart';
-import '../../../../../../tasks/presentation/widgets/cards/task_card.dart';
-import '../../datasources/models/mind_set_session_model.dart';
-import '../../datasources/services/mind_set_session_service.dart';
+import '../../../../tasks/datasources/models/task_model.dart';
+import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../tasks/presentation/widgets/cards/task_card.dart';
+import '../../../datasources/models/mind_set_session_model.dart';
+import '../../../datasources/services/mind_set_session_service.dart';
 
 class FollowThroughTaskStream extends StatefulWidget {
   final List<String> taskIds;
@@ -26,6 +26,8 @@ class FollowThroughTaskStream extends StatefulWidget {
 class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
   final MindSetSessionService _sessionService = MindSetSessionService();
   bool _isUpdatingFrog = false;
+  String _sortBy = 'created_desc'; // format: 'field_direction'
+  
   @override
   void initState() {
     super.initState();
@@ -237,19 +239,70 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text(
-              'Plan Tasks',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Column(
+            children: [
+              // Tasks Header with Divider
+              Row(
+                children: [
+                  const Text(
+                    'Tasks',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Container(
+                      height: 1,
+                      color: Colors.grey[300],
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  PopupMenuButton<String>(
+                    tooltip: 'Filter',
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(Icons.filter_list, size: 16, color: Colors.grey[700]),
+                    ),
+                    onSelected: (value) {
+                      // TODO: Implement filter
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'status',
+                        child: Text('Status'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => _showSortMenu(),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Icon(Icons.swap_vert, size: 16, color: Colors.grey[700]),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 4),
+            ],
+          ),
         ),
-        const SizedBox(height: 4),
         Expanded(
           child: Consumer<TaskProvider>(
             builder: (context, taskProvider, _) {
@@ -399,6 +452,131 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
       final bIndex = orderMap[b.taskId] ?? order.length;
       return aIndex.compareTo(bIndex);
     });
+
+    // Apply secondary sorting based on _sortBy
+    return _applySorting(sorted);
+  }
+
+  int _priorityToInt(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'low':
+        return 1;
+      case 'medium':
+        return 2;
+      case 'high':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  List<Task> _applySorting(List<Task> tasks) {
+    final sorted = [...tasks];
+    
+    try {
+      switch (_sortBy) {
+        case 'priority_asc':
+          sorted.sort((a, b) => _priorityToInt(a.taskPriorityLevel)
+              .compareTo(_priorityToInt(b.taskPriorityLevel)));
+          break;
+        case 'priority_desc':
+          sorted.sort((a, b) => _priorityToInt(b.taskPriorityLevel)
+              .compareTo(_priorityToInt(a.taskPriorityLevel)));
+          break;
+        case 'alphabetical_asc':
+          sorted.sort((a, b) => a.taskTitle
+              .toLowerCase()
+              .compareTo(b.taskTitle.toLowerCase()));
+          break;
+        case 'alphabetical_desc':
+          sorted.sort((a, b) => b.taskTitle
+              .toLowerCase()
+              .compareTo(a.taskTitle.toLowerCase()));
+          break;
+        case 'created_asc':
+          sorted.sort((a, b) => a.taskCreatedAt.compareTo(b.taskCreatedAt));
+          break;
+        case 'created_desc':
+          sorted.sort((a, b) => b.taskCreatedAt.compareTo(a.taskCreatedAt));
+          break;
+        case 'deadline_asc':
+          sorted.sort((a, b) {
+            final aDeadline = a.taskDeadline ?? DateTime(2099);
+            final bDeadline = b.taskDeadline ?? DateTime(2099);
+            return aDeadline.compareTo(bDeadline);
+          });
+          break;
+        case 'deadline_desc':
+          sorted.sort((a, b) {
+            final aDeadline = a.taskDeadline ?? DateTime(1970);
+            final bDeadline = b.taskDeadline ?? DateTime(1970);
+            return bDeadline.compareTo(aDeadline);
+          });
+          break;
+        default:
+          break;
+      }
+    } catch (e) {
+      // If sorting fails, return unsorted list
+      return tasks;
+    }
+
     return sorted;
+  }
+
+  void _showSortMenu() {
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 100,
+        kToolbarHeight + 50,
+        0,
+        0,
+      ),
+      items: [
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'priority_asc',
+          child: Text('Priority (Low→High)'),
+        ),
+        const PopupMenuItem(
+          value: 'priority_desc',
+          child: Text('Priority (High→Low)'),
+        ),
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'alphabetical_asc',
+          child: Text('Title (A→Z)'),
+        ),
+        const PopupMenuItem(
+          value: 'alphabetical_desc',
+          child: Text('Title (Z→A)'),
+        ),
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'created_asc',
+          child: Text('Created (Oldest)'),
+        ),
+        const PopupMenuItem(
+          value: 'created_desc',
+          child: Text('Created (Newest)'),
+        ),
+        const PopupMenuDivider(height: 8),
+        const PopupMenuItem(
+          value: 'deadline_asc',
+          child: Text('Deadline (Soonest)'),
+        ),
+        const PopupMenuItem(
+          value: 'deadline_desc',
+          child: Text('Deadline (Latest)'),
+        ),
+      ],
+    ).then((value) {
+      if (value != null) {
+        setState(() {
+          _sortBy = value;
+        });
+      }
+    });
   }
 }

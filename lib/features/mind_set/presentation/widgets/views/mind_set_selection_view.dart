@@ -4,10 +4,10 @@ import 'package:uuid/uuid.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
 import '/features/plans/datasources/services/plan_service.dart';
 import '/features/tasks/datasources/services/task_services.dart';
-import '../datasources/models/mind_set_session_model.dart';
-import '../datasources/models/mind_set_session_stats_model.dart';
-import '../datasources/services/mind_set_session_service.dart';
-import 'mind_set_create_form.dart';
+import '../../../datasources/models/mind_set_session_model.dart';
+import '../../../datasources/models/mind_set_session_stats_model.dart';
+import '../../../datasources/services/mind_set_session_service.dart';
+import '../mind_set_create_form.dart';
 
 class MindSetSelectionView extends StatefulWidget {
   const MindSetSelectionView({super.key});

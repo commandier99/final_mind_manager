@@ -127,35 +127,45 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
           navigation.selectFromSideMenu(sideMenuIndex + 4);
         },
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            // Board Details Section
-            BoardDetailsSection(
-              boardId: widget.board.boardId,
-              showStats: _showStats,
-              onStatsToggle: (value) {
-                setState(() {
-                  _showStats = value;
-                });
-              },
-            ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          context.read<TaskProvider>().streamTasksByBoard(widget.board.boardId);
+          context.read<BoardStatsProvider>().streamStatsForBoard(
+            widget.board.boardId,
+          );
+          await Future.delayed(const Duration(milliseconds: 300));
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            children: [
+              // Board Details Section
+              BoardDetailsSection(
+                boardId: widget.board.boardId,
+                showStats: _showStats,
+                onStatsToggle: (value) {
+                  setState(() {
+                    _showStats = value;
+                  });
+                },
+              ),
 
-            // Conditional rendering - Tasks or Stats
-            if (!_showStats) ...[
-              // Board Tasks Section
-              BoardTasksSection(
-                boardId: widget.board.boardId,
-                board: widget.board,
-              ),
-            ] else ...[
-              // Board Stats Section
-              BoardStatsSection(
-                boardId: widget.board.boardId,
-                board: widget.board,
-              ),
+              // Conditional rendering - Tasks or Stats
+              if (!_showStats) ...[
+                // Board Tasks Section
+                BoardTasksSection(
+                  boardId: widget.board.boardId,
+                  board: widget.board,
+                ),
+              ] else ...[
+                // Board Stats Section
+                BoardStatsSection(
+                  boardId: widget.board.boardId,
+                  board: widget.board,
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       bottomNavigationBar: AppBottomNavigation(

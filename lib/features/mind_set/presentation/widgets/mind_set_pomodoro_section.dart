@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../datasources/models/mind_set_session_model.dart';
-import '../datasources/services/mind_set_session_service.dart';
+import '../../datasources/models/mind_set_session_model.dart';
+import '../../datasources/services/mind_set_session_service.dart';
 
 class MindSetPomodoroSection extends StatefulWidget {
   final MindSetSession session;

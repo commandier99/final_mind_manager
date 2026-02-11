@@ -271,6 +271,39 @@ class _TaskCardState extends State<TaskCard> {
     }
   }
 
+  Color _getDeadlineColor() {
+    if (widget.task.taskDeadlineMissed) {
+      return Colors.red;
+    }
+    if (widget.task.taskDeadline == null) {
+      return Colors.grey;
+    }
+    final daysUntil = widget.task.taskDeadline!.difference(DateTime.now()).inDays;
+    if (daysUntil < 0) {
+      return Colors.red; // Missed
+    } else if (daysUntil <= 3) {
+      return Colors.orange; // Upcoming soon
+    } else {
+      return Colors.green; // Far away
+    }
+  }
+
+  String _formatDeadline(DateTime? deadline) {
+    if (deadline == null) return '';
+    final now = DateTime.now();
+    final daysUntil = deadline.difference(DateTime(now.year, now.month, now.day)).inDays;
+    
+    if (daysUntil < 0) {
+      return '${-daysUntil} day${-daysUntil > 1 ? 's' : ''} overdue';
+    } else if (daysUntil == 0) {
+      return 'Due today';
+    } else if (daysUntil == 1) {
+      return 'Due tomorrow';
+    } else {
+      return 'Due in $daysUntil days';
+    }
+  }
+
   IconData _getStatusIcon(String status) {
     switch (_normalizeStatus(status)) {
       case 'OVERDUE':
@@ -344,7 +377,7 @@ class _TaskCardState extends State<TaskCard> {
     final borderColor = isFocused ? statusColor : Colors.grey.shade300;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Slidable(
         key: ValueKey(widget.task.taskId),
         endActionPane: ActionPane(
@@ -388,536 +421,272 @@ class _TaskCardState extends State<TaskCard> {
             ),
           ],
         ),
-            child: GestureDetector(
-              onTap: () {
-                // If task is unassigned, go to applications page first
-                // But only if user is the board manager
-                if (widget.task.taskAssignedTo.isEmpty) {
-                  final boardProvider = context.read<BoardProvider>();
-                  final board = boardProvider.getBoardById(widget.task.taskBoardId);
-                  
-                  if (board?.boardManagerId == _currentUserId) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => TaskApplicationsPage(task: widget.task),
-                      ),
-                    );
-                  } else {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => TaskDetailsPage(task: widget.task),
-                      ),
-                    );
-                  }
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TaskDetailsPage(task: widget.task),
-                    ),
-                  );
-                }
-              },
-              child: Card(
-                elevation: isFocused ? 3 : 2,
-                color: cardBaseColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                  side: BorderSide(
-                    color: borderColor,
-                    width: 1,
+        child: GestureDetector(
+          onTap: () {
+            if (widget.task.taskAssignedTo.isEmpty) {
+              final boardProvider = context.read<BoardProvider>();
+              final board = boardProvider.getBoardById(widget.task.taskBoardId);
+
+              if (board?.boardManagerId == _currentUserId) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TaskApplicationsPage(task: widget.task),
                   ),
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.zero,
-                    color: Colors.transparent,
+                );
+              } else {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TaskDetailsPage(task: widget.task),
                   ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                );
+              }
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TaskDetailsPage(task: widget.task),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      child: Column(
+              );
+            }
+          },
+          child: Card(
+            elevation: isFocused ? 3 : 2,
+            color: cardBaseColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.zero,
+              side: BorderSide(color: borderColor, width: 1),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header: Board/Priority (left) + Status (right)
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Row(
-                            children: [
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (widget.showBoardLabel) ...[
-                                    Icon(
-                                      Icons.label,
-                                      size: 14,
-                                      color: Colors.grey[600],
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      widget.task.taskBoardTitle ?? 'Personal',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey[600],
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  // Priority badge
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: _getPriorityBackgroundColor(
-                                        widget.task.taskPriorityLevel,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      widget.task.taskPriorityLevel,
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.bold,
-                                        color: _getPriorityColor(
-                                          widget.task.taskPriorityLevel,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const Spacer(),
-                              // Right side - status + focus action
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                        color: statusColor,
-                                        width: 1.5,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          _getStatusIcon(widget.task.taskStatus),
-                                          size: 12,
-                                          color: statusColor,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          widget.task.taskStatus,
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.bold,
-                                            color: statusColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  if (showFocusInHeader) ...[
-                                    const SizedBox(width: 6),
-                                    OutlinedButton.icon(
-                                      onPressed: isFocused
-                                          ? widget.onPause
-                                          : widget.onFocus,
-                                      icon: Icon(
-                                        isFocused ? Icons.pause : Icons.play_arrow,
-                                        size: 14,
-                                      ),
-                                      label: Text(
-                                        isFocused ? 'Pause' : 'Focus',
-                                        style: const TextStyle(fontSize: 10),
-                                      ),
-                                      style: OutlinedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        visualDensity: VisualDensity.compact,
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        minimumSize: const Size(0, 0),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ],
-                          ),
-                              const SizedBox(height: 6),
-                          // Additional badges row (approval, acceptance, helpers)
-                          if (widget.task.taskRequiresApproval ||
-                              widget.task.taskAcceptanceStatus != null ||
-                              widget.task.taskHelpers.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 4,
-                                  ),
-                              child: Row(
-                                children: [
-                                  // Approval indicator
-                                  if (widget.task.taskRequiresApproval)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 2,
-                                      ),
-                                      child: Tooltip(
-                                        message: 'Requires approval',
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.amber.shade100,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: Icon(
-                                            Icons.check_circle_outline,
-                                            size: 12,
-                                            color: Colors.amber.shade700,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(width: 6),
-                                  // Acceptance status
-                                  if (widget.task.taskAcceptanceStatus !=
-                                      null)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 2,
-                                      ),
-                                      child: Tooltip(
-                                        message: _getAcceptanceStatusLabel(
-                                          widget.task.taskAcceptanceStatus,
-                                        ),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                _getAcceptanceStatusColor(
-                                                  widget
-                                                      .task
-                                                      .taskAcceptanceStatus,
-                                                ).withOpacity(0.2),
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: Text(
-                                            _getAcceptanceStatusLabel(
-                                              widget.task
-                                                  .taskAcceptanceStatus,
-                                            ),
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.bold,
-                                              color:
-                                                  _getAcceptanceStatusColor(
-                                                    widget
-                                                        .task
-                                                        .taskAcceptanceStatus,
-                                                  ),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  const SizedBox(width: 6),
-                                  // Helpers count
-                                  if (widget.task.taskHelpers.isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 2,
-                                      ),
-                                      child: Tooltip(
-                                        message:
-                                            '${widget.task.taskHelpers.length} helper${widget.task.taskHelpers.length > 1 ? 's' : ''}',
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 6,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Colors.teal.shade100,
-                                            borderRadius:
-                                                BorderRadius.circular(8),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.people,
-                                                size: 11,
-                                                color: Colors.teal.shade700,
-                                              ),
-                                              const SizedBox(width: 2),
-                                              Text(
-                                                widget.task.taskHelpers.length
-                                                    .toString(),
-                                                style: TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: Colors.teal.shade700,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                          if (widget.showBoardLabel) ...[
+                            Icon(Icons.label, size: 12, color: Colors.grey[600]),
+                            const SizedBox(width: 4),
+                            Text(
+                              widget.task.taskBoardTitle ?? 'Personal',
+                              style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _getPriorityBackgroundColor(widget.task.taskPriorityLevel),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              widget.task.taskPriorityLevel,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: _getPriorityColor(widget.task.taskPriorityLevel),
                               ),
                             ),
+                          ),
                         ],
                       ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 6,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: statusColor, width: 1.5),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(_getStatusIcon(widget.task.taskStatus), size: 11, color: statusColor),
+                            const SizedBox(width: 3),
+                            Text(
+                              widget.task.taskStatus,
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: statusColor),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Row(
-                        children: [
-                          if (showCheckbox) ...[
-                            Checkbox(
-                              value: widget.task.taskIsDone,
-                              onChanged: (bool? newValue) {
-                                widget.onToggleDone?.call(newValue);
-                              },
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Main content row
+                  Row(
+                    children: [
+                      if (showCheckbox) ...[
+                        Checkbox(
+                          value: widget.task.taskIsDone,
+                          onChanged: (bool? newValue) => widget.onToggleDone?.call(newValue),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              widget.task.taskTitle,
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(width: 12),
-                          ],
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  widget.task.taskTitle,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                                const SizedBox(height: 3),
-                                Flexible(
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(
-                                          Icons.calendar_today,
-                                          size: 14,
-                                          color: Colors.grey,
-                                        ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          widget.task.taskDeadline != null
-                                              ? _formatDate(
-                                                widget.task.taskDeadline!,
-                                              )
-                                              : 'No deadline',
-                                          style: const TextStyle(
-                                            color: Colors.grey,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        if (widget.task.taskIsRepeating) ...[
-                                          const SizedBox(width: 8),
-                                          const Icon(
-                                            Icons.repeat,
-                                            size: 14,
-                                            color: Colors.grey,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            _formatRepeatDays(
-                                              widget.task.taskRepeatInterval,
-                                            ),
-                                            style: const TextStyle(
-                                              color: Colors.grey,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (showFocusInMainRow) ...[
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed:
-                                  isFocused ? widget.onPause : widget.onFocus,
-                              icon: Icon(
-                                isFocused ? Icons.pause : Icons.adjust,
-                                size: 34,
-                              ),
-                              padding: const EdgeInsets.all(10),
-                              constraints: const BoxConstraints(
-                                minWidth: 56,
-                                minHeight: 56,
-                              ),
-                              splashRadius: 28,
-                            ),
-                          ],
-                          const SizedBox(width: 8),
-                          // Show interest buttons only if task is unassigned AND unassigned is allowed
-                          if (_isTaskUnassigned() && _shouldAllowUnassigned())
+                            const SizedBox(height: 4),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Tooltip(
-                                  message: _isInterested ? 'Not interested' : 'Interested',
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      if (_isInterested) {
-                                        _removeInterest();
-                                      } else {
-                                        _toggleInterest(true);
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: _isInterested
-                                            ? Colors.green.shade100
-                                            : Colors.grey.shade100,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: _isInterested
-                                              ? Colors.green
-                                              : Colors.grey.shade400,
-                                          width: 1.5,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            _isInterested
-                                                ? Icons.thumb_up
-                                                : Icons.thumb_up_outlined,
-                                            size: 16,
-                                            color: _isInterested
-                                                ? Colors.green
-                                                : Colors.grey,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            _isInterested ? 'Interested' : 'Interest?',
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.w600,
-                                              color: _isInterested
-                                                  ? Colors.green.shade700
-                                                  : Colors.grey.shade700,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                Icon(
+                                  widget.task.taskDeadline == null
+                                      ? Icons.calendar_today
+                                      : (widget.task.taskDeadlineMissed
+                                          ? Icons.error
+                                          : Icons.calendar_today),
+                                  size: 12,
+                                  color: widget.task.taskDeadline == null
+                                      ? Colors.grey
+                                      : _getDeadlineColor(),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  widget.task.taskDeadline == null
+                                      ? 'No deadline'
+                                      : _formatDeadline(widget.task.taskDeadline),
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: widget.task.taskDeadline == null
+                                        ? Colors.grey
+                                        : _getDeadlineColor(),
+                                    fontWeight: FontWeight.w500,
                                   ),
                                 ),
                               ],
-                            )
-                          else if (_hasSubtasks())
-                            const SizedBox(width: 8),
-                          if (_hasSubtasks())
-                            SizedBox(
-                              width: 45,
-                              height: 45,
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  CircularProgressIndicator(
-                                    value: progress,
-                                    strokeWidth: 3,
-                                    backgroundColor: Colors.grey.shade300,
-                                    color:
-                                        widget.task.taskIsDone
-                                            ? Colors.green
-                                            : Colors.blue,
-                                  ),
-                                  Text(
-                                    widget.task.taskIsDone ? "100%" : "$percent%",
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
                             ),
-                          const SizedBox(width: 8),
-                          // const SizedBox(width: 8),
-                          // // Focus button - Commented out, focus session feature not used
-                          // Tooltip(
-                          //   message: _isFocused ? 'Unfocus' : 'Set as current task',
-                          //   child: GestureDetector(
-                          //     onTap: () {
-                          //       setState(() {
-                          //         _isFocused = !_isFocused;
-                          //       });
-                          //     },
-                          //     child: Container(
-                          //       padding: const EdgeInsets.all(8),
-                          //       decoration: BoxDecoration(
-                          //         color: _isFocused ? Colors.blue : Colors.blue.shade50,
-                          //         borderRadius: BorderRadius.circular(8),
-                          //         border: Border.all(
-                          //           color: Colors.blue,
-                          //           width: 1.5,
-                          //         ),
-                          //       ),
-                          //       child: Icon(
-                          //         Icons.adjust,
-                          //         size: 20,
-                          //         color: _isFocused ? Colors.white : Colors.blue,
-                          //       ),
-                          //     ),
-                          //   ),
-                          // ),
-                        ],
+                            const SizedBox(height: 3),
+                            // Compact badges row
+                            if (widget.task.taskRequiresApproval ||
+                                widget.task.taskAcceptanceStatus != null ||
+                                widget.task.taskHelpers.isNotEmpty)
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (widget.task.taskRequiresApproval)
+                                      Tooltip(
+                                        message: 'Requires approval',
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: Colors.purple[100],
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: Icon(Icons.verified_user, size: 10, color: Colors.purple[700]),
+                                        ),
+                                      ),
+                                    if (widget.task.taskAcceptanceStatus != null)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: Tooltip(
+                                          message: _getAcceptanceStatusLabel(widget.task.taskAcceptanceStatus),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: _getAcceptanceStatusColor(widget.task.taskAcceptanceStatus).withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Icon(Icons.check_circle, size: 10, color: _getAcceptanceStatusColor(widget.task.taskAcceptanceStatus)),
+                                          ),
+                                        ),
+                                      ),
+                                    if (widget.task.taskHelpers.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 4),
+                                        child: Tooltip(
+                                          message: '${widget.task.taskHelpers.length} helper${widget.task.taskHelpers.length > 1 ? 's' : ''}',
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue[100],
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              '+${widget.task.taskHelpers.length}',
+                                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue[700]),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Right side indicators
+                      if (showFocusAction && widget.showFocusInMainRow)
+                        IconButton(
+                          onPressed: isFocused ? widget.onPause : widget.onFocus,
+                          icon: Icon(isFocused ? Icons.pause : Icons.adjust, size: 28),
+                          padding: const EdgeInsets.all(6),
+                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                        )
+                      else if (_isTaskUnassigned() && _shouldAllowUnassigned())
+                        GestureDetector(
+                          onTap: () => _toggleInterest(!_isInterested),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _isInterested ? Colors.green[100] : Colors.grey[100],
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: _isInterested ? Colors.green : Colors.grey[300]!),
+                            ),
+                            child: Icon(
+                              _isInterested ? Icons.thumb_up : Icons.thumb_up_outlined,
+                              size: 16,
+                              color: _isInterested ? Colors.green : Colors.grey[600],
+                            ),
+                          ),
+                        )
+                      else if (_hasSubtasks())
+                        SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              CircularProgressIndicator(
+                                value: progress,
+                                strokeWidth: 2.5,
+                                backgroundColor: Colors.grey.shade300,
+                                color: statusColor,
+                              ),
+                              Text("$percent%", style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                  // Focus action if needed
+                  if (showFocusAction && !widget.showFocusInMainRow)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: OutlinedButton.icon(
+                        onPressed: isFocused ? widget.onPause : widget.onFocus,
+                        icon: Icon(isFocused ? Icons.pause : Icons.adjust, size: 14),
+                        label: Text(isFocused ? 'Pause' : 'Focus', style: const TextStyle(fontSize: 11)),
                       ),
                     ),
-                  ],
-                ),
+                ],
               ),
             ),
           ),

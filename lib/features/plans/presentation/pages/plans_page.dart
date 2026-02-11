@@ -91,29 +91,68 @@ class _PlansPageState extends State<PlansPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'plans_page_fab',
-        onPressed: () async {
-          final createdPlan = await Navigator.push<Plan?>(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const CreatePlanPage(),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF1565C0), // Dark Blue
+              Color(0xFF42A5F5), // Light Blue
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF1565C0).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
-          );
-
-          if (createdPlan != null && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  'Plan "${createdPlan.planTitle}" has been made successfully!',
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () async {
+              final createdPlan = await Navigator.push<Plan?>(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CreatePlanPage(),
                 ),
-                duration: const Duration(seconds: 2),
+              );
+
+              if (createdPlan != null && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Plan "${createdPlan.planTitle}" has been made successfully!',
+                    ),
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              }
+            },
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: const [
+                  Icon(Icons.add_circle_outline, color: Colors.white, size: 24),
+                  SizedBox(width: 8),
+                  Text(
+                    'New Plan',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
-            );
-          }
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('New Plan'),
+            ),
+          ),
+        ),
       ),
       body: Padding(
         padding: const EdgeInsets.all(8),
