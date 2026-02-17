@@ -16,6 +16,7 @@ class AuthenticationProvider extends ChangeNotifier {
   User? _user;
   bool _isLoading = false;
   String? _error;
+  bool _authStateInitialized = false;
 
   // Callback to notify when user data needs to be loaded
   Function(String userId)? onUserAuthenticated;
@@ -24,6 +25,7 @@ class AuthenticationProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _user != null && _user!.emailVerified;
+  bool get authStateInitialized => _authStateInitialized;
 
   AuthenticationProvider() {
     _initAuth();
@@ -32,8 +34,28 @@ class AuthenticationProvider extends ChangeNotifier {
   void _initAuth() {
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       _user = user;
+      _authStateInitialized = true;
       notifyListeners();
     });
+  }
+
+  /// Wait for Firebase Auth to restore the session from persistent storage.
+  /// Returns true if a user is authenticated, false otherwise.
+  Future<bool> waitForAuthState() async {
+    if (_authStateInitialized) {
+      return isAuthenticated;
+    }
+    
+    // Wait for the first auth state change event
+    return await FirebaseAuth.instance.authStateChanges().first.then((user) {
+      return user != null && user.emailVerified;
+    }).timeout(
+      const Duration(seconds: 5),
+      onTimeout: () {
+        _authStateInitialized = true;
+        return false;
+      },
+    );
   }
 
   Future<void> signInWithEmail({

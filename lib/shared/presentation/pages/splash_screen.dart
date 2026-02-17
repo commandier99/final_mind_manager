@@ -83,8 +83,12 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       listen: false,
     );
 
-    // Check if user is authenticated and email is verified
-    if (authProvider.isAuthenticated) {
+    // Wait for Firebase to restore the session from persistent storage
+    final isAuthenticated = await authProvider.waitForAuthState();
+
+    if (!mounted) return;
+
+    if (isAuthenticated) {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
       
       // Get current Firebase user and load their data
