@@ -28,6 +28,10 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   VoidCallback? _boardsSearchToggle;
   VoidCallback? _plansSearchToggle;
+  VoidCallback? _boardsFilterPressed;
+  VoidCallback? _boardsSortPressed;
+  VoidCallback? _plansFilterPressed;
+  VoidCallback? _plansSortPressed;
   
   // Search state
   bool _boardsSearchExpanded = false;
@@ -53,6 +57,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               _boardsSearchClear = onClear;
             });
           },
+          onFilterPressedReady: (handler) => _boardsFilterPressed = handler,
+          onSortPressedReady: (handler) => _boardsSortPressed = handler,
         ),
         PlansPage(
           key: const ValueKey('plans_page'),
@@ -65,6 +71,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
               _plansSearchClear = onClear;
             });
           },
+          onFilterPressedReady: (handler) => _plansFilterPressed = handler,
+          onSortPressedReady: (handler) => _plansSortPressed = handler,
         ),
         const DashboardPage(),
         const ProfilePage(),
@@ -137,6 +145,30 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     List<Widget>? customActions;
     if (isNotificationsPage) {
       // No custom actions for notifications page
+    } else if (selectedIndex == 1 || selectedIndex == 2) {
+      final isBoardsPage = selectedIndex == 1;
+      final onFilterPressed =
+          isBoardsPage ? _boardsFilterPressed : _plansFilterPressed;
+      final onSortPressed =
+          isBoardsPage ? _boardsSortPressed : _plansSortPressed;
+
+      customActions = [
+        IconButton(
+          icon: const Icon(Icons.filter_list),
+          onPressed: onFilterPressed,
+          tooltip: 'Filter',
+        ),
+        IconButton(
+          icon: const Icon(Icons.sort),
+          onPressed: onSortPressed,
+          tooltip: 'Sort',
+        ),
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: _handleSearchPressed,
+          tooltip: 'Search',
+        ),
+      ];
     }
     
     // Determine search state based on current page

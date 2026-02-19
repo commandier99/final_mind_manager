@@ -13,11 +13,13 @@ class MindSetSelectionView extends StatefulWidget {
   const MindSetSelectionView({super.key});
 
   @override
-  State<MindSetSelectionView> createState() => _MindSetSelectionViewState();
+  State<MindSetSelectionView> createState() =>
+      _MindSetSelectionViewState();
 }
 
 class _MindSetSelectionViewState extends State<MindSetSelectionView> {
-  final MindSetSessionService _sessionService = MindSetSessionService();
+  final MindSetSessionService _sessionService =
+      MindSetSessionService();
   final PlanService _planService = PlanService();
   final TaskService _taskService = TaskService();
 
@@ -37,122 +39,107 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
         const SizedBox(height: 16),
         const Divider(thickness: 1),
         const Spacer(),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => _openCreateSession('on_the_spot'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Column(
-                children: const [
-                  Text(
-                    'On the Spot',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Create and complete tasks immediately.',
-                    style: TextStyle(
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
+
+        /// ON THE SPOT
+        _buildOptionCard(
+          icon: Icons.flash_on_rounded,
+          iconColor: Colors.blue,
+          title: 'On the Spot',
+          subtitle: 'Create and complete tasks immediately.',
+          onTap: () => _openCreateSession('on_the_spot'),
         ),
+
         const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => _handleGoWithFlowSelection(),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Column(
-                children: const [
-                  Text(
-                    'Go with the Flow',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Work on existing unplanned tasks.',
-                    style: TextStyle(
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
+
+        /// GO WITH THE FLOW
+        _buildOptionCard(
+          icon: Icons.auto_awesome_rounded,
+          iconColor: Colors.deepPurple,
+          title: 'Go with the Flow',
+          subtitle: 'Work on existing unplanned tasks.',
+          onTap: () => _openCreateSession('go_with_flow'),
         ),
+
+
         const SizedBox(height: 16),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => _openCreateSession('follow_through'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.all(24),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Column(
-                children: const [
-                  Text(
-                    'Follow Through',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Work on tasks from a selected plan.',
-                    style: TextStyle(
-                      fontSize: 14,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
-              ),
-            ),
-          ),
+
+        /// FOLLOW THROUGH
+        _buildOptionCard(
+          icon: Icons.track_changes_rounded,
+          iconColor: Colors.green,
+          title: 'Follow Through',
+          subtitle: 'Work on tasks from a selected plan.',
+          onTap: () => _openCreateSession('follow_through'),
         ),
+
         const Spacer(),
       ],
+    );
+  }
+
+  Widget _buildOptionCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
+            border: Border.all(
+              color: Colors.grey.shade200,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, size: 32, color: iconColor),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   Future<void> _openCreateSession(String sessionType) async {
     if (await _hasActiveSession()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End your current session first.')),
+        const SnackBar(
+          content: Text('End your current session first.'),
+        ),
       );
       return;
     }
@@ -161,15 +148,20 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
       context: context,
       isScrollControlled: true,
       showDragHandle: false,
-      builder: (context) => MindSetCreateForm(sessionType: sessionType),
+      builder: (context) =>
+          MindSetCreateForm(sessionType: sessionType),
     );
 
     if (created == true) {
       if (!mounted) return;
-      final userId = context.read<UserProvider>().userId;
+      final userId =
+          context.read<UserProvider>().userId;
       if (userId != null) {
-        final session = await _sessionService.streamActiveSession(userId).first;
-        if (session != null && session.sessionStatus == 'created') {
+        final session = await _sessionService
+            .streamActiveSession(userId)
+            .first;
+        if (session != null &&
+            session.sessionStatus == 'created') {
           await _startSession(session);
         }
       }
@@ -179,36 +171,52 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
   Future<void> _handleGoWithFlowSelection() async {
     if (await _hasActiveSession()) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End your current session first.')),
+        const SnackBar(
+          content: Text('End your current session first.'),
+        ),
       );
       return;
     }
 
-    final userId = context.read<UserProvider>().userId;
+    final userId =
+        context.read<UserProvider>().userId;
+
     if (userId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not found. Please sign in again.')),
+        const SnackBar(
+          content:
+              Text('User not found. Please sign in again.'),
+        ),
       );
       return;
     }
 
-    final hasUnplanned = await _hasUnplannedTasks(userId);
+    final hasUnplanned =
+        await _hasUnplannedTasks(userId);
+
     if (!hasUnplanned) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No unplanned tasks to work on.')),
+        const SnackBar(
+          content:
+              Text('No unplanned tasks to work on.'),
+        ),
       );
       return;
     }
 
     final sessionId = const Uuid().v4();
+
     final session = MindSetSession(
       sessionId: sessionId,
       sessionUserId: userId,
       sessionType: 'go_with_flow',
       sessionMode: 'Checklist',
       sessionModeHistory: [
-        MindSetModeChange(mode: 'Checklist', changedAt: DateTime.now()),
+        MindSetModeChange(
+          mode: 'Checklist',
+          changedAt: DateTime.now(),
+        ),
       ],
       sessionTitle: 'Flow Session',
       sessionPurpose: 'Do What I Can',
@@ -223,6 +231,7 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
         sessionFocusDurationSeconds: 0,
         pomodoroCount: 0,
         pomodoroTargetCount: 4,
+        pomodoroFocusMinutes: 25,
         pomodoroBreakMinutes: 5,
         pomodoroLongBreakMinutes: 60,
         pomodoroIsRunning: false,
@@ -236,29 +245,43 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
   }
 
   Future<bool> _hasActiveSession() async {
-    final userId = context.read<UserProvider>().userId;
+    final userId =
+        context.read<UserProvider>().userId;
     if (userId == null) return false;
-    final active = await _sessionService.streamActiveSession(userId).first;
+    final active = await _sessionService
+        .streamActiveSession(userId)
+        .first;
     return active != null;
   }
 
-  Future<bool> _hasUnplannedTasks(String userId) async {
-    final tasks = await _taskService.streamTasks(ownerId: userId).first;
+  Future<bool> _hasUnplannedTasks(
+      String userId) async {
+    final tasks = await _taskService
+        .streamTasks(ownerId: userId)
+        .first;
+
     final activeTasks = tasks
-        .where((task) => !task.taskIsDone && !task.taskIsDeleted)
+        .where((task) =>
+            !task.taskIsDone && !task.taskIsDeleted)
         .toList();
+
     if (activeTasks.isEmpty) return false;
 
-    final plans = await _planService.getUserPlans(userId);
+    final plans =
+        await _planService.getUserPlans(userId);
+
     final plannedTaskIds = <String>{};
+
     for (final plan in plans) {
       plannedTaskIds.addAll(plan.taskIds);
     }
 
-    return activeTasks.any((task) => !plannedTaskIds.contains(task.taskId));
+    return activeTasks.any(
+        (task) => !plannedTaskIds.contains(task.taskId));
   }
 
-  Future<void> _startSession(MindSetSession session) async {
+  Future<void> _startSession(
+      MindSetSession session) async {
     await _sessionService.startSession(session);
   }
 }

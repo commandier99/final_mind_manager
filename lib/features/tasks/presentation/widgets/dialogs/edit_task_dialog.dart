@@ -4,6 +4,7 @@ import '../../../datasources/models/task_model.dart';
 import '../../../datasources/providers/task_provider.dart';
 import '../../../../boards/datasources/services/board_services.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
+import '../../../../notifications/datasources/helpers/notification_helper.dart';
 
 class EditTaskDialog extends StatefulWidget {
   final Task task;
@@ -74,8 +75,14 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     } else {
       _repeatTime = null;
     }
-    _assignedToUserId = widget.task.taskAssignedTo;
-    _assignedToUserName = widget.task.taskAssignedToName;
+    // Handle "None" or empty assignedTo values
+    if (widget.task.taskAssignedTo.isEmpty || widget.task.taskAssignedTo == 'None') {
+      _assignedToUserId = null;
+      _assignedToUserName = null;
+    } else {
+      _assignedToUserId = widget.task.taskAssignedTo;
+      _assignedToUserName = widget.task.taskAssignedToName;
+    }
     _loadBoardMembers();
   }
 
@@ -180,18 +187,49 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
             _repeatTime != null
                 ? '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}'
                 : null,
-        taskAssignedTo: _assignedToUserId,
-        taskAssignedToName: _assignedToUserName,
+        // Convert null to "None" for unassigned tasks
+        taskAssignedTo: _assignedToUserId ?? 'None',
+        taskAssignedToName: _assignedToUserName ?? 'Unassigned',
         // Reset acceptance status to 'pending' if task is reassigned to a different person
         taskAcceptanceStatus:
             assigneeChanged
-                ? (_assignedToUserId != widget.task.taskOwnerId
+                ? (_assignedToUserId != null && _assignedToUserId != widget.task.taskOwnerId
                     ? 'pending'
                     : null)
                 : widget.task.taskAcceptanceStatus,
       );
 
       await taskProvider.updateTask(updatedTask);
+
+      // Send notification if task was reassigned to a different user
+      if (assigneeChanged && 
+          _assignedToUserId != null && 
+          _assignedToUserId != 'None' && 
+          _assignedToUserId != widget.task.taskOwnerId) {
+        try {
+          final deadlineInfo = updatedTask.taskDeadline != null 
+              ? ' with a deadline on ${updatedTask.taskDeadline!.toString().split(' ')[0]}' 
+              : '';
+          
+          await NotificationHelper.createInAppOnly(
+            userId: _assignedToUserId!,
+            title: 'Task Assigned',
+            message: 'You have been assigned to "${updatedTask.taskTitle}"$deadlineInfo',
+            category: 'task_assignment',
+            relatedId: updatedTask.taskId,
+            metadata: {
+              'boardId': updatedTask.taskBoardId,
+              'taskId': updatedTask.taskId,
+              'taskTitle': updatedTask.taskTitle,
+              'deadline': updatedTask.taskDeadline?.toIso8601String() ?? '',
+              'assignedBy': updatedTask.taskAssignedBy,
+            },
+          );
+          print('[TaskNotification] ✅ Task reassignment notification sent to: $_assignedToUserId');
+        } catch (e) {
+          print('[TaskNotification] ⚠️ Failed to send reassignment notification: $e');
+        }
+      }
 
       if (mounted) {
         Navigator.pop(context);

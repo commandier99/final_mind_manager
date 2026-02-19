@@ -51,10 +51,6 @@ class Task {
   final String?
   taskAcceptanceStatus; // 'pending', 'accepted', 'declined', null for self-assigned
 
-  // Helper assignees when user requests help
-  final List<String> taskHelpers; // List of user IDs who volunteered to help
-  final Map<String, String> taskHelperNames; // Map of userId -> userName
-
   Task({
     required this.taskId,
     required this.taskBoardId,
@@ -87,8 +83,6 @@ class Task {
     this.taskNextRepeatDate,
     this.taskRepeatTime,
     this.taskAcceptanceStatus,
-    this.taskHelpers = const [],
-    this.taskHelperNames = const {},
   });
 
   // Helper to map legacy Firestore statuses to core statuses
@@ -172,13 +166,6 @@ class Task {
           (data['taskNextRepeatDate'] as Timestamp?)?.toDate(),
       taskRepeatTime: data['taskRepeatTime'] as String?,
       taskAcceptanceStatus: data['taskAcceptanceStatus'] as String?,
-      taskHelpers:
-          (data['taskHelpers'] as List<dynamic>?)?.cast<String>() ?? [],
-      taskHelperNames:
-          (data['taskHelperNames'] as Map<String, dynamic>?)?.map(
-            (key, value) => MapEntry(key, value.toString()),
-          ) ??
-          {},
     );
   }
 
@@ -222,8 +209,6 @@ class Task {
       if (taskRepeatTime != null) 'taskRepeatTime': taskRepeatTime,
       if (taskAcceptanceStatus != null)
         'taskAcceptanceStatus': taskAcceptanceStatus,
-      'taskHelpers': taskHelpers,
-      'taskHelperNames': taskHelperNames,
     };
   }
 
@@ -259,8 +244,6 @@ class Task {
     DateTime? taskNextRepeatDate,
     String? taskRepeatTime,
     String? taskAcceptanceStatus,
-    List<String>? taskHelpers,
-    Map<String, String>? taskHelperNames,
   }) {
     return Task(
       taskId: taskId ?? this.taskId,
@@ -294,8 +277,6 @@ class Task {
           taskNextRepeatDate ?? this.taskNextRepeatDate,
       taskRepeatTime: taskRepeatTime ?? this.taskRepeatTime,
       taskAcceptanceStatus: taskAcceptanceStatus ?? this.taskAcceptanceStatus,
-      taskHelpers: taskHelpers ?? this.taskHelpers,
-      taskHelperNames: taskHelperNames ?? this.taskHelperNames,
     );
   }
 

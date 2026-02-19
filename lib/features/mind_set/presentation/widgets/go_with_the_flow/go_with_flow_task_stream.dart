@@ -21,25 +21,25 @@ class GoWithFlowTaskStream extends StatefulWidget {
   });
 
   @override
-  State<GoWithFlowTaskStream> createState() => _GoWithFlowTaskStreamState();
+  State<GoWithFlowTaskStream> createState() =>
+      _GoWithFlowTaskStreamState();
 }
 
-class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
-  final MindSetSessionService _sessionService = MindSetSessionService();
-  bool _isUpdatingFrog = false;
-  
+class _GoWithFlowTaskStreamState
+    extends State<GoWithFlowTaskStream> {
+  final MindSetSessionService _sessionService =
+      MindSetSessionService();
+
+  Task? _currentFlowTask;
+  final Set<String> _rejectedTaskIds = {};
+  late String _currentFlowStyle;
+
   @override
   void initState() {
     super.initState();
+    _currentFlowStyle =
+        widget.session?.sessionFlowStyle ?? 'list';
     _streamTasks();
-  }
-
-  @override
-  void didUpdateWidget(covariant GoWithFlowTaskStream oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.userId != widget.userId) {
-      _streamTasks();
-    }
   }
 
   void _streamTasks() {
@@ -47,387 +47,349 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     taskProvider.streamUserActiveTasks(widget.userId);
   }
 
-  String _normalizeStatus(String status) {
-    return status.toUpperCase().replaceAll(' ', '_');
-  }
+  String _normalizeStatus(String status) =>
+      status.toUpperCase().replaceAll(' ', '_');
 
-  bool _isInProgressStatus(String status) {
-    return _normalizeStatus(status) == 'IN_PROGRESS';
-  }
+  bool _isInProgressStatus(String status) =>
+      _normalizeStatus(status) == 'IN_PROGRESS';
 
-  bool _isPomodoroMode() {
-    return widget.mode == 'Pomodoro' && widget.session != null;
-  }
+  void _pickRandomFlowTask(List<Task> tasks) {
+    final available = tasks
+        .where((t) =>
+            !_rejectedTaskIds.contains(t.taskId) &&
+            !t.taskIsDone &&
+            !_isInProgressStatus(t.taskStatus))
+        .toList();
 
-  bool _isEatTheFrogMode() {
-    return widget.mode == 'Eat the Frog' && widget.session != null;
-  }
-
-  Task? _findTaskById(List<Task> tasks, String taskId) {
-    for (final task in tasks) {
-      if (task.taskId == taskId) return task;
-    }
-    return null;
-  }
-
-  Future<void> _setFrogTask(Task task) async {
-    if (!_isEatTheFrogMode()) return;
-    final session = widget.session!;
-    if (session.sessionActiveTaskId == task.taskId) return;
-    await _sessionService.updateSession(
-      session.copyWith(sessionActiveTaskId: task.taskId),
-    );
-  }
-
-  Future<void> _clearFrogTask() async {
-    if (!_isEatTheFrogMode()) return;
-    final session = widget.session!;
-    if (session.sessionActiveTaskId == null) return;
-    await _sessionService.updateSession(
-      session.copyWith(sessionActiveTaskId: null),
-    );
-  }
-
-  void _scheduleClearFrogTask() {
-    if (_isUpdatingFrog) return;
-    _isUpdatingFrog = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        await _clearFrogTask();
-      } finally {
-        if (mounted) {
-          _isUpdatingFrog = false;
-        }
-      }
-    });
-  }
-
-  int _calculateRemainingSeconds(MindSetSession session) {
-    final stats = session.sessionStats;
-    final focusMinutes = stats.pomodoroFocusMinutes;
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-    if (focusMinutes == null || focusMinutes <= 0) return 0;
-    final isOnBreak = stats.pomodoroIsOnBreak ?? false;
-    final isLongBreak = stats.pomodoroIsLongBreak ?? false;
-    final baseRemaining = stats.pomodoroRemainingSeconds ??
-        ((isOnBreak
-                    ? (isLongBreak ? longBreakMinutes : breakMinutes)
-                    : focusMinutes) *
-                60);
-    if (stats.pomodoroIsRunning != true) return baseRemaining;
-    final lastUpdated = stats.pomodoroLastUpdatedAt;
-    if (lastUpdated == null) return baseRemaining;
-    final elapsed = DateTime.now().difference(lastUpdated).inSeconds;
-    final remaining = baseRemaining - elapsed;
-    return remaining < 0 ? 0 : remaining;
-  }
-
-  Future<void> _pausePomodoro() async {
-    if (!_isPomodoroMode()) return;
-    final session = widget.session!;
-    final stats = session.sessionStats;
-    final remaining = _calculateRemainingSeconds(session);
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: false,
-          pomodoroRemainingSeconds: remaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _resumePomodoro() async {
-    if (!_isPomodoroMode()) return;
-    final session = widget.session!;
-    final stats = session.sessionStats;
-    if (stats.pomodoroFocusMinutes == null ||
-        (stats.pomodoroFocusMinutes ?? 0) <= 0) {
+    if (available.isEmpty) {
+      _currentFlowTask = null;
       return;
     }
-    final remaining = _calculateRemainingSeconds(session);
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: true,
-          pomodoroRemainingSeconds: remaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+
+    available.shuffle();
+    _currentFlowTask = available.first;
   }
 
   Future<void> _focusTask(Task task) async {
     if (task.taskIsDone) return;
-    if (_isInProgressStatus(task.taskStatus)) return;
 
     final taskProvider = context.read<TaskProvider>();
-    Task? focusedTask;
-    for (final candidate in taskProvider.tasks) {
-      if (candidate.taskId == task.taskId) continue;
-      if (candidate.taskIsDone) continue;
-      if (_isInProgressStatus(candidate.taskStatus)) {
-        focusedTask = candidate;
-        break;
+
+    // Pause any currently focused task
+    for (final t in taskProvider.tasks) {
+      if (_isInProgressStatus(t.taskStatus)) {
+        await taskProvider.updateTask(
+          t.copyWith(taskStatus: 'Paused'),
+        );
       }
-    }
-
-    if (focusedTask != null) {
-      final activeTask = focusedTask;
-      final shouldPause = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Pause current task?'),
-          content: Text(
-            'You can focus on only one task at a time. Pause "${activeTask.taskTitle}" first.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Pause Task'),
-            ),
-          ],
-        ),
-      );
-
-      if (shouldPause != true) return;
-      await taskProvider.updateTask(
-        activeTask.copyWith(taskStatus: 'Paused'),
-      );
-      await _pausePomodoro();
     }
 
     await taskProvider.updateTask(
       task.copyWith(taskStatus: 'In Progress'),
     );
-    await _resumePomodoro();
   }
 
   Future<void> _pauseTask(Task task) async {
-    if (!_isInProgressStatus(task.taskStatus)) return;
     final taskProvider = context.read<TaskProvider>();
     await taskProvider.updateTask(
       task.copyWith(taskStatus: 'Paused'),
     );
-    await _pausePomodoro();
-  }
-
-  Future<void> _toggleDoneForTask(Task task, bool? isDone) async {
-    final taskProvider = context.read<TaskProvider>();
-    await taskProvider.toggleTaskDone(
-      task.copyWith(
-        taskIsDone: isDone ?? false,
-        taskStatus: (isDone ?? false) ? 'COMPLETED' : 'To Do',
-      ),
-    );
-
-    if (_isEatTheFrogMode() && (isDone ?? false)) {
-      final frogId = widget.session?.sessionActiveTaskId;
-      if (frogId == task.taskId) {
-        await _clearFrogTask();
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        /// HEADER
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Column(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
             children: [
-              // Tasks Header with Divider
-              Row(
-                children: [
-                  const Text(
-                    'Tasks',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Container(
-                      height: 1,
-                      color: Colors.grey[300],
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  PopupMenuButton<String>(
-                    tooltip: 'Filter',
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey[300]!),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(Icons.filter_list, size: 16, color: Colors.grey[700]),
-                    ),
-                    onSelected: (value) {
-                      // TODO: Implement filter
-                    },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'status',
-                        child: Text('Status'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                ],
+              const Text(
+                'Tasks',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: Colors.grey[300],
+                ),
+              ),
+              const SizedBox(width: 4),
+
+              /// FILTER BUTTON (placeholder)
+              Icon(Icons.filter_list,
+                  size: 18, color: Colors.grey[700]),
+
+              const SizedBox(width: 12),
+
+              /// FLOW STYLE TOGGLE
+              InkWell(
+                onTap: () async {
+                  final newStyle =
+                      _currentFlowStyle == 'shuffle'
+                          ? 'list'
+                          : 'shuffle';
+
+                  setState(() {
+                    _currentFlowStyle = newStyle;
+                    _currentFlowTask = null;
+                    _rejectedTaskIds.clear();
+                  });
+
+                  if (widget.session != null) {
+                    await _sessionService.updateSession(
+                      widget.session!
+                          .copyWith(sessionFlowStyle: newStyle),
+                    );
+                  }
+                },
+                child: Icon(
+                  _currentFlowStyle == 'shuffle'
+                      ? Icons.shuffle
+                      : Icons.view_list,
+                  size: 18,
+                  color: Colors.grey[700],
+                ),
+              ),
             ],
           ),
         ),
+
+        const SizedBox(height: 8),
+
+        /// TASK AREA
         Expanded(
           child: Consumer<PlanProvider>(
             builder: (context, planProvider, _) {
               return StreamBuilder<List<Plan>>(
-                stream: planProvider.streamUserPlans(widget.userId),
+                stream: planProvider
+                    .streamUserPlans(widget.userId),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-
-                  if (snapshot.hasError) {
-                    return Text('Error loading plans: ${snapshot.error}');
-                  }
-
                   final plans = snapshot.data ?? [];
                   final plannedTaskIds = <String>{};
+
                   for (final plan in plans) {
                     plannedTaskIds.addAll(plan.taskIds);
                   }
 
                   return Consumer<TaskProvider>(
                     builder: (context, taskProvider, _) {
-                      if (taskProvider.isLoading &&
-                          taskProvider.tasks.isEmpty) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
+                      final unplannedTasks =
+                          taskProvider.tasks
+                              .where((task) =>
+                                  !plannedTaskIds
+                                      .contains(task.taskId))
+                              .toList();
 
-                      final unplannedTasks = taskProvider.tasks
-                          .where((task) => !plannedTaskIds.contains(task.taskId))
-                          .toList();
+                      final visibleTasks =
+                          unplannedTasks;
 
-                      final isEatTheFrog = _isEatTheFrogMode();
-                      final frogId = widget.session?.sessionActiveTaskId;
-                      Task? frogTask;
-                      if (isEatTheFrog && frogId != null) {
-                        frogTask = _findTaskById(unplannedTasks, frogId);
-                        if (frogTask == null || frogTask.taskIsDone) {
-                          _scheduleClearFrogTask();
+                      /// APPLY FILTERS HERE LATER
+                      final filteredTasks =
+                          visibleTasks;
+
+                      /// ===== SHUFFLE MODE =====
+                      if (_currentFlowStyle ==
+                          'shuffle') {
+                        Task? focusedTask;
+
+                        for (final t
+                            in filteredTasks) {
+                          if (_isInProgressStatus(
+                              t.taskStatus)) {
+                            focusedTask = t;
+                            break;
+                          }
                         }
+
+                        /// If already focused → show only that
+                        if (focusedTask != null) {
+                          return Column(
+                            children: [
+                              const Padding(
+                                padding:
+                                    EdgeInsets.only(
+                                        top: 8,
+                                        bottom: 4),
+                                child: Text(
+                                  '🔥 Currently Working On',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color:
+                                          Colors.grey),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView(
+                                  children: [
+                                    TaskCard(
+                                      task:
+                                          focusedTask,
+                                      showFocusAction:
+                                          true,
+                                      showFocusInMainRow:
+                                          true,
+                                      showCheckboxWhenFocusedOnly:
+                                          true,
+                                      useStatusColor:
+                                          true,
+                                      isPomodoroMode:
+                                          false,
+                                      onPause: () =>
+                                          _pauseTask(
+                                              focusedTask!),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+
+                        /// Otherwise → show Yes/No
+                        if (_currentFlowTask ==
+                                null ||
+                            !filteredTasks.any(
+                                (t) =>
+                                    t.taskId ==
+                                    _currentFlowTask!
+                                        .taskId)) {
+                          _pickRandomFlowTask(
+                              filteredTasks);
+                        }
+
+                        if (_currentFlowTask ==
+                            null) {
+                          return const Center(
+                            child: Text(
+                              'No more tasks available.',
+                              style: TextStyle(
+                                  color:
+                                      Colors.grey),
+                            ),
+                          );
+                        }
+
+                        final task =
+                            _currentFlowTask!;
+
+                        return Column(
+                          mainAxisAlignment:
+                              MainAxisAlignment
+                                  .center,
+                          children: [
+                            Padding(
+                              padding:
+                                  const EdgeInsets
+                                      .all(24),
+                              child: TaskCard(
+                                task: task,
+                                showFocusAction:
+                                    false,
+                                showFocusInMainRow:
+                                    false,
+                                showCheckboxWhenFocusedOnly:
+                                    true,
+                                useStatusColor:
+                                    true,
+                                isPomodoroMode:
+                                    false,
+                                onToggleDone:
+                                    null,
+                              ),
+                            ),
+                            Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment
+                                      .center,
+                              children: [
+                                OutlinedButton(
+                                  onPressed: () {
+                                    setState(() {
+                                      _rejectedTaskIds
+                                          .add(task
+                                              .taskId);
+                                      _pickRandomFlowTask(
+                                          filteredTasks);
+                                    });
+                                  },
+                                  child:
+                                      const Text(
+                                          'No'),
+                                ),
+                                const SizedBox(
+                                    width: 16),
+                                ElevatedButton(
+                                  onPressed:
+                                      () async {
+                                    await _focusTask(
+                                        task);
+                                    setState(() {
+                                      _rejectedTaskIds
+                                          .clear();
+                                      _currentFlowTask =
+                                          null;
+                                    });
+                                  },
+                                  child:
+                                      const Text(
+                                          'Yes'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
                       }
 
-                      final visibleTasks = isEatTheFrog
-                          ? (frogId == null
-                              ? unplannedTasks
-                              : (frogTask == null
-                                  ? <Task>[]
-                                  : <Task>[frogTask]))
-                          : unplannedTasks;
-
-                      if (visibleTasks.isEmpty) {
-                        final emptyMessage = isEatTheFrog && frogId != null
-                            ? 'Frog completed. Pick your next one.'
-                            : 'No unplanned tasks yet.';
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Text(
-                              emptyMessage,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.grey,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
+                      /// ===== LIST MODE =====
+                      if (filteredTasks
+                          .isEmpty) {
+                        return const Center(
+                          child: Text(
+                            'No tasks available.',
+                            style: TextStyle(
+                                color:
+                                    Colors.grey),
                           ),
                         );
                       }
 
-                      final isChecklist = widget.mode == 'Checklist';
-                      final isPomodoro = widget.mode == 'Pomodoro';
+                      return ListView.builder(
+                        itemCount:
+                            filteredTasks.length,
+                        itemBuilder:
+                            (context, index) {
+                          final task =
+                              filteredTasks[
+                                  index];
 
-                      return Column(
-                        children: [
-                          if (isEatTheFrog)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Text(
-                                frogId == null
-                                    ? 'Pick your Frog: choose the hardest task and focus on only that one.'
-                                    : 'Frog locked: finish it before moving to the next.',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ),
-                          Expanded(
-                            child: ListView.builder(
-                              itemCount: visibleTasks.length,
-                              itemBuilder: (context, index) {
-                                final task = visibleTasks[index];
-                                final canComplete = isChecklist &&
-                                    _isInProgressStatus(task.taskStatus);
-                                final canPickFrog = isEatTheFrog && frogId == null;
-                                final isFrogTask =
-                                    isEatTheFrog && frogId == task.taskId;
-
-                                return TaskCard(
-                                  task: task,
-                                  showFocusAction: (isChecklist || isPomodoro) ||
-                                      (isEatTheFrog &&
-                                          (canPickFrog || isFrogTask)),
-                                  showFocusInMainRow: (isChecklist || isPomodoro) ||
-                                      (isEatTheFrog &&
-                                          (canPickFrog || isFrogTask)),
-                                  showCheckboxWhenFocusedOnly: isChecklist,
-                                  useStatusColor: true,
-                                  onFocus: (isChecklist || isPomodoro)
-                                      ? () => _focusTask(task)
-                                      : (isEatTheFrog
-                                          ? () async {
-                                              if (canPickFrog) {
-                                                await _setFrogTask(task);
-                                              }
-                                              await _focusTask(task);
-                                            }
-                                          : null),
-                                  onPause: (isChecklist || isPomodoro)
-                                      ? () => _pauseTask(task)
-                                      : (isEatTheFrog && isFrogTask
-                                          ? () => _pauseTask(task)
-                                          : null),
-                                  onToggleDone: isEatTheFrog
-                                      ? (isFrogTask
-                                          ? (isDone) =>
-                                              _toggleDoneForTask(task, isDone)
-                                          : null)
-                                      : (isChecklist
-                                          ? (canComplete
-                                              ? (isDone) =>
-                                                  _toggleDoneForTask(task, isDone)
-                                              : null)
-                                          : (isDone) =>
-                                              _toggleDoneForTask(task, isDone)),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
+                          return TaskCard(
+                            task: task,
+                            showFocusAction:
+                                true,
+                            showFocusInMainRow:
+                                true,
+                            showCheckboxWhenFocusedOnly:
+                                true,
+                            useStatusColor:
+                                true,
+                            isPomodoroMode:
+                                false,
+                            onFocus: () =>
+                                _focusTask(
+                                    task),
+                            onPause: () =>
+                                _pauseTask(
+                                    task),
+                            onToggleDone:
+                                (isDone) {},
+                          );
+                        },
                       );
                     },
                   );

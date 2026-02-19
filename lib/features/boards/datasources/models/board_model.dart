@@ -22,6 +22,15 @@ class Board {
   final String? boardDescription;
   final int boardMemberLimit; // 0 = unlimited
 
+  // Board type: 'personal' or 'team'
+  // Personal boards auto-assign tasks to the owner (no dropdown)
+  // Team boards show assignment dropdown even with 1 member
+  final String boardType;
+
+  // Board purpose: 'project' or 'category'
+  // Project boards focus on a deliverable; Category boards are for sorting tasks
+  final String boardPurpose;
+
   // Role-based access control
   // memberRoles: userId -> role mapping
   // Roles: 'manager', 'member', 'inspector'
@@ -47,6 +56,8 @@ class Board {
     this.boardRequiresApproval = true,
     this.boardDescription,
     this.boardMemberLimit = 0,
+    this.boardType = 'team', // Default to team for backward compatibility
+    this.boardPurpose = 'project', // Default to project for backward compatibility
     this.memberRoles = const {},
     this.memberTaskLimits = const {},
     required this.boardLastModifiedAt,
@@ -76,6 +87,8 @@ class Board {
       boardRequiresApproval: data['boardRequiresApproval'] ?? true,
       boardDescription: data['boardDescription'] as String?,
       boardMemberLimit: data['boardMemberLimit'] ?? 0,
+      boardType: data['boardType'] ?? 'team', // Default to team for backward compatibility
+      boardPurpose: data['boardPurpose'] ?? 'project',
       memberRoles: Map<String, String>.from(data['memberRoles'] ?? {}),
       memberTaskLimits: Map<String, int>.from(data['memberTaskLimits'] ?? {}),
       boardLastModifiedAt: (data['boardLastModifiedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -101,6 +114,8 @@ class Board {
       'boardRequiresApproval': boardRequiresApproval,
       if (boardDescription != null) 'boardDescription': boardDescription,
       'boardMemberLimit': boardMemberLimit,
+      'boardType': boardType,
+      'boardPurpose': boardPurpose,
       'memberRoles': memberRoles,
       'memberTaskLimits': memberTaskLimits,
       'boardLastModifiedAt': Timestamp.fromDate(boardLastModifiedAt),
@@ -120,6 +135,8 @@ class Board {
     bool? boardRequiresApproval,
     String? boardDescription,
     int? boardMemberLimit,
+    String? boardType,
+    String? boardPurpose,
     Map<String, String>? memberRoles,
     Map<String, int>? memberTaskLimits,
     DateTime? boardLastModifiedAt,
@@ -141,6 +158,8 @@ class Board {
       boardRequiresApproval: boardRequiresApproval ?? this.boardRequiresApproval,
       boardDescription: boardDescription ?? this.boardDescription,
       boardMemberLimit: boardMemberLimit ?? this.boardMemberLimit,
+      boardType: boardType ?? this.boardType,
+      boardPurpose: boardPurpose ?? this.boardPurpose,
       memberRoles: memberRoles ?? this.memberRoles,
       memberTaskLimits: memberTaskLimits ?? this.memberTaskLimits,
       boardLastModifiedAt: boardLastModifiedAt ?? this.boardLastModifiedAt,

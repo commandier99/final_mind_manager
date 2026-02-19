@@ -3,12 +3,19 @@ import 'package:flutter/material.dart';
 import '../../datasources/models/mind_set_session_model.dart';
 import '../../datasources/services/mind_set_session_service.dart';
 
+typedef PomodoroCompleteCallback = Future<void> Function();
+typedef BreakCompleteCallback = Future<void> Function();
+
 class MindSetPomodoroSection extends StatefulWidget {
   final MindSetSession session;
+  final PomodoroCompleteCallback? onPomodoroComplete;
+  final BreakCompleteCallback? onBreakComplete;
 
   const MindSetPomodoroSection({
     super.key,
     required this.session,
+    this.onPomodoroComplete,
+    this.onBreakComplete,
   });
 
   @override
@@ -134,6 +141,11 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
     final completedCount = stats.pomodoroCount ?? 0;
 
     if (_isOnBreak) {
+      // Break ended - trigger callback for break-end confirmation
+      if (widget.onBreakComplete != null) {
+        await widget.onBreakComplete!();
+      }
+      
       final resetCount = _isLongBreak;
       _isOnBreak = false;
       _isLongBreak = false;
@@ -153,6 +165,11 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
         ),
       );
     } else {
+      // Focus session ended - trigger callback for timer-done check-in
+      if (widget.onPomodoroComplete != null) {
+        await widget.onPomodoroComplete!();
+      }
+      
       final nextCompleted = completedCount + 1;
       final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
       final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;

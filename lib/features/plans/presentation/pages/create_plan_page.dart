@@ -193,6 +193,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 controller: _titleController,
                 decoration: InputDecoration(
                   labelText: 'Plan Title',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                   hintText: 'e.g., Monday study session for Algebra II',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -204,6 +205,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 controller: _descriptionController,
                 decoration: InputDecoration(
                   labelText: 'Description',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                   hintText: 'What will you focus on?',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
@@ -216,6 +218,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                 controller: _benefitController,
                 decoration: InputDecoration(
                   labelText: 'Benefit',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                   hintText: 'Why is this important?',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),

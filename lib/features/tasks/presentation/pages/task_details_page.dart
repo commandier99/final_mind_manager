@@ -11,6 +11,8 @@ import '../widgets/sections/task_file_submissions_section.dart';
 import '../../../subtasks/datasources/providers/subtask_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../../shared/features/users/datasources/providers/activity_event_provider.dart';
+import '../widgets/dialogs/edit_task_dialog.dart';
+import '../../datasources/providers/task_provider.dart';
 
 class TaskDetailsPage extends StatefulWidget {
   final Task task;
@@ -102,8 +104,13 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                   PopupMenuItem(
                     child: const Text('Edit'),
                     onTap: () {
-                      // TODO: Navigate to edit task page
-                      print('[DEBUG] TaskDetailsPage: Edit tapped for taskId = ${widget.task.taskId}');
+                      // Show edit task dialog after menu closes
+                      Future.delayed(Duration.zero, () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => EditTaskDialog(task: widget.task),
+                        );
+                      });
                     },
                   ),
                   PopupMenuItem(

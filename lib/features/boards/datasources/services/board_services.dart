@@ -20,6 +20,8 @@ class BoardService {
     String? boardTitle,
     String? boardGoal,
     String? boardGoalDescription,
+    String? boardType,
+    String? boardPurpose,
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("User not signed in");
@@ -50,6 +52,8 @@ class BoardService {
       boardRequiresApproval: true,
       boardDescription: null,
       boardMemberLimit: 0,
+      boardType: boardType ?? 'team', // Default to team
+      boardPurpose: boardPurpose ?? 'project',
       memberRoles: {user.uid: 'manager'},
       memberTaskLimits: {},
       boardLastModifiedAt: now,

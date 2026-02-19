@@ -7,6 +7,7 @@ import '../../../datasources/models/task_model.dart';
 import '../../../datasources/providers/task_provider.dart';
 import '../../pages/task_details_page.dart';
 import '../../pages/task_applications_page.dart';
+import '../dialogs/edit_task_dialog.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 
 class TaskCard extends StatefulWidget {
@@ -21,6 +22,7 @@ class TaskCard extends StatefulWidget {
   final bool showFocusInMainRow;
   final bool showCheckboxWhenFocusedOnly;
   final bool useStatusColor;
+  final bool isPomodoroMode;
 
   const TaskCard({
     super.key,
@@ -35,6 +37,7 @@ class TaskCard extends StatefulWidget {
     this.showFocusInMainRow = false,
     this.showCheckboxWhenFocusedOnly = false,
     this.useStatusColor = true,
+    this.isPomodoroMode = false,
   });
 
   @override
@@ -42,15 +45,12 @@ class TaskCard extends StatefulWidget {
 }
 
 class _TaskCardState extends State<TaskCard> {
-  late bool _isInterested;
   late String _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-    // Track if current user has already expressed interest in helpers list
-    _isInterested = widget.task.taskHelpers.contains(_currentUserId);
   }
 
   bool _hasSubtasks() {
@@ -71,16 +71,6 @@ class _TaskCardState extends State<TaskCard> {
     final board = boardProvider.getBoardById(widget.task.taskBoardId);
     
     return board == null || (board.memberIds.length > 1);
-  }
-
-  Future<void> _toggleInterest(bool interested) async {
-    if (interested && !_isInterested) {
-      // Show appeal dialog when expressing interest
-      _showAppealDialog();
-    } else if (!interested && _isInterested) {
-      // Remove interest without dialog
-      await _removeInterest();
-    }
   }
 
   void _showAppealDialog() {
@@ -123,7 +113,7 @@ class _TaskCardState extends State<TaskCard> {
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              _submitInterest(appealController.text);
+              _submitAppeal(appealController.text);
               appealController.dispose();
             },
             icon: const Icon(Icons.thumb_up),
@@ -138,81 +128,56 @@ class _TaskCardState extends State<TaskCard> {
     );
   }
 
-  Future<void> _submitInterest(String appealText) async {
-    final taskProvider = context.read<TaskProvider>();
-    
-    try {
-      final updatedHelpers = [...widget.task.taskHelpers, _currentUserId];
-      
-      // Update task with new helper
-      final updatedTask = widget.task.copyWith(
-        taskHelpers: updatedHelpers,
+  Stream<bool> _isUserInterestedStream() {
+    return FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(widget.task.taskId)
+        .collection('appeals')
+        .where('userId', isEqualTo: _currentUserId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.isNotEmpty);
+  }
+
+  Future<void> _submitAppeal(String appealText) async {
+    await FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(widget.task.taskId)
+        .collection('appeals')
+        .add({
+      'userId': _currentUserId,
+      'appealText': appealText,
+      'createdAt': Timestamp.now(),
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Interest submitted!'),
+          backgroundColor: Colors.green,
+        ),
       );
-      await taskProvider.updateTask(updatedTask);
-      
-      // Save appeal to subcollection
-      final appealsRef = FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(widget.task.taskId)
-          .collection('appeals');
-      
-      await appealsRef.add({
-        'userId': _currentUserId,
-        'userName': widget.task.taskOwnerName,
-        'userProfilePicture': '',
-        'appealText': appealText,
-        'createdAt': Timestamp.now(),
-      });
-      
-      setState(() => _isInterested = true);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('✅ Interest submitted!'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error submitting interest: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit interest: $e')),
-        );
-      }
     }
   }
 
-  Future<void> _removeInterest() async {
-    final taskProvider = context.read<TaskProvider>();
-    
-    try {
-      final updatedHelpers = widget.task.taskHelpers
-          .where((id) => id != _currentUserId)
-          .toList();
-      final updatedTask = widget.task.copyWith(
-        taskHelpers: updatedHelpers,
+  Future<void> _removeAppeal() async {
+    final query = await FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(widget.task.taskId)
+        .collection('appeals')
+        .where('userId', isEqualTo: _currentUserId)
+        .get();
+
+    for (final doc in query.docs) {
+      await doc.reference.delete();
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Interest removed'),
+          duration: Duration(seconds: 1),
+        ),
       );
-      await taskProvider.updateTask(updatedTask);
-      setState(() => _isInterested = false);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Interest removed'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error removing interest: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to remove interest: $e')),
-        );
-      }
     }
   }
 
@@ -365,8 +330,7 @@ class _TaskCardState extends State<TaskCard> {
     final isCompleted = widget.task.taskIsDone ||
       _normalizeStatus(widget.task.taskStatus) == 'COMPLETED';
     final showFocusAction = widget.showFocusAction && !isCompleted;
-    final showFocusInMainRow = showFocusAction && widget.showFocusInMainRow;
-    final showFocusInHeader = showFocusAction && !widget.showFocusInMainRow;
+    
     final showCheckbox =
       !widget.showCheckboxWhenFocusedOnly || (isFocused && !isCompleted);
     final statusColor = widget.useStatusColor
@@ -376,10 +340,69 @@ class _TaskCardState extends State<TaskCard> {
     final cardBaseColor = Theme.of(context).cardColor;
     final borderColor = isFocused ? statusColor : Colors.grey.shade300;
 
+    // Check if user can edit (task owner or board manager)
+    bool canEditTask = widget.task.taskOwnerId == _currentUserId;
+    if (!canEditTask && widget.task.taskBoardId.isNotEmpty) {
+      final boardProvider = context.read<BoardProvider>();
+      final board = boardProvider.getBoardById(widget.task.taskBoardId);
+      if (board?.boardManagerId == _currentUserId) {
+        canEditTask = true;
+      }
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Slidable(
         key: ValueKey(widget.task.taskId),
+        startActionPane: canEditTask
+            ? ActionPane(
+                motion: const DrawerMotion(),
+                extentRatio: 0.25,
+                children: [
+                  Expanded(
+                    child: Container(
+                      alignment: Alignment.center,
+                      child: Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade400,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              Slidable.of(context)?.close();
+                              showDialog(
+                                context: context,
+                                builder: (context) => EditTaskDialog(task: widget.task),
+                              );
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            child: const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.edit, color: Colors.white, size: 20),
+                                SizedBox(height: 2),
+                                Text(
+                                  'Edit',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              )
+            : null,
         endActionPane: ActionPane(
           motion: const DrawerMotion(),
           extentRatio: 0.25,
@@ -573,8 +596,7 @@ class _TaskCardState extends State<TaskCard> {
                             const SizedBox(height: 3),
                             // Compact badges row
                             if (widget.task.taskRequiresApproval ||
-                                widget.task.taskAcceptanceStatus != null ||
-                                widget.task.taskHelpers.isNotEmpty)
+                                widget.task.taskAcceptanceStatus != null)
                               SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
                                 child: Row(
@@ -607,24 +629,6 @@ class _TaskCardState extends State<TaskCard> {
                                           ),
                                         ),
                                       ),
-                                    if (widget.task.taskHelpers.isNotEmpty)
-                                      Padding(
-                                        padding: const EdgeInsets.only(left: 4),
-                                        child: Tooltip(
-                                          message: '${widget.task.taskHelpers.length} helper${widget.task.taskHelpers.length > 1 ? 's' : ''}',
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: Colors.blue[100],
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              '+${widget.task.taskHelpers.length}',
-                                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue[700]),
-                                            ),
-                                          ),
-                                        ),
-                                      ),
                                   ],
                                 ),
                               ),
@@ -634,29 +638,55 @@ class _TaskCardState extends State<TaskCard> {
                       const SizedBox(width: 8),
                       // Right side indicators
                       if (showFocusAction && widget.showFocusInMainRow)
-                        IconButton(
-                          onPressed: isFocused ? widget.onPause : widget.onFocus,
-                          icon: Icon(isFocused ? Icons.pause : Icons.adjust, size: 28),
-                          padding: const EdgeInsets.all(6),
-                          constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                        // In Pomodoro: hide button when focused, show focus when not focused
+                        // In other modes: show pause when focused, show focus when not focused
+                        if (widget.isPomodoroMode && !isFocused)
+                          IconButton(
+                            onPressed: widget.onFocus,
+                            icon: const Icon(Icons.adjust, size: 28),
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          )
+                        else if (!widget.isPomodoroMode)
+                          IconButton(
+                            onPressed: isFocused ? widget.onPause : widget.onFocus,
+                            icon: Icon(isFocused ? Icons.pause : Icons.adjust, size: 28),
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                          )
+                      else if (!showFocusAction && _isTaskUnassigned() && _shouldAllowUnassigned())
+                        StreamBuilder<bool>(
+                          stream: _isUserInterestedStream(),
+                          builder: (context, snapshot) {
+                            final isInterested = snapshot.data ?? false;
+
+                            return GestureDetector(
+                              onTap: () {
+                                if (isInterested) {
+                                  _removeAppeal();
+                                } else {
+                                  _showAppealDialog();
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: isInterested ? Colors.green[100] : Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(
+                                    color: isInterested ? Colors.green : Colors.grey[300]!,
+                                  ),
+                                ),
+                                child: Icon(
+                                  isInterested ? Icons.thumb_up : Icons.thumb_up_outlined,
+                                  size: 16,
+                                  color: isInterested ? Colors.green : Colors.grey[600],
+                                ),
+                              ),
+                            );
+                          },
                         )
-                      else if (_isTaskUnassigned() && _shouldAllowUnassigned())
-                        GestureDetector(
-                          onTap: () => _toggleInterest(!_isInterested),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: _isInterested ? Colors.green[100] : Colors.grey[100],
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: _isInterested ? Colors.green : Colors.grey[300]!),
-                            ),
-                            child: Icon(
-                              _isInterested ? Icons.thumb_up : Icons.thumb_up_outlined,
-                              size: 16,
-                              color: _isInterested ? Colors.green : Colors.grey[600],
-                            ),
-                          ),
-                        )
+
                       else if (_hasSubtasks())
                         SizedBox(
                           width: 40,
@@ -693,44 +723,5 @@ class _TaskCardState extends State<TaskCard> {
         ),
       ),
     );
-  }
-
-  String _formatDate(DateTime date) {
-    return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
-  }
-
-  String _formatRepeatDays(String? repeatInterval) {
-    if (repeatInterval == null || repeatInterval.isEmpty) {
-      return '';
-    }
-
-    final days = repeatInterval.split(',');
-    const allDays = [
-      'Monday',
-      'Tuesday',
-      'Wednesday',
-      'Thursday',
-      'Friday',
-      'Saturday',
-      'Sunday'
-    ];
-    const dayAbbreviations = {
-      'Monday': 'Mo',
-      'Tuesday': 'Tu',
-      'Wednesday': 'We',
-      'Thursday': 'Th',
-      'Friday': 'Fr',
-      'Saturday': 'Sa',
-      'Sunday': 'Su',
-    };
-
-    // Check if all days are selected
-    if (days.length == 7 &&
-        days.every((day) => allDays.contains(day.trim()))) {
-      return 'Daily';
-    }
-
-    // Abbreviate selected days
-    return days.map((day) => dayAbbreviations[day.trim()] ?? '').join(', ');
   }
 }

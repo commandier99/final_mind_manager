@@ -26,11 +26,39 @@ class _MindSetDetailsSettingsFormState
   late bool _showTimer;
   late String _taskCountMode;
 
+  String _normalizeTaskCountMode(String mode) {
+    switch (mode) {
+      case 'tasks completed':
+      case 'tasks remaining':
+      case 'hide':
+        return mode;
+      case 'remaining':
+        return 'tasks remaining';
+      default:
+        return 'tasks completed';
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     _showTimer = widget.showTimer;
-    _taskCountMode = widget.taskCountMode;
+    _taskCountMode = _normalizeTaskCountMode(widget.taskCountMode);
+  }
+
+  @override
+  void didUpdateWidget(MindSetDetailsSettingsForm oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.taskCountMode != widget.taskCountMode) {
+      setState(() {
+        _taskCountMode = _normalizeTaskCountMode(widget.taskCountMode);
+      });
+    }
+    if (oldWidget.showTimer != widget.showTimer) {
+      setState(() {
+        _showTimer = widget.showTimer;
+      });
+    }
   }
 
   @override
@@ -115,7 +143,7 @@ class _MindSetDetailsSettingsFormState
                       ),
                       RadioListTile<String>(
                         title: const Text('Tasks Remaining (counts down)'),
-                        value: 'remaining',
+                        value: 'tasks remaining',
                         groupValue: _taskCountMode,
                         onChanged: (value) {
                           if (value != null) {

@@ -47,8 +47,7 @@ class TasksDueTodayWidget extends StatelessWidget {
             .where((task) {
               final isDueToday = _isDueToday(task);
               final isUserInvolved = task.taskAssignedTo == userId || 
-                                     task.taskOwnerId == userId ||
-                                     task.taskHelpers.contains(userId);
+                                     task.taskOwnerId == userId;
               return isDueToday && isUserInvolved;
             })
             .toList();

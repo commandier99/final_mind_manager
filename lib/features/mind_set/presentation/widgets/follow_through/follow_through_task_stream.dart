@@ -163,6 +163,23 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     if (task.taskIsDone) return;
     if (_isInProgressStatus(task.taskStatus)) return;
 
+    // In Pomodoro mode, check if timer is configured
+    if (_isPomodoroMode()) {
+      final session = widget.session!;
+      final stats = session.sessionStats;
+      if (stats.pomodoroFocusMinutes == null || stats.pomodoroFocusMinutes! <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please set a Pomodoro timer duration first'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     final taskProvider = context.read<TaskProvider>();
     Task? focusedTask;
     for (final candidate in taskProvider.tasks) {
@@ -401,6 +418,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                               (isEatTheFrog && (canPickFrog || isFrogTask)),
                           showCheckboxWhenFocusedOnly: isChecklist,
                           useStatusColor: true,
+                          isPomodoroMode: isPomodoro,
                           onFocus: (isChecklist || isPomodoro)
                               ? () => _focusTask(task)
                               : (isEatTheFrog

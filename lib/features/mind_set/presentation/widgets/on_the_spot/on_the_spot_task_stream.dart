@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../../../boards/datasources/models/board_model.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../dialogs/add_task_to_session_dialog.dart';
+import '../dialogs/pomodoro_check_in_dialogs.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/task_card.dart';
@@ -102,6 +103,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       title: 'Personal',
       goal: 'Personal Tasks',
       description: 'Personal tasks created from Mind:Set.',
+      boardType: 'personal', // Mark as personal board
     );
     await boardProvider.refreshBoards();
 
@@ -278,6 +280,23 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     if (!widget.isSessionActive || task.taskIsDone) return;
     if (_isInProgressStatus(task.taskStatus)) return;
 
+    // In Pomodoro mode, check if timer is configured
+    if (_isPomodoroMode()) {
+      final session = widget.session!;
+      final stats = session.sessionStats;
+      if (stats.pomodoroFocusMinutes == null || stats.pomodoroFocusMinutes! <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please set a Pomodoro timer duration first'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     final taskProvider = context.read<TaskProvider>();
     Task? focusedTask;
     for (final candidate in taskProvider.tasks) {
@@ -291,42 +310,80 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
     if (focusedTask != null) {
       final activeTask = focusedTask;
-      final shouldPause = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Pause current task?'),
-          content: Text(
-            'You can focus on only one task at a time. Pause "${activeTask.taskTitle}" first.',
+      
+      // In Pomodoro mode, confirm switch mid-timer
+      if (_isPomodoroMode()) {
+        final session = widget.session!;
+        final stats = session.sessionStats;
+        final isTimerRunning = stats.pomodoroIsRunning ?? false;
+        
+        if (isTimerRunning) {
+          final shouldSwitch = await showSwitchFocusConfirmationDialog(
+            context,
+            currentTask: activeTask,
+            newTask: task,
+          );
+          if (!shouldSwitch) return;
+          
+          // Switch without pausing timer
+          await taskProvider.updateTask(
+            activeTask.copyWith(taskStatus: 'Paused'),
+          );
+        } else {
+          // Timer not running, normal switch
+          await taskProvider.updateTask(
+            activeTask.copyWith(taskStatus: 'Paused'),
+          );
+        }
+      } else {
+        // Non-pomodoro mode: normal pause dialog
+        final shouldPause = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Pause current task?'),
+            content: Text(
+              'You can focus on only one task at a time. Pause "${activeTask.taskTitle}" first.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Pause Task'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Pause Task'),
-            ),
-          ],
-        ),
-      );
+        );
 
-      if (shouldPause != true) return;
-      await taskProvider.updateTask(
-        activeTask.copyWith(taskStatus: 'Paused'),
-      );
-      await _pausePomodoro();
+        if (shouldPause != true) return;
+        await taskProvider.updateTask(
+          activeTask.copyWith(taskStatus: 'Paused'),
+        );
+        await _pausePomodoro();
+      }
     }
 
     await taskProvider.updateTask(
       task.copyWith(taskStatus: 'In Progress'),
     );
-    await _resumePomodoro();
+    
+    // In Pomodoro mode, start timer when focusing
+    if (_isPomodoroMode()) {
+      await _resumePomodoro();
+    }
   }
 
   Future<void> _pauseTask(Task task) async {
     if (!widget.isSessionActive) return;
     if (!_isInProgressStatus(task.taskStatus)) return;
+    
+    // In Pomodoro mode, disallow manual pause (only system pauses when timer ends)
+    if (_isPomodoroMode()) {
+      return;
+    }
+    
     final taskProvider = context.read<TaskProvider>();
     await taskProvider.updateTask(
       task.copyWith(taskStatus: 'Paused'),
@@ -336,6 +393,59 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
   Future<void> _toggleDoneForTask(Task task, bool? isDone) async {
     final taskProvider = context.read<TaskProvider>();
+    
+    // Handle Pomodoro check-in when task is marked done
+    if (_isPomodoroMode() && isDone == true && _isInProgressStatus(task.taskStatus)) {
+      final session = widget.session!;
+      final stats = session.sessionStats;
+      final isTimerRunning = stats.pomodoroIsRunning ?? false;
+      
+      if (isTimerRunning) {
+        // Pause timer before showing dialog
+        await _pausePomodoro();
+        
+        // Show task-done-early check-in
+        final availableTasks = taskProvider.tasks
+            .where((t) => t.taskId != task.taskId && !t.taskIsDone)
+            .toList();
+            
+        final result = await showTaskDoneEarlyDialog(
+          context,
+          availableTasks: availableTasks,
+        );
+        
+        if (result == null) {
+          // User dismissed dialog, resume timer
+          await _resumePomodoro();
+          return;
+        }
+        
+        // Mark task done
+        await taskProvider.toggleTaskDone(
+          task.copyWith(
+            taskIsDone: true,
+            taskStatus: 'COMPLETED',
+          ),
+        );
+        
+        if (result.continueWithAnother && result.nextTaskId != null) {
+          // Continue with another task
+          final nextTask = taskProvider.tasks.firstWhere(
+            (t) => t.taskId == result.nextTaskId,
+          );
+          await taskProvider.updateTask(
+            nextTask.copyWith(taskStatus: 'In Progress'),
+          );
+          await _resumePomodoro();
+        } else {
+          // End pomodoro and start break
+          await _handlePomodoroComplete(task);
+        }
+        return;
+      }
+    }
+    
+    // Normal toggle
     await taskProvider.toggleTaskDone(
       task.copyWith(
         taskIsDone: isDone ?? false,
@@ -348,6 +458,17 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       if (frogId == task.taskId) {
         await _clearFrogTask();
       }
+    }
+  }
+  
+  Future<void> _handlePomodoroComplete(Task completedTask) async {
+    // This will be called by timer completion handler in pomodoro section
+    // For now, pause the task
+    final taskProvider = context.read<TaskProvider>();
+    if (_isInProgressStatus(completedTask.taskStatus)) {
+      await taskProvider.updateTask(
+        completedTask.copyWith(taskStatus: 'Paused'),
+      );
     }
   }
 
@@ -610,6 +731,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                           showCheckboxWhenFocusedOnly: true,
                           showBoardLabel: false,
                           useStatusColor: true,
+                          isPomodoroMode: isPomodoro,
                           onFocus: (isChecklist || isPomodoro)
                               ? () => _focusTask(task)
                               : (isEatTheFrog && isActive

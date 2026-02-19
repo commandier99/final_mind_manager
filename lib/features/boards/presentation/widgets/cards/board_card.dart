@@ -60,6 +60,20 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
         final stats =
             statsProvider.getStatsForBoard(widget.board.boardId) ?? widget.board.stats;
 
+        final isPersonal =
+            widget.board.boardType == 'personal' || widget.board.boardTitle == 'Personal';
+        final isProject = widget.board.boardPurpose == 'project';
+
+        final accentColor = isPersonal
+            ? Colors.blueGrey.shade700
+            : (isProject ? Colors.orange.shade700 : Colors.green.shade700);
+        final headerColor = isPersonal
+            ? Colors.blueGrey.shade600
+            : (isProject ? Colors.orange.shade600 : Colors.green.shade600);
+        final borderColor = isPersonal
+            ? Colors.blueGrey.shade300
+            : (isProject ? Colors.orange.shade300 : Colors.green.shade300);
+
         final taskDone = stats.boardTasksDoneCount;
         final taskTotal = stats.boardTasksCount;
         final progress = taskTotal > 0 ? taskDone / taskTotal : 0.0;
@@ -73,7 +87,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Slidable(
             key: ValueKey(widget.board.boardId),
-            endActionPane: widget.board.boardTitle == 'Personal'
+            endActionPane: isPersonal
                 ? null // Personal board cannot be deleted
                 : ActionPane(
               motion: const ScrollMotion(),
@@ -126,11 +140,11 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                 child: Card(
                 margin: EdgeInsets.zero,
                 elevation: 4,
-                shadowColor: Colors.blue.withOpacity(0.2),
+                shadowColor: accentColor.withOpacity(0.25),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.zero,
                   side: BorderSide(
-                    color: Colors.blue.shade400,
+                    color: borderColor,
                     width: 1,
                   ),
                 ),
@@ -149,34 +163,99 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                             horizontal: 16,
                             vertical: 10,
                           ),
-                          color: Colors.blue.shade700,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                          decoration: BoxDecoration(
+                            color: headerColor,
+                          ),
+                          child: Stack(
                             children: [
-                              Expanded(
-                                child: Text(
-                                  widget.board.boardTitle,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                              Positioned(
+                                right: -24,
+                                top: -18,
+                                child: Opacity(
+                                  opacity: 0.18,
+                                  child: Icon(
+                                    isPersonal
+                                        ? Icons.person_rounded
+                                        : (isProject
+                                            ? Icons.flag_rounded
+                                            : Icons.category_rounded),
+                                    size: 64,
                                     color: Colors.white,
                                   ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              Text(
-                                "by ${widget.board.boardManagerName}",
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.white70,
+                              Positioned(
+                                right: 8,
+                                bottom: -18,
+                                child: Opacity(
+                                  opacity: 0.12,
+                                  child: Container(
+                                    width: 48,
+                                    height: 48,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ),
-                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.18),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Icon(
+                                      isPersonal
+                                          ? Icons.person_rounded
+                                          : (isProject
+                                              ? Icons.flag_rounded
+                                              : Icons.category_rounded),
+                                      size: 18,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          widget.board.boardTitle,
+                                          style: const TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 4),
+                                        _buildPurposePill(
+                                          widget.board.boardPurpose,
+                                          isPersonal,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "by ${widget.board.boardManagerName}",
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      color: Colors.white70,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
                         ),
-                        // Body with description, members, and progress
+                        // Body with goal, members, and progress
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -185,11 +264,28 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // Left column: Description and Members
+                              // Left column: Goal and Members
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    if (widget.board.boardPurpose != 'category') ...[
+                                      // Goal
+                                      Text(
+                                        widget.board.boardGoal?.isNotEmpty ?? false
+                                            ? widget.board.boardGoal!
+                                            : "Goal: None",
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey[700],
+                                          height: 1.3,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 8),
+                                    ],
                                     // Description
                                     Text(
                                       widget.board.boardDescription?.isNotEmpty ?? false
@@ -209,9 +305,16 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                   ],
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              // Right: Circular progress indicator
-                              _buildProgressIndicator(stats, progress, percent),
+                              if (isProject) ...[
+                                const SizedBox(width: 12),
+                                // Right: Circular progress indicator
+                                _buildProgressIndicator(
+                                  stats,
+                                  progress,
+                                  percent,
+                                  accentColor,
+                                ),
+                              ],
                             ],
                           ),
                         ),
@@ -312,8 +415,8 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
     );
   }
 
-  Widget _buildProgressIndicator(
-      dynamic stats, double progress, int percent) {
+    Widget _buildProgressIndicator(
+      dynamic stats, double progress, int percent, Color accentColor) {
     return SizedBox(
       width: 60,
       height: 60,
@@ -324,7 +427,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
             value: progress,
             strokeWidth: 3,
             backgroundColor: Colors.grey.shade300,
-            color: progress == 1.0 ? Colors.green : Colors.blue,
+            color: progress == 1.0 ? Colors.green : accentColor,
           ),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -339,6 +442,30 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPurposePill(String boardPurpose, bool isPersonal) {
+    final isProject = boardPurpose == 'project';
+    final label = isPersonal ? 'Personal' : (isProject ? 'Project' : 'Category');
+    final color = isPersonal
+        ? Colors.blueGrey.shade200
+        : (isProject ? Colors.orange.shade200 : Colors.green.shade200);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: Colors.black87,
+        ),
       ),
     );
   }

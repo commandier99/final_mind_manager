@@ -57,6 +57,8 @@ class BoardProvider extends ChangeNotifier {
     String? title,
     String? goal,
     String? description,
+    String? boardType,
+    String? boardPurpose,
   }) async {
     _setLoading(true);
     try {
@@ -64,6 +66,8 @@ class BoardProvider extends ChangeNotifier {
         boardTitle: title,
         boardGoal: goal,
         boardGoalDescription: description,
+        boardType: boardType,
+        boardPurpose: boardPurpose,
       );
       await refreshBoards();
     } finally {

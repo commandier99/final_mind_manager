@@ -42,8 +42,7 @@ class TasksOverdueWidget extends StatelessWidget {
             .where((task) {
               final isOverdue = _isOverdue(task);
               final isUserInvolved = task.taskAssignedTo == userId || 
-                                     task.taskOwnerId == userId ||
-                                     task.taskHelpers.contains(userId);
+                                     task.taskOwnerId == userId;
               return isOverdue && isUserInvolved;
             })
             .toList();

@@ -12,8 +12,16 @@ import 'board_details_page.dart';
 class BoardsPage extends StatefulWidget {
   final void Function(VoidCallback)? onSearchToggleReady;
   final void Function(bool, TextEditingController, ValueChanged<String>, VoidCallback)? onSearchStateChanged;
+  final void Function(VoidCallback)? onFilterPressedReady;
+  final void Function(VoidCallback)? onSortPressedReady;
 
-  const BoardsPage({super.key, this.onSearchToggleReady, this.onSearchStateChanged});
+  const BoardsPage({
+    super.key,
+    this.onSearchToggleReady,
+    this.onSearchStateChanged,
+    this.onFilterPressedReady,
+    this.onSortPressedReady,
+  });
 
   @override
   State<BoardsPage> createState() => _BoardsPageState();
@@ -24,11 +32,37 @@ class _BoardsPageState extends State<BoardsPage> {
   bool _isSearchExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  Set<String> _selectedFilters = {allFilter};
+  String _sortBy = 'created_desc';
+
+  static const String allFilter = 'All';
+  static const List<String> boardTypeFilters = [
+    'type_team',
+    'type_personal',
+  ];
+  static const List<String> boardPurposeFilters = [
+    'purpose_project',
+    'purpose_category',
+  ];
+  static final List<String> allFilters = [
+    allFilter,
+    ...boardTypeFilters,
+    ...boardPurposeFilters,
+  ];
+
+  static const Map<String, String> filterLabels = {
+    'type_team': 'Team boards',
+    'type_personal': 'Personal boards',
+    'purpose_project': 'Project boards',
+    'purpose_category': 'Category boards',
+  };
 
   @override
   void initState() {
     super.initState();
     widget.onSearchToggleReady?.call(_toggleSearch);
+    widget.onFilterPressedReady?.call(_showFilterMenu);
+    widget.onSortPressedReady?.call(_showSortMenu);
   }
 
   @override
@@ -292,18 +326,229 @@ class _BoardsPageState extends State<BoardsPage> {
     }).toList();
   }
 
-  List<Board> _sortBoards(List<Board> boards) {
-    // Sort so "Personal" is always first (case-insensitive)
+  List<Board> _applyFilters(List<Board> boards) {
+    if (_selectedFilters.contains(allFilter)) return boards;
+
+    final selectedTypes = _selectedFilters
+        .where((filter) => boardTypeFilters.contains(filter))
+        .map((filter) => filter.replaceFirst('type_', ''))
+        .toSet();
+    final selectedPurposes = _selectedFilters
+        .where((filter) => boardPurposeFilters.contains(filter))
+        .map((filter) => filter.replaceFirst('purpose_', ''))
+        .toSet();
+
+    return boards.where((board) {
+      final typeMatch =
+          selectedTypes.isEmpty || selectedTypes.contains(board.boardType);
+      final purposeMatch = selectedPurposes.isEmpty ||
+          selectedPurposes.contains(board.boardPurpose);
+      return typeMatch && purposeMatch;
+    }).toList();
+  }
+
+  List<Board> _applySorting(List<Board> boards) {
+    final sortedBoards = List<Board>.from(boards);
+
+    switch (_sortBy) {
+      case 'alphabetical_asc':
+        sortedBoards.sort((a, b) =>
+            a.boardTitle.toLowerCase().compareTo(b.boardTitle.toLowerCase()));
+        break;
+      case 'alphabetical_desc':
+        sortedBoards.sort((a, b) =>
+            b.boardTitle.toLowerCase().compareTo(a.boardTitle.toLowerCase()));
+        break;
+      case 'created_asc':
+        sortedBoards.sort((a, b) => a.boardCreatedAt.compareTo(b.boardCreatedAt));
+        break;
+      case 'created_desc':
+        sortedBoards.sort((a, b) => b.boardCreatedAt.compareTo(a.boardCreatedAt));
+        break;
+      case 'modified_asc':
+        sortedBoards.sort(
+            (a, b) => a.boardLastModifiedAt.compareTo(b.boardLastModifiedAt));
+        break;
+      case 'modified_desc':
+        sortedBoards.sort(
+            (a, b) => b.boardLastModifiedAt.compareTo(a.boardLastModifiedAt));
+        break;
+    }
+
     try {
-      final personalBoard = boards.firstWhere(
+      final personalBoardIndex = sortedBoards.indexWhere(
         (b) => b.boardTitle.toLowerCase() == 'personal',
       );
-      final otherBoards = boards.where((b) => b.boardTitle.toLowerCase() != 'personal').toList();
-      return [personalBoard, ...otherBoards];
-    } catch (e) {
-      // Personal board doesn't exist, return as is
-      return boards;
+      if (personalBoardIndex > 0) {
+        final personalBoard = sortedBoards.removeAt(personalBoardIndex);
+        sortedBoards.insert(0, personalBoard);
+      }
+    } catch (_) {
+      // Ignore if Personal board not found
     }
+
+    return sortedBoards;
+  }
+
+  String _getFilterLabel(String filter) {
+    if (filter == allFilter) return 'All boards';
+    return filterLabels[filter] ?? filter;
+  }
+
+  void _showFilterMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        var tempFilters = Set<String>.from(_selectedFilters);
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Filter boards',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: allFilters.map((filter) {
+                        final isSelected = tempFilters.contains(filter);
+                        return FilterChip(
+                          label: Text(_getFilterLabel(filter)),
+                          selected: isSelected,
+                          onSelected: (selected) {
+                            setSheetState(() {
+                              if (filter == allFilter) {
+                                tempFilters = {allFilter};
+                              } else {
+                                tempFilters.remove(allFilter);
+                                if (selected) {
+                                  tempFilters.add(filter);
+                                } else {
+                                  tempFilters.remove(filter);
+                                  if (tempFilters.isEmpty) {
+                                    tempFilters.add(allFilter);
+                                  }
+                                }
+                              }
+                            });
+                          },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Close'),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedFilters = tempFilters;
+                            });
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showSortMenu() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Sort boards',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildSortOption('Alphabetical (A-Z)', 'alphabetical_asc'),
+                _buildSortOption('Alphabetical (Z-A)', 'alphabetical_desc'),
+                _buildSortOption('Created (Newest)', 'created_desc'),
+                _buildSortOption('Created (Oldest)', 'created_asc'),
+                _buildSortOption('Modified (Newest)', 'modified_desc'),
+                _buildSortOption('Modified (Oldest)', 'modified_asc'),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSortOption(String label, String value) {
+    final isSelected = _sortBy == value;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      title: Text(label),
+      trailing: isSelected ? const Icon(Icons.check, color: Colors.blue) : null,
+      onTap: () {
+        setState(() {
+          _sortBy = value;
+        });
+        Navigator.pop(context);
+      },
+    );
+  }
+
+  Widget _buildSelectedFiltersRow() {
+    final filters = _selectedFilters.where((f) => f != allFilter).toList();
+    if (filters.isEmpty) return const SizedBox.shrink();
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: filters.map((filter) {
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: InputChip(
+              label: Text(_getFilterLabel(filter)),
+              onDeleted: () {
+                setState(() {
+                  _selectedFilters.remove(filter);
+                  if (_selectedFilters.isEmpty) {
+                    _selectedFilters.add(allFilter);
+                  }
+                });
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 
   @override
@@ -359,9 +604,23 @@ class _BoardsPageState extends State<BoardsPage> {
                   );
                 }
 
-                final filteredBoards = _sortBoards(_filterBoards(boardProvider.boards));
+                final searchedBoards = _filterBoards(boardProvider.boards);
+                final personalBoard = searchedBoards.where((board) {
+                  return board.boardTitle.toLowerCase() == 'personal';
+                }).toList();
+                final nonPersonalBoards = searchedBoards.where((board) {
+                  return board.boardTitle.toLowerCase() != 'personal';
+                }).toList();
 
-                if (filteredBoards.isEmpty && _searchQuery.isNotEmpty) {
+                final filteredBoards = _applySorting(
+                  _applyFilters(nonPersonalBoards),
+                );
+                final displayBoards = [
+                  ...personalBoard,
+                  ...filteredBoards,
+                ];
+
+                if (displayBoards.isEmpty && _searchQuery.isNotEmpty) {
                   return wrapWithRefresh(
                     Center(
                       child: Column(
@@ -423,10 +682,9 @@ class _BoardsPageState extends State<BoardsPage> {
                 }
 
                 return wrapWithRefresh(
-                  ListView.builder(
-                    itemCount: filteredBoards.length,
-                    itemBuilder: (context, index) {
-                      final board = filteredBoards[index];
+                  ListView(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    children: displayBoards.map((board) {
                       return Column(
                         children: [
                           BoardCard(
@@ -458,7 +716,7 @@ class _BoardsPageState extends State<BoardsPage> {
                             ),
                         ],
                       );
-                    },
+                    }).toList(),
                   ),
                 );
               },

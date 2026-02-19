@@ -28,6 +28,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   final MindSetSessionService _sessionService = MindSetSessionService();
 
   String _selectedMode = 'Checklist';
+  String _flowStyle = 'shuffle'; // shuffle or list
   bool _isSaving = false;
   String? _selectedPlanId;
   Plan? _selectedPlan;
@@ -203,6 +204,47 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
                 },
               ),
               const SizedBox(height: 16),
+              if (_isGoWithFlow) ...[
+                DropdownButtonFormField<String>(
+                  value: _flowStyle,
+                  decoration: InputDecoration(
+                    labelText: 'Flow Style',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'shuffle',
+                      child: Text('Shuffle Mode'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'list',
+                      child: Text('List Mode'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _flowStyle = value ?? 'shuffle';
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                /// 🔹 Description
+                Text(
+                  _flowStyle == 'shuffle'
+                      ? 'Shuffle Mode shows one task at a time with a Yes / No format so you can quickly decide what to work on without overthinking.'
+                      : 'List Mode shows all available tasks in a traditional list view so you can manually choose what to focus on.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+              ],
+
             ],
             SizedBox(
               width: double.infinity,
@@ -424,6 +466,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
     const flowSessionTitle = 'Flow';
     const flowSessionGoal = 'Do What I Can';
     const flowSessionBenefit = 'Make Progress In Any Way';
+    
 
     if (_isFollowThrough && _selectedPlan == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -475,6 +518,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
       sessionUserId: userId,
       sessionType: widget.sessionType,
       sessionMode: _selectedMode,
+      sessionFlowStyle: _isGoWithFlow ? _flowStyle : 'list',
       sessionModeHistory: [
         MindSetModeChange(mode: _selectedMode, changedAt: DateTime.now()),
       ],
@@ -506,6 +550,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
         sessionFocusDurationSeconds: 0,
         pomodoroCount: 0,
         pomodoroTargetCount: 4,
+        pomodoroFocusMinutes: 25,
         pomodoroBreakMinutes: 5,
         pomodoroLongBreakMinutes: 60,
         pomodoroIsRunning: false,

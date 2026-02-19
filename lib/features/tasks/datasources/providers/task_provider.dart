@@ -94,7 +94,7 @@ class TaskProvider extends ChangeNotifier {
     _currentStreamingId = userId;
 
     _setLoading(true);
-    _taskStream = _taskService.streamTasks(ownerId: userId);
+    _taskStream = _taskService.streamTasksAssignedTo(userId);
     _taskSubscription = _taskStream!.listen((tasks) {
       print(
         '[DEBUG] TaskProvider: streamUserActiveTasks received ${tasks.length} tasks, filtering active ones',
@@ -129,7 +129,7 @@ class TaskProvider extends ChangeNotifier {
     _currentStreamingId = userId;
 
     _setLoading(true);
-    _taskStream = _taskService.streamTasks(ownerId: userId);
+    _taskStream = _taskService.streamTasksAssignedTo(userId);
     _taskSubscription = _taskStream!.listen((tasks) {
       print(
         '[DEBUG] TaskProvider: streamAllUserTasks received ${tasks.length} tasks',
@@ -456,79 +456,6 @@ class TaskProvider extends ChangeNotifier {
       print('⚠️ Error declining task: $e');
       rethrow;
     }
-  }
-
-  Future<void> volunteerForTask(String taskId) async {
-    try {
-      print(
-        '[DEBUG] TaskProvider: volunteerForTask called for taskId = $taskId',
-      );
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('No user logged in');
-      }
-
-      await _taskService.volunteerForTask(
-        taskId,
-        currentUser.uid,
-        currentUser.displayName ?? 'Unknown User',
-      );
-
-      print('✅ User requested to volunteer for task $taskId');
-    } catch (e) {
-      print('⚠️ Error volunteering for task: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> acceptVolunteerRequest(String requestId) async {
-    try {
-      print(
-        '[DEBUG] TaskProvider: acceptVolunteerRequest called for requestId = $requestId',
-      );
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('No user logged in');
-      }
-
-      await _taskService.acceptVolunteerRequest(
-        requestId,
-        currentUser.uid,
-        currentUser.displayName ?? 'Unknown User',
-      );
-
-      print('✅ Volunteer request $requestId accepted');
-    } catch (e) {
-      print('⚠️ Error accepting volunteer request: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> declineVolunteerRequest(String requestId) async {
-    try {
-      print(
-        '[DEBUG] TaskProvider: declineVolunteerRequest called for requestId = $requestId',
-      );
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('No user logged in');
-      }
-
-      await _taskService.declineVolunteerRequest(
-        requestId,
-        currentUser.uid,
-        currentUser.displayName ?? 'Unknown User',
-      );
-
-      print('✅ Volunteer request $requestId declined');
-    } catch (e) {
-      print('⚠️ Error declining volunteer request: $e');
-      rethrow;
-    }
-  }
-
-  Stream<List<Map<String, dynamic>>> streamVolunteerRequests(String boardId) {
-    return _taskService.streamVolunteerRequests(boardId);
   }
 
   // ----------------------

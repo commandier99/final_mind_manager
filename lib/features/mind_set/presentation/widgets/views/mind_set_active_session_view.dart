@@ -8,6 +8,7 @@ import '../mind_set_pomodoro_section.dart';
 import '../on_the_spot/on_the_spot_task_stream.dart';
 import '../follow_through/follow_through_task_stream.dart';
 import '../go_with_the_flow/go_with_flow_task_stream.dart';
+import '../dialogs/pomodoro_check_in_dialogs.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/focused_task_card.dart';
 
@@ -125,7 +126,11 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
             );
           },
         ),
-        if (session.sessionMode == 'Pomodoro') MindSetPomodoroSection(session: session),
+        if (session.sessionMode == 'Pomodoro') MindSetPomodoroSection(
+          session: session,
+          onPomodoroComplete: () => _handlePomodoroComplete(session),
+          onBreakComplete: () => _handleBreakComplete(session),
+        ),
         Expanded(child: _buildSessionBody(session)),
         Consumer<TaskProvider>(
           builder: (context, taskProvider, _) {
@@ -133,14 +138,11 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                 .firstWhereOrNull((task) => task.taskStatus == 'In Progress');
             
             if (focusedTask != null) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: FocusedTaskCard(
+                return FocusedTaskCard(
                   task: focusedTask,
                   onPause: () => _pauseTask(taskProvider, focusedTask),
                   onToggleDone: (isDone) => _toggleTaskDone(taskProvider, focusedTask, isDone ?? false),
-                ),
-              );
+                );
             }
             return const SizedBox.shrink();
           },
@@ -212,6 +214,97 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     );
   }
 
+  Future<void> _handlePomodoroComplete(MindSetSession session) async {
+    // Timer done - pause focused task and show check-in
+    final taskProvider = context.read<TaskProvider>();
+    final focusedTask = taskProvider.tasks
+        .firstWhereOrNull((task) => task.taskStatus == 'In Progress');
+    
+    if (focusedTask == null) return;
+    
+    // Pause the task
+    await taskProvider.updateTask(
+      focusedTask.copyWith(taskStatus: 'Paused'),
+    );
+    
+    // Show timer-done check-in
+    final availableTasks = taskProvider.tasks
+        .where((t) => !t.taskIsDone)
+        .toList();
+        
+    if (!mounted) return;
+    
+    final result = await showTimerDoneDialog(
+      context,
+      availableTasks: availableTasks,
+      currentTask: focusedTask,
+    );
+    
+    if (result == null || result.preselectedTaskId == null) return;
+    
+    // Store preselected task ID in session for break-end handler
+    await _sessionService.updateSession(
+      session.copyWith(
+        sessionActiveTaskId: result.preselectedTaskId,
+      ),
+    );
+  }
+  
+  Future<void> _handleBreakComplete(MindSetSession session) async {
+    // Break ended - show confirmation for pre-selected task
+    final preselectedTaskId = session.sessionActiveTaskId;
+    if (preselectedTaskId == null) return;
+    
+    final taskProvider = context.read<TaskProvider>();
+    final preselectedTask = taskProvider.tasks
+        .firstWhereOrNull((t) => t.taskId == preselectedTaskId);
+    
+    if (preselectedTask == null) {
+      // Task was deleted or no longer available
+      await _sessionService.updateSession(
+        session.copyWith(sessionActiveTaskId: null),
+      );
+      return;
+    }
+    
+    final allTasks = taskProvider.tasks
+        .where((t) => !t.taskIsDone)
+        .toList();
+    
+    if (!mounted) return;
+    
+    final result = await showBreakEndConfirmationDialog(
+      context,
+      preselectedTask: preselectedTask,
+      allTasks: allTasks,
+    );
+    
+    if (result == null) return;
+    
+    String? taskIdToFocus;
+    if (result.confirmed) {
+      taskIdToFocus = preselectedTask.taskId;
+    } else if (result.selectedTaskId != null) {
+      taskIdToFocus = result.selectedTaskId;
+    }
+    
+    if (taskIdToFocus != null) {
+      final taskToFocus = taskProvider.tasks
+          .firstWhereOrNull((t) => t.taskId == taskIdToFocus);
+      if (taskToFocus != null) {
+        await taskProvider.updateTask(
+          taskToFocus.copyWith(taskStatus: 'In Progress'),
+        );
+        // Timer already started by pomodoro section
+      }
+    }
+    
+    // Clear the active task ID
+    await _sessionService.updateSession(
+      session.copyWith(sessionActiveTaskId: null),
+    );
+  }
+
   Widget _buildSessionBody(MindSetSession session) {
     switch (session.sessionType) {
       case 'on_the_spot':
@@ -247,10 +340,45 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     String newMode,
   ) async {
     if (newMode == session.sessionMode) return;
+
+    final taskProvider = context.read<TaskProvider>();
+
+    // 🔒 Check if any task is currently focused
+    final hasFocusedTask = taskProvider.tasks
+        .any((task) => task.taskStatus == 'In Progress');
+
+    if (hasFocusedTask) {
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Finish or Pause Task First'),
+          content: const Text(
+            'You cannot change the session mode while a task is being focused.\n\n'
+            'Pause or complete the current task first.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Okay'),
+            ),
+          ],
+        ),
+      );
+
+      return; // 🚫 Stop mode change
+    }
+
+    // ✅ Safe to change mode
     final updatedHistory = [
       ...session.sessionModeHistory,
-      MindSetModeChange(mode: newMode, changedAt: DateTime.now()),
+      MindSetModeChange(
+        mode: newMode,
+        changedAt: DateTime.now(),
+      ),
     ];
+
     await _sessionService.updateSession(
       session.copyWith(
         sessionMode: newMode,
@@ -259,10 +387,64 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     );
   }
 
+
   Future<void> _endSession(String sessionId) async {
-    // Timer runs locally, elapsed time is calculated server-side when session ends
-    await _sessionService.endSession(sessionId, DateTime.now());
+    final taskProvider = context.read<TaskProvider>();
+
+    // Get session from Firestore
+    final session = await _sessionService.streamUserSessions(
+      widget.session.sessionUserId,
+    ).first.then(
+      (sessions) => sessions.firstWhere(
+        (s) => s.sessionId == sessionId,
+        orElse: () => widget.session,
+      ),
+    );
+
+    final now = DateTime.now();
+
+    // 1️⃣ Pause all focused tasks
+    final focusedTasks = taskProvider.tasks
+        .where((task) => task.taskStatus == 'In Progress')
+        .toList();
+
+    for (final task in focusedTasks) {
+      await taskProvider.updateTask(
+        task.copyWith(taskStatus: 'Paused'),
+      );
+    }
+
+    // 2️⃣ Calculate session duration
+    final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
+    final duration = now.difference(startedAt);
+
+    // 3️⃣ Calculate session task stats
+    final sessionTasks = taskProvider.tasks
+        .where((task) => session.sessionTaskIds.contains(task.taskId))
+        .toList();
+
+    final tasksTotal = sessionTasks.length;
+    final tasksDone =
+        sessionTasks.where((task) => task.taskIsDone).length;
+
+    // 4️⃣ Update session with computed stats
+    await _sessionService.updateSession(
+      session.copyWith(
+        sessionStatus: 'completed',
+        sessionEndedAt: now,
+        sessionStats: session.sessionStats.copyWith(
+          tasksTotalCount: tasksTotal,
+          tasksDoneCount: tasksDone,
+          sessionFocusDurationMinutes: duration.inMinutes,
+          sessionFocusDurationSeconds: duration.inSeconds,
+        ),
+      ),
+    );
+
+    // 5️⃣ Log completion event properly
+    await _sessionService.endSession(sessionId, now);
   }
+
 
   Future<void> _confirmEndSession(String sessionId) async {
     final shouldEnd = await showDialog<bool>(
@@ -308,9 +490,89 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   }
 
   Future<void> _toggleTaskDone(TaskProvider taskProvider, dynamic focusedTask, bool isDone) async {
+    final session = widget.session;
+    
+    // Handle Pomodoro check-in when task is marked done
+    if (session.sessionMode == 'Pomodoro' && isDone && focusedTask.taskStatus == 'In Progress') {
+      final stats = session.sessionStats;
+      final isTimerRunning = stats.pomodoroIsRunning ?? false;
+      
+      if (isTimerRunning) {
+        // Pause timer before showing dialog
+        await _sessionService.updateSession(
+          session.copyWith(
+            sessionStats: stats.copyWith(
+              pomodoroIsRunning: false,
+              pomodoroRemainingSeconds: stats.pomodoroRemainingSeconds,
+              pomodoroLastUpdatedAt: DateTime.now(),
+            ),
+          ),
+        );
+        
+        // Show task-done-early check-in
+        final availableTasks = taskProvider.tasks
+            .where((t) => t.taskId != focusedTask.taskId && !t.taskIsDone)
+            .toList();
+        
+        if (!mounted) return;
+        
+        final result = await showTaskDoneEarlyDialog(
+          context,
+          availableTasks: availableTasks,
+        );
+        
+        if (result == null) {
+          // User dismissed dialog, resume timer
+          await _sessionService.updateSession(
+            session.copyWith(
+              sessionStats: stats.copyWith(
+                pomodoroIsRunning: true,
+                pomodoroLastUpdatedAt: DateTime.now(),
+              ),
+            ),
+          );
+          return;
+        }
+        
+        // Mark task done
+        await taskProvider.updateTask(
+          focusedTask.copyWith(
+            taskIsDone: true,
+            taskStatus: 'COMPLETED',
+            taskIsDoneAt: DateTime.now(),
+          ),
+        );
+        
+        if (result.continueWithAnother && result.nextTaskId != null) {
+          // Continue with another task
+          final nextTask = taskProvider.tasks.firstWhereOrNull(
+            (t) => t.taskId == result.nextTaskId,
+          );
+          if (nextTask != null) {
+            await taskProvider.updateTask(
+              nextTask.copyWith(taskStatus: 'In Progress'),
+            );
+            await _sessionService.updateSession(
+              session.copyWith(
+                sessionStats: stats.copyWith(
+                  pomodoroIsRunning: true,
+                  pomodoroLastUpdatedAt: DateTime.now(),
+                ),
+              ),
+            );
+          }
+        } else {
+          // End pomodoro - handled by timer completion logic in _handlePomodoroComplete
+        }
+        return;
+      }
+    }
+    
+    // Normal toggle
     final updatedTask = focusedTask.copyWith(
       taskIsDone: isDone,
       taskIsDoneAt: isDone ? DateTime.now() : null,
+      taskStatus: isDone ? 'COMPLETED' : focusedTask.taskStatus,
     );
     await taskProvider.updateTask(updatedTask);
   }

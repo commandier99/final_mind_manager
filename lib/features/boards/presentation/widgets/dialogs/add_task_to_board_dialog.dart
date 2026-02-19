@@ -96,8 +96,15 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
 
     setState(() {
       _boardMembers = members;
-      // If only one member in board, auto-assign to them
-      if (members.length == 1) {
+      // Auto-assign based on board type:
+      // - Personal boards (boardType == 'personal'): Always auto-assign to the single member
+      // - Team boards with 1 member: Still show dropdown to prepare for future members
+      // - Team boards with multiple members: Default to None
+      if (widget.board.boardType == 'personal' && members.length == 1) {
+        _assignedToUserId = members.keys.first;
+        _assignedToUserName = members.values.first;
+      } else if (members.length == 1) {
+        // Single member team board - still show dropdown but default to that member
         _assignedToUserId = members.keys.first;
         _assignedToUserName = members.values.first;
       } else {
@@ -205,9 +212,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        // Always create as unassigned - assignment is pending member acceptance
-        taskAssignedTo: 'None',
-        taskAssignedToName: 'Unassigned',
+        // Use selected assignee if available, otherwise default to None
+        taskAssignedTo: _assignedToUserId ?? 'None',
+        taskAssignedToName: _assignedToUserName ?? 'Unassigned',
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),
@@ -225,8 +232,8 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: repeatTimeStr,
-        // No pending acceptance status needed since task starts unassigned
-        taskAcceptanceStatus: null,
+        // Set acceptance status to null if self-assigned (single member boards), pending otherwise
+        taskAcceptanceStatus: _assignedToUserId == widget.userId ? null : (_assignedToUserId != null ? 'pending' : null),
       );
 
       // Pass the selected member for assignment notification, not the task itself
@@ -334,7 +341,11 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
               ),
               const SizedBox(height: 12),
               if (!_loadingMembers && _boardMembers.isNotEmpty) ...[
-                if (_boardMembers.length > 1)
+                // Show dropdown for:
+                // - Team boards with any number of members (even 1, to prepare for future members)
+                // - Multi-member boards
+                // Hide dropdown only for personal boards with 1 member
+                if (widget.board.boardType == 'team' || _boardMembers.length > 1)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: DropdownButtonFormField<String?>(

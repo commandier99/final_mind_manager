@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../plans/datasources/models/plans_model.dart';
 import 'greeting_section.dart';
+import 'mind_set_sessions_carousel_widget.dart';
 import 'quick_actions_widget.dart';
 import 'features_carousel_widget.dart';
 
@@ -15,6 +16,8 @@ class MainHomeSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const GreetingSection(),
+        const SizedBox(height: 20),
+        const MindSetSessionsCarouselWidget(),
         const SizedBox(height: 20),
         const FeaturesCarouselWidget(),
         const SizedBox(height: 20),

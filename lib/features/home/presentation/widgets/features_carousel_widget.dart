@@ -185,8 +185,7 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
           final deadline = task.taskDeadline!;
           final isOverdue = deadline.isBefore(now);
           final isUserInvolved = task.taskAssignedTo == userId || 
-                                 task.taskOwnerId == userId ||
-                                 task.taskHelpers.contains(userId);
+                                 task.taskOwnerId == userId;
           
           return isOverdue && isUserInvolved;
         })
@@ -208,8 +207,7 @@ class _FeaturesCarouselWidgetState extends State<FeaturesCarouselWidget> {
           final isDueToday = isToday && deadline.isAfter(now);
           
           final isUserInvolved = task.taskAssignedTo == userId || 
-                                 task.taskOwnerId == userId ||
-                                 task.taskHelpers.contains(userId);
+                                 task.taskOwnerId == userId;
           
           return isDueToday && isUserInvolved;
         })

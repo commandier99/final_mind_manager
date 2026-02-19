@@ -7,6 +7,7 @@ import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../../tasks/presentation/pages/task_applications_page.dart';
+import '../../../../tasks/presentation/widgets/dialogs/edit_task_dialog.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../datasources/models/board_model.dart';
 
@@ -37,14 +38,12 @@ class BoardTaskCard extends StatefulWidget {
 }
 
 class _BoardTaskCardState extends State<BoardTaskCard> {
-  late bool _isInterested;
   late String _currentUserId;
 
   @override
   void initState() {
     super.initState();
     _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-    _isInterested = widget.task.taskHelpers.contains(_currentUserId);
   }
 
   bool _isTaskUnassigned() {
@@ -65,22 +64,12 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     return '';
   }
 
-  Future<void> _toggleInterest(bool interested) async {
-    if (interested && !_isInterested) {
-      // Show appeal dialog when expressing interest
-      _showAppealDialog();
-    } else if (!interested && _isInterested) {
-      // Remove interest without dialog
-      await _removeInterest();
-    }
-  }
-
   void _showAppealDialog() {
     final appealController = TextEditingController();
-    
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Express Your Interest'),
         content: SingleChildScrollView(
           child: Column(
@@ -109,14 +98,16 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(dialogContext);
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton.icon(
             onPressed: () {
-              Navigator.pop(context);
-              _submitInterest(appealController.text);
-              appealController.dispose();
+              final text = appealController.text;
+              Navigator.pop(dialogContext);
+              _submitAppeal(text);
             },
             icon: const Icon(Icons.thumb_up),
             label: const Text('Submit'),
@@ -130,86 +121,56 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     );
   }
 
-  Future<void> _submitInterest(String appealText) async {
-    final taskProvider = context.read<TaskProvider>();
-    
-    try {
-      final updatedHelpers = [...widget.task.taskHelpers, _currentUserId];
-      
-      // Update task with new helper
-      final updatedTask = widget.task.copyWith(
-        taskHelpers: updatedHelpers,
+  Stream<bool> _isUserInterestedStream() {
+    return FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(widget.task.taskId)
+        .collection('appeals')
+        .where('userId', isEqualTo: _currentUserId)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.isNotEmpty);
+  }
+
+  Future<void> _submitAppeal(String appealText) async {
+    await FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(widget.task.taskId)
+        .collection('appeals')
+        .add({
+      'userId': _currentUserId,
+      'appealText': appealText,
+      'createdAt': Timestamp.now(),
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✅ Interest submitted!'),
+          backgroundColor: Colors.green,
+        ),
       );
-      await taskProvider.updateTask(updatedTask);
-      
-      // Save appeal to subcollection - wrapped in try-catch for permission errors
-      try {
-        final appealsRef = FirebaseFirestore.instance
-            .collection('tasks')
-            .doc(widget.task.taskId)
-            .collection('appeals');
-        
-        await appealsRef.add({
-          'userId': _currentUserId,
-          'userName': widget.task.taskOwnerName,
-          'userProfilePicture': '',
-          'appealText': appealText,
-          'createdAt': Timestamp.now(),
-        });
-      } catch (e) {
-        print('⚠️ Warning: Could not save appeal text: $e');
-        // Continue anyway - the interest (taskHelpers) was still recorded
-      }
-      
-      if (mounted) {
-        setState(() => _isInterested = true);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('✅ Interest submitted!'),
-            backgroundColor: Colors.green,
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error submitting interest: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit interest: $e')),
-        );
-      }
     }
   }
 
-  Future<void> _removeInterest() async {
-    final taskProvider = context.read<TaskProvider>();
-    
-    try {
-      final updatedHelpers = widget.task.taskHelpers
-          .where((id) => id != _currentUserId)
-          .toList();
-      final updatedTask = widget.task.copyWith(
-        taskHelpers: updatedHelpers,
+  Future<void> _removeAppeal() async {
+    final query = await FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(widget.task.taskId)
+        .collection('appeals')
+        .where('userId', isEqualTo: _currentUserId)
+        .get();
+
+    for (final doc in query.docs) {
+      await doc.reference.delete();
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Interest removed'),
+          duration: Duration(seconds: 1),
+        ),
       );
-      await taskProvider.updateTask(updatedTask);
-      setState(() => _isInterested = false);
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Interest removed'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-    } catch (e) {
-      print('Error removing interest: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to remove interest: $e')),
-        );
-      }
     }
   }
 
@@ -344,6 +305,9 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         (widget.board!.boardManagerId == widget.currentUserId ||
          widget.task.taskOwnerId == widget.currentUserId);
 
+    // Only allow edit for board manager or task owner
+    final canEdit = canDelete;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Opacity(
@@ -352,6 +316,55 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
           ignoring: widget.isDisabled,
           child: Slidable(
             key: ValueKey(widget.task.taskId),
+            startActionPane: canEdit
+                ? ActionPane(
+                    motion: const DrawerMotion(),
+                    extentRatio: 0.25,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade400,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () {
+                                  Slidable.of(context)?.close();
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => EditTaskDialog(task: widget.task),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.edit, color: Colors.white, size: 20),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Edit',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : null,
             endActionPane: canDelete
                 ? ActionPane(
                     motion: const DrawerMotion(),
@@ -486,27 +499,6 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                       ),
                                     ),
                                   ),
-                                  if (widget.task.taskHelpers.isNotEmpty) ...[
-                                    const SizedBox(width: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 4,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.blue[100],
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        '+${widget.task.taskHelpers.length}',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: Colors.blue[700],
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                 ],
                               ),
                               // Status badge on the right
@@ -623,18 +615,20 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                               ),
                               const SizedBox(width: 8),
                               // Show interest buttons only if task is unassigned AND unassigned is allowed
-                              if (_isTaskUnassigned() && canHaveUnassigned)
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Tooltip(
-                                      message: _isInterested ? 'Not interested' : 'Interested',
+                              if (_isTaskUnassigned())
+                                StreamBuilder<bool>(
+                                  stream: _isUserInterestedStream(),
+                                  builder: (context, snapshot) {
+                                    final isInterested = snapshot.data ?? false;
+
+                                    return Tooltip(
+                                      message: isInterested ? 'Not interested' : 'Interested',
                                       child: GestureDetector(
                                         onTap: () {
-                                          if (_isInterested) {
-                                            _removeInterest();
+                                          if (isInterested) {
+                                            _removeAppeal();
                                           } else {
-                                            _toggleInterest(true);
+                                            _showAppealDialog();
                                           }
                                         },
                                         child: Container(
@@ -643,12 +637,12 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                             vertical: 6,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: _isInterested
+                                            color: isInterested
                                                 ? Colors.green.shade100
                                                 : Colors.grey.shade100,
                                             borderRadius: BorderRadius.circular(8),
                                             border: Border.all(
-                                              color: _isInterested
+                                              color: isInterested
                                                   ? Colors.green
                                                   : Colors.grey.shade400,
                                               width: 1.5,
@@ -658,21 +652,21 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                             mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Icon(
-                                                _isInterested
+                                                isInterested
                                                     ? Icons.thumb_up
                                                     : Icons.thumb_up_outlined,
                                                 size: 16,
-                                                color: _isInterested
+                                                color: isInterested
                                                     ? Colors.green
                                                     : Colors.grey,
                                               ),
                                               const SizedBox(width: 4),
                                               Text(
-                                                _isInterested ? 'Interested' : 'Interest?',
+                                                isInterested ? 'Interested' : 'Interest?',
                                                 style: TextStyle(
                                                   fontSize: 12,
                                                   fontWeight: FontWeight.w600,
-                                                  color: _isInterested
+                                                  color: isInterested
                                                       ? Colors.green.shade700
                                                       : Colors.grey.shade700,
                                                 ),
@@ -681,9 +675,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                           ),
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 )
+
                               else if (_hasSubtasks())
                                 const SizedBox(width: 8),
                               // Circular progress indicator

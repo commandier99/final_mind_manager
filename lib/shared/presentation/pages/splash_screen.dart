@@ -95,25 +95,29 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       final firebaseUser = FirebaseAuth.instance.currentUser;
       if (firebaseUser != null) {
         await userProvider.loadUserData(firebaseUser.uid);
-        
-        // Only register FCM token if user document exists in database
+
+        // Only proceed if a user document exists in the database.
         if (userProvider.currentUser != null) {
           print('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
-          
+
           // Register FCM token only for existing users (prevents creating empty user docs)
           FirebaseMessagingService().registerTokenForUser(userProvider.currentUser!.userId);
-          
+
           // Check for deadline reminders when app opens
-            final deadlineReminderService = DeadlineReminderService(
-              FirebaseMessagingService().localNotifications,
-            );
-            await deadlineReminderService.checkAndSendReminders();
-            deadlineReminderService.startPeriodicReminders();
+          final deadlineReminderService = DeadlineReminderService(
+            FirebaseMessagingService().localNotifications,
+          );
+          await deadlineReminderService.checkAndSendReminders();
+          deadlineReminderService.startPeriodicReminders();
+
+          Navigator.pushReplacementNamed(context, '/home');
         } else {
-          print('[SplashScreen] ⚠️ User document not found in database - skipping FCM registration');
+          print('[SplashScreen] ⚠️ User document not found in database - routing to auth');
+          Navigator.pushReplacementNamed(context, '/auth');
         }
+        return;
       }
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.pushReplacementNamed(context, '/auth');
     } else {
       Navigator.pushReplacementNamed(context, '/auth');
     }

@@ -281,6 +281,28 @@ class TaskService {
     });
   }
 
+  Stream<List<Task>> streamTasksAssignedTo(String userId) {
+    return _tasks
+        .where('taskAssignedTo', isEqualTo: userId)
+        .where('taskIsDeleted', isEqualTo: false)
+        .orderBy('taskCreatedAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map((doc) {
+                try {
+                  return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+                } catch (e) {
+                  print('⚠️ Error parsing task ${doc.id}: $e');
+                  return null;
+                }
+              })
+              .whereType<Task>()
+              .toList();
+        });
+  }
+
+
   /// Get a single task by ID
   Future<Task?> getTaskById(String taskId) async {
     try {
@@ -371,140 +393,6 @@ class TaskService {
     } catch (e) {
       print('⚠️ Error creating volunteer request: $e');
     }
-  }
-
-  /// Accept a volunteer request (manager only)
-  Future<void> acceptVolunteerRequest(
-    String requestId,
-    String managerId,
-    String managerName,
-  ) async {
-    try {
-      // Get the request
-      final requestDoc =
-          await _firestore
-              .collection('task_volunteer_requests')
-              .doc(requestId)
-              .get();
-
-      if (!requestDoc.exists) {
-        print('⚠️ Volunteer request not found');
-        return;
-      }
-
-      final requestData = requestDoc.data()!;
-      final taskId = requestData['taskId'] as String;
-      final userId = requestData['userId'] as String;
-      final userName = requestData['userName'] as String;
-      final boardId = requestData['boardId'] as String;
-
-      // Get the task
-      final task = await getTaskById(taskId);
-      if (task == null) return;
-
-      // Check if this is for an unassigned task or to help
-      if (task.taskAssignedTo.isEmpty) {
-        // Unassigned task - assign to volunteer
-        await _tasks.doc(taskId).update({
-          'taskAssignedTo': userId,
-          'taskAssignedToName': userName,
-          'taskAcceptanceStatus': 'accepted',
-        });
-      } else {
-        // Task needs help - add to helpers list
-        final updatedHelpers = List<String>.from(task.taskHelpers);
-        final updatedHelperNames = Map<String, String>.from(
-          task.taskHelperNames,
-        );
-
-        if (!updatedHelpers.contains(userId)) {
-          updatedHelpers.add(userId);
-          updatedHelperNames[userId] = userName;
-
-          await _tasks.doc(taskId).update({
-            'taskHelpers': updatedHelpers,
-            'taskHelperNames': updatedHelperNames,
-          });
-        }
-      }
-
-      // Update request status
-      await _firestore
-          .collection('task_volunteer_requests')
-          .doc(requestId)
-          .update({
-            'status': 'accepted',
-            'respondedAt': Timestamp.now(),
-            'respondedBy': managerId,
-            'respondedByName': managerName,
-          });
-
-      print('✅ Volunteer request $requestId accepted by $managerName');
-    } catch (e) {
-      print('⚠️ Error accepting volunteer request: $e');
-    }
-  }
-
-  /// Decline a volunteer request (manager only)
-  Future<void> declineVolunteerRequest(
-    String requestId,
-    String managerId,
-    String managerName,
-  ) async {
-    try {
-      // Get the request
-      final requestDoc =
-          await _firestore
-              .collection('task_volunteer_requests')
-              .doc(requestId)
-              .get();
-
-      if (!requestDoc.exists) {
-        print('⚠️ Volunteer request not found');
-        return;
-      }
-
-      final requestData = requestDoc.data()!;
-      final taskId = requestData['taskId'] as String;
-      final userName = requestData['userName'] as String;
-      final boardId = requestData['boardId'] as String;
-
-      // Get the task
-      final task = await getTaskById(taskId);
-      if (task == null) return;
-
-      // Update request status
-      await _firestore
-          .collection('task_volunteer_requests')
-          .doc(requestId)
-          .update({
-            'status': 'declined',
-            'respondedAt': Timestamp.now(),
-            'respondedBy': managerId,
-            'respondedByName': managerName,
-          });
-
-      print('✅ Volunteer request $requestId declined by $managerName');
-    } catch (e) {
-      print('⚠️ Error declining volunteer request: $e');
-    }
-  }
-
-  /// Stream volunteer requests for a board
-  Stream<List<Map<String, dynamic>>> streamVolunteerRequests(String boardId) {
-    return _firestore
-        .collection('task_volunteer_requests')
-        .where('boardId', isEqualTo: boardId)
-        .where('status', isEqualTo: 'pending')
-        .orderBy('createdAt', descending: true)
-        .snapshots()
-        .map((snapshot) {
-          return snapshot.docs.map((doc) {
-            final data = doc.data();
-            data['requestId'] = doc.id;
-            return data;
-          }).toList();
-        });
   }
 
   /// Send deadline notification to the assigned user
