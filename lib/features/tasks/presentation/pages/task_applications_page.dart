@@ -1,25 +1,22 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
 import '../../datasources/models/task_model.dart';
 import '../../datasources/providers/task_provider.dart';
+import '../../datasources/services/task_appeal_service.dart';
 import '../../../../shared/presentation/widgets/app_top_bar.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../shared/features/users/datasources/services/user_services.dart';
 
 class TaskApplicationsPage extends StatelessWidget {
   final Task task;
+  final TaskAppealService _taskAppealService = TaskAppealService();
 
-  const TaskApplicationsPage({super.key, required this.task});
+  TaskApplicationsPage({super.key, required this.task});
 
   @override
   Widget build(BuildContext context) {
-    final appealsStream = FirebaseFirestore.instance
-        .collection('tasks')
-        .doc(task.taskId)
-        .collection('appeals')
-        .orderBy('createdAt', descending: true)
-        .snapshots();
+    final appealsStream = _taskAppealService.streamAppeals(task.taskId);
 
     return Scaffold(
       appBar: AppTopBar(
@@ -28,7 +25,7 @@ class TaskApplicationsPage extends StatelessWidget {
         onBackPressed: () => Navigator.pop(context),
         showNotificationButton: false,
       ),
-      body: StreamBuilder<QuerySnapshot>(
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
         stream: appealsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -61,7 +58,7 @@ class TaskApplicationsPage extends StatelessWidget {
               const SizedBox(height: 20),
 
               ...appeals.map((doc) {
-                final data = doc.data() as Map<String, dynamic>;
+                final data = doc.data();
                 final userId = data['userId'] as String?;
                 final appealText = data['appealText'] ?? '';
                 final createdAt = data['createdAt'];
@@ -174,12 +171,10 @@ class _ApplicationCardState extends State<_ApplicationCard> {
 
 
   Future<void> _decline() async {
-    await FirebaseFirestore.instance
-        .collection('tasks')
-        .doc(widget.task.taskId)
-        .collection('appeals')
-        .doc(widget.appealDocId)
-        .delete();
+    await TaskAppealService().deleteAppeal(
+      taskId: widget.task.taskId,
+      appealDocId: widget.appealDocId,
+    );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

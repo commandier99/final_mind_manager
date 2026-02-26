@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
+import '/shared/modes/mind_set_mode_policy.dart';
 import '../../datasources/models/mind_set_session_model.dart';
 import '../../datasources/services/mind_set_session_service.dart';
 import '../widgets/views/mind_set_active_session_view.dart';
@@ -37,6 +38,15 @@ class _MindSetPageState extends State<MindSetPage> {
                 final activeSession = snapshot.data;
 
                 if (activeSession != null) {
+                  final modePolicy =
+                      MindSetModePolicy.fromMode(activeSession.sessionMode);
+                  if (modePolicy.hidesSessionTimer && _showTimer) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        setState(() => _showTimer = false);
+                      }
+                    });
+                  }
                   return IconButton(
                     icon: const Icon(Icons.more_vert),
                     tooltip: 'Options',
@@ -45,7 +55,9 @@ class _MindSetPageState extends State<MindSetPage> {
                       builder: (context) => MindSetDetailsSettingsForm(
                         showTimer: _showTimer,
                         onTimerToggle: (value) {
-                          setState(() => _showTimer = value);
+                          if (!modePolicy.hidesSessionTimer) {
+                            setState(() => _showTimer = value);
+                          }
                         },
                         taskCountMode: _taskCountMode,
                         onTaskCountModeChange: (value) {
@@ -74,9 +86,9 @@ class _MindSetPageState extends State<MindSetPage> {
                 final activeSession = snapshot.data;
 
                 if (activeSession != null) {
-                  // Auto-hide timer in Pomodoro mode
-                  if (activeSession.sessionMode == 'Pomodoro' &&
-                      _showTimer) {
+                  final modePolicy =
+                      MindSetModePolicy.fromMode(activeSession.sessionMode);
+                  if (modePolicy.hidesSessionTimer && _showTimer) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) {
                         setState(() => _showTimer = false);
@@ -87,8 +99,11 @@ class _MindSetPageState extends State<MindSetPage> {
                   return MindSetActiveSessionView(
                     session: activeSession,
                     showTimer: _showTimer,
-                    onTimerToggle: (value) =>
-                        setState(() => _showTimer = value),
+                    onTimerToggle: (value) {
+                      if (!modePolicy.hidesSessionTimer) {
+                        setState(() => _showTimer = value);
+                      }
+                    },
                     taskCountMode: _taskCountMode,
                   );
                 }

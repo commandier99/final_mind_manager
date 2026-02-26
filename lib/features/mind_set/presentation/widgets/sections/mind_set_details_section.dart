@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:mind_manager_final/shared/modes/mind_set_modes.dart';
 import '../mind_set_timer.dart';
 
 class MindSetDetails extends StatelessWidget {
@@ -23,6 +24,7 @@ class MindSetDetails extends StatelessWidget {
   final int? tasksDoneCount;
   final int? tasksCount;
   final String taskCountMode; // 'progress', 'remaining', 'hidden'
+  final Key? modeDropdownKey;
 
   const MindSetDetails({
     super.key,
@@ -47,6 +49,7 @@ class MindSetDetails extends StatelessWidget {
     this.tasksDoneCount,
     this.tasksCount,
     this.taskCountMode = 'progress',
+    this.modeDropdownKey,
   });
 
   @override
@@ -73,9 +76,7 @@ class MindSetDetails extends StatelessWidget {
                     if (titleController == null)
                       Text(
                         title,
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
+                        style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(fontWeight: FontWeight.bold),
                         overflow: TextOverflow.ellipsis,
                       )
@@ -95,8 +96,7 @@ class MindSetDetails extends StatelessWidget {
                   ],
                 ),
               ),
-              if (primaryActionLabel != null)
-                const SizedBox(width: 12),
+              if (primaryActionLabel != null) const SizedBox(width: 12),
               if (primaryActionLabel != null)
                 primaryActionIcon != null
                     ? FilledButton.icon(
@@ -132,7 +132,11 @@ class MindSetDetails extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           const Divider(thickness: 1),
-          if (timerElapsed != null || (selectedMode != null && onModeChanged != null) || (tasksDoneCount != null && tasksCount != null && taskCountMode != 'hidden')) ...[
+          if (timerElapsed != null ||
+              (selectedMode != null && onModeChanged != null) ||
+              (tasksDoneCount != null &&
+                  tasksCount != null &&
+                  taskCountMode != 'hidden')) ...[
             LayoutBuilder(
               builder: (context, constraints) {
                 const sectionWidth = 125.0;
@@ -146,7 +150,8 @@ class MindSetDetails extends StatelessWidget {
                         alignment: Alignment.topLeft,
                         child: SizedBox(
                           width: sectionWidth,
-                          child: (tasksDoneCount != null &&
+                          child:
+                              (tasksDoneCount != null &&
                                   tasksCount != null &&
                                   taskCountMode != 'hidden')
                               ? Column(
@@ -170,7 +175,9 @@ class MindSetDetails extends StatelessWidget {
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
                                     ),
                                   ],
@@ -212,23 +219,42 @@ class MindSetDetails extends StatelessWidget {
                                         ),
                                         if (!showTimer)
                                           Padding(
-                                            padding: const EdgeInsets.symmetric(vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              vertical: 2,
+                                            ),
                                             child: TextButton.icon(
-                                              onPressed: () => _showElapsedTimeDialog(context, timerElapsed!),
-                                              icon: const Icon(Icons.schedule, size: 14),
-                                              label: const Text('Check', style: TextStyle(fontSize: 11)),
+                                              onPressed: () =>
+                                                  _showElapsedTimeDialog(
+                                                    context,
+                                                    timerElapsed!,
+                                                  ),
+                                              icon: const Icon(
+                                                Icons.schedule,
+                                                size: 14,
+                                              ),
+                                              label: const Text(
+                                                'Check',
+                                                style: TextStyle(fontSize: 11),
+                                              ),
                                               style: TextButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                                                visualDensity: VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 0,
+                                                    ),
+                                                visualDensity:
+                                                    VisualDensity.compact,
                                                 minimumSize: Size.zero,
-                                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                                tapTargetSize:
+                                                    MaterialTapTargetSize
+                                                        .shrinkWrap,
                                               ),
                                             ),
                                           ),
                                       ],
                                     ),
-                                    ],
-                                  )
+                                  ],
+                                )
                               : const SizedBox.shrink(),
                         ),
                       ),
@@ -252,7 +278,8 @@ class MindSetDetails extends StatelessWidget {
                                     SizedBox(
                                       width: sectionWidth,
                                       child: DropdownButtonFormField<String>(
-                                        value: selectedMode,
+                                        key: modeDropdownKey,
+                                        initialValue: selectedMode,
                                         decoration: const InputDecoration(
                                           isDense: true,
                                           contentPadding: EdgeInsets.symmetric(
@@ -261,29 +288,19 @@ class MindSetDetails extends StatelessWidget {
                                           ),
                                           border: OutlineInputBorder(),
                                         ),
-                                        items: const [
-                                          DropdownMenuItem(
-                                            value: 'Checklist',
-                                            child: Text(
-                                              'Checklist',
-                                              style: TextStyle(fontSize: 11),
-                                            ),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'Pomodoro',
-                                            child: Text(
-                                              'Pomodoro',
-                                              style: TextStyle(fontSize: 11),
-                                            ),
-                                          ),
-                                          DropdownMenuItem(
-                                            value: 'Eat the Frog',
-                                            child: Text(
-                                              'Eat the Frog',
-                                              style: TextStyle(fontSize: 11),
-                                            ),
-                                          ),
-                                        ],
+                                        items: MindSetModes.values
+                                            .map(
+                                              (mode) => DropdownMenuItem(
+                                                value: mode,
+                                                child: Text(
+                                                  mode,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                            .toList(),
                                         onChanged: (value) {
                                           if (value != null) {
                                             onModeChanged!(value);
@@ -312,7 +329,7 @@ String _formatDuration(Duration duration) {
   final hours = duration.inHours;
   final minutes = duration.inMinutes.remainder(60);
   final seconds = duration.inSeconds.remainder(60);
-  
+
   if (hours > 0) {
     return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   } else {

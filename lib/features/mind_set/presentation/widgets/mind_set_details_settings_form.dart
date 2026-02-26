@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '/shared/modes/mind_set_mode_policy.dart';
 
 class MindSetDetailsSettingsForm extends StatefulWidget {
   final bool showTimer;
@@ -63,6 +64,11 @@ class _MindSetDetailsSettingsFormState
 
   @override
   Widget build(BuildContext context) {
+    final modePolicy = widget.selectedMode != null
+        ? MindSetModePolicy.fromMode(widget.selectedMode!)
+        : null;
+    final timerLocked = modePolicy?.hidesSessionTimer ?? false;
+
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
@@ -99,13 +105,13 @@ class _MindSetDetailsSettingsFormState
             child: Column(
               children: [
                 Opacity(
-                  opacity: widget.selectedMode == 'Pomodoro' ? 0.5 : 1.0,
+                  opacity: timerLocked ? 0.5 : 1.0,
                   child: AbsorbPointer(
-                    absorbing: widget.selectedMode == 'Pomodoro',
+                    absorbing: timerLocked,
                     child: SwitchListTile(
                       title: const Text('Show Timer'),
-                      subtitle: widget.selectedMode == 'Pomodoro'
-                          ? const Text('Disabled in Pomodoro mode (uses built-in timer)')
+                      subtitle: timerLocked
+                          ? const Text('Disabled in Pomodoro mode (uses focus timer)')
                           : const Text('Display elapsed time during the session'),
                       value: _showTimer,
                       onChanged: (value) {

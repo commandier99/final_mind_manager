@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -249,7 +251,7 @@ class TaskService {
       });
     }
 
-    // For multiple batches, combine the streams
+    // For multiple batches, keep all batch subscriptions live and merge updates.
     final streams = batches.map((batch) {
       return _tasks
           .where(FieldPath.documentId, whereIn: batch)
@@ -270,14 +272,51 @@ class TaskService {
       });
     }).toList();
 
-    // Combine all batch streams into one
-    return streams[0].asyncMap((firstBatch) async {
-      final allTasks = <Task>[...firstBatch];
-      for (var i = 1; i < streams.length; i++) {
-        final batch = await streams[i].first;
-        allTasks.addAll(batch);
+    final idOrder = <String, int>{};
+    for (var i = 0; i < taskIds.length; i++) {
+      idOrder[taskIds[i]] = i;
+    }
+
+    return Stream<List<Task>>.multi((multi) {
+      final latestByBatch = <int, List<Task>>{};
+      final subscriptions = <StreamSubscription<List<Task>>>[];
+
+      void emitMerged() {
+        final merged = <Task>[];
+        for (var i = 0; i < streams.length; i++) {
+          final batchTasks = latestByBatch[i];
+          if (batchTasks != null) {
+            merged.addAll(batchTasks);
+          }
+        }
+
+        merged.sort((a, b) {
+          final ai = idOrder[a.taskId] ?? taskIds.length;
+          final bi = idOrder[b.taskId] ?? taskIds.length;
+          return ai.compareTo(bi);
+        });
+
+        multi.add(merged);
       }
-      return allTasks;
+
+      for (var i = 0; i < streams.length; i++) {
+        final index = i;
+        subscriptions.add(
+          streams[index].listen(
+            (tasks) {
+              latestByBatch[index] = tasks;
+              emitMerged();
+            },
+            onError: multi.addError,
+          ),
+        );
+      }
+
+      multi.onCancel = () async {
+        for (final sub in subscriptions) {
+          await sub.cancel();
+        }
+      };
     });
   }
 

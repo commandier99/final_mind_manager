@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:mind_manager_final/shared/modes/mind_set_modes.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
 import '/features/plans/datasources/services/plan_service.dart';
 import '/features/tasks/datasources/services/task_services.dart';
@@ -211,10 +212,10 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
       sessionId: sessionId,
       sessionUserId: userId,
       sessionType: 'go_with_flow',
-      sessionMode: 'Checklist',
+      sessionMode: MindSetModes.checklist,
       sessionModeHistory: [
         MindSetModeChange(
-          mode: 'Checklist',
+          mode: MindSetModes.checklist,
           changedAt: DateTime.now(),
         ),
       ],

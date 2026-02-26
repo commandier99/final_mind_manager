@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:mind_manager_final/shared/modes/mind_set_modes.dart';
 import 'mind_set_session_stats_model.dart';
 
 class MindSetSession {
@@ -17,6 +18,8 @@ class MindSetSession {
   final DateTime? sessionEndedAt;
   final String? sessionActiveTaskId;
   final List<String> sessionTaskIds;
+  final List<String> sessionWorkedTaskIds;
+  final List<MindSetSessionAction> sessionActions;
   final MindSetSessionStats sessionStats;
 
   const MindSetSession({
@@ -35,11 +38,14 @@ class MindSetSession {
     this.sessionEndedAt,
     this.sessionActiveTaskId,
     this.sessionTaskIds = const [],
+    this.sessionWorkedTaskIds = const [],
+    this.sessionActions = const [],
     required this.sessionStats,
   });
 
   factory MindSetSession.fromMap(Map<String, dynamic> data) {
     final historyData = data['sessionModeHistory'] as List<dynamic>?;
+    final actionsData = data['sessionActions'] as List<dynamic>?;
 
     return MindSetSession(
       sessionId: data['sessionId'] as String,
@@ -72,6 +78,16 @@ class MindSetSession {
           data['sessionActiveTaskId'] as String?,
       sessionTaskIds:
           List<String>.from(data['sessionTaskIds'] ?? const []),
+      sessionWorkedTaskIds:
+          List<String>.from(data['sessionWorkedTaskIds'] ?? const []),
+      sessionActions: actionsData
+              ?.map(
+                (entry) => MindSetSessionAction.fromMap(
+                  Map<String, dynamic>.from(entry as Map),
+                ),
+              )
+              .toList() ??
+          const [],
       sessionStats: MindSetSessionStats.fromMap(
         (data['sessionStats']
                 as Map<String, dynamic>? ??
@@ -103,6 +119,8 @@ class MindSetSession {
           : null,
       'sessionActiveTaskId': sessionActiveTaskId,
       'sessionTaskIds': sessionTaskIds,
+      'sessionWorkedTaskIds': sessionWorkedTaskIds,
+      'sessionActions': sessionActions.map((e) => e.toMap()).toList(),
       'sessionStats': sessionStats.toMap(),
     };
   }
@@ -123,6 +141,8 @@ class MindSetSession {
     DateTime? sessionEndedAt,
     String? sessionActiveTaskId,
     List<String>? sessionTaskIds,
+    List<String>? sessionWorkedTaskIds,
+    List<MindSetSessionAction>? sessionActions,
     MindSetSessionStats? sessionStats,
   }) {
     return MindSetSession(
@@ -151,6 +171,10 @@ class MindSetSession {
           sessionActiveTaskId ?? this.sessionActiveTaskId,
       sessionTaskIds:
           sessionTaskIds ?? this.sessionTaskIds,
+      sessionWorkedTaskIds:
+          sessionWorkedTaskIds ?? this.sessionWorkedTaskIds,
+      sessionActions:
+          sessionActions ?? this.sessionActions,
       sessionStats:
           sessionStats ?? this.sessionStats,
     );
@@ -169,7 +193,7 @@ class MindSetModeChange {
   factory MindSetModeChange.fromMap(
       Map<String, dynamic> data) {
     return MindSetModeChange(
-      mode: data['mode'] as String? ?? 'Checklist',
+      mode: data['mode'] as String? ?? MindSetModes.checklist,
       changedAt:
           (data['changedAt'] as Timestamp?)
                   ?.toDate() ??
@@ -182,6 +206,42 @@ class MindSetModeChange {
       'mode': mode,
       'changedAt':
           Timestamp.fromDate(changedAt),
+    };
+  }
+}
+
+class MindSetSessionAction {
+  final String type; // focus, switch, pause, complete
+  final String taskId;
+  final String mode;
+  final DateTime at;
+  final String? fromTaskId;
+
+  const MindSetSessionAction({
+    required this.type,
+    required this.taskId,
+    required this.mode,
+    required this.at,
+    this.fromTaskId,
+  });
+
+  factory MindSetSessionAction.fromMap(Map<String, dynamic> data) {
+    return MindSetSessionAction(
+      type: data['type'] as String? ?? '',
+      taskId: data['taskId'] as String? ?? '',
+      mode: data['mode'] as String? ?? MindSetModes.checklist,
+      at: (data['at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      fromTaskId: data['fromTaskId'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'type': type,
+      'taskId': taskId,
+      'mode': mode,
+      'at': Timestamp.fromDate(at),
+      'fromTaskId': fromTaskId,
     };
   }
 }

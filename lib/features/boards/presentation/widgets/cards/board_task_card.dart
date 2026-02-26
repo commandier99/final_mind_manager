@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../tasks/datasources/services/task_appeal_service.dart';
 import '../../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../../tasks/presentation/pages/task_applications_page.dart';
 import '../../../../tasks/presentation/widgets/dialogs/edit_task_dialog.dart';
@@ -39,6 +39,7 @@ class BoardTaskCard extends StatefulWidget {
 
 class _BoardTaskCardState extends State<BoardTaskCard> {
   late String _currentUserId;
+  final TaskAppealService _taskAppealService = TaskAppealService();
 
   @override
   void initState() {
@@ -122,25 +123,15 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
   }
 
   Stream<bool> _isUserInterestedStream() {
-    return FirebaseFirestore.instance
-        .collection('tasks')
-        .doc(widget.task.taskId)
-        .collection('appeals')
-        .where('userId', isEqualTo: _currentUserId)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.isNotEmpty);
+    return _taskAppealService.hasUserAppealed(widget.task.taskId, _currentUserId);
   }
 
   Future<void> _submitAppeal(String appealText) async {
-    await FirebaseFirestore.instance
-        .collection('tasks')
-        .doc(widget.task.taskId)
-        .collection('appeals')
-        .add({
-      'userId': _currentUserId,
-      'appealText': appealText,
-      'createdAt': Timestamp.now(),
-    });
+    await _taskAppealService.submitAppeal(
+      taskId: widget.task.taskId,
+      userId: _currentUserId,
+      appealText: appealText,
+    );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -153,16 +144,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
   }
 
   Future<void> _removeAppeal() async {
-    final query = await FirebaseFirestore.instance
-        .collection('tasks')
-        .doc(widget.task.taskId)
-        .collection('appeals')
-        .where('userId', isEqualTo: _currentUserId)
-        .get();
-
-    for (final doc in query.docs) {
-      await doc.reference.delete();
-    }
+    await _taskAppealService.removeUserAppeals(
+      taskId: widget.task.taskId,
+      userId: _currentUserId,
+    );
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

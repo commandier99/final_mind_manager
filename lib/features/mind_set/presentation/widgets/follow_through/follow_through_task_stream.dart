@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/task_card.dart';
+import '../../../../../shared/modes/mind_set_modes.dart';
+import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 
@@ -20,14 +22,14 @@ class FollowThroughTaskStream extends StatefulWidget {
   });
 
   @override
-  State<FollowThroughTaskStream> createState() => _FollowThroughTaskStreamState();
+  State<FollowThroughTaskStream> createState() =>
+      _FollowThroughTaskStreamState();
 }
 
 class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
   final MindSetSessionService _sessionService = MindSetSessionService();
-  bool _isUpdatingFrog = false;
   String _sortBy = 'created_desc'; // format: 'field_direction'
-  
+
   @override
   void initState() {
     super.initState();
@@ -55,106 +57,78 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     return _normalizeStatus(status) == 'IN_PROGRESS';
   }
 
-  bool _isPomodoroMode() {
-    return widget.mode == 'Pomodoro' && widget.session != null;
-  }
+  Future<void> _logSessionAction({
+    required String type,
+    required Task task,
+    Task? fromTask,
+  }) async {
+    final session = widget.session;
+    if (session == null) return;
 
-  bool _isEatTheFrogMode() {
-    return widget.mode == 'Eat the Frog' && widget.session != null;
-  }
+    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
+    final stats = session.sessionStats;
+    final workedTaskIds = session.sessionWorkedTaskIds;
+    final actions = session.sessionActions;
 
-  Task? _findTaskById(List<Task> tasks, String taskId) {
-    for (final task in tasks) {
-      if (task.taskId == taskId) return task;
-    }
-    return null;
-  }
+    var nextStats = stats;
+    var nextWorkedTaskIds = workedTaskIds;
 
-  Future<void> _setFrogTask(Task task) async {
-    if (!_isEatTheFrogMode()) return;
-    final session = widget.session!;
-    if (session.sessionActiveTaskId == task.taskId) return;
-    await _sessionService.updateSession(
-      session.copyWith(sessionActiveTaskId: task.taskId),
-    );
-  }
-
-  Future<void> _clearFrogTask() async {
-    if (!_isEatTheFrogMode()) return;
-    final session = widget.session!;
-    if (session.sessionActiveTaskId == null) return;
-    await _sessionService.updateSession(
-      session.copyWith(sessionActiveTaskId: null),
-    );
-  }
-
-  void _scheduleClearFrogTask() {
-    if (_isUpdatingFrog) return;
-    _isUpdatingFrog = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      try {
-        await _clearFrogTask();
-      } finally {
-        if (mounted) {
-          _isUpdatingFrog = false;
-        }
+    if (type == 'focus' || type == 'switch') {
+      final wasWorked = workedTaskIds.contains(task.taskId);
+      if (!wasWorked) {
+        nextWorkedTaskIds = [...workedTaskIds, task.taskId];
+        nextStats = nextStats.copyWith(
+          tasksWorkedCount: (stats.tasksWorkedCount ?? 0) + 1,
+        );
       }
-    });
-  }
-
-  int _calculateRemainingSeconds(MindSetSession session) {
-    final stats = session.sessionStats;
-    final focusMinutes = stats.pomodoroFocusMinutes;
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-    if (focusMinutes == null || focusMinutes <= 0) return 0;
-    final isOnBreak = stats.pomodoroIsOnBreak ?? false;
-    final isLongBreak = stats.pomodoroIsLongBreak ?? false;
-    final baseRemaining = stats.pomodoroRemainingSeconds ??
-        ((isOnBreak
-                    ? (isLongBreak ? longBreakMinutes : breakMinutes)
-                    : focusMinutes) *
-                60);
-    if (stats.pomodoroIsRunning != true) return baseRemaining;
-    final lastUpdated = stats.pomodoroLastUpdatedAt;
-    if (lastUpdated == null) return baseRemaining;
-    final elapsed = DateTime.now().difference(lastUpdated).inSeconds;
-    final remaining = baseRemaining - elapsed;
-    return remaining < 0 ? 0 : remaining;
-  }
-
-  Future<void> _pausePomodoro() async {
-    if (!_isPomodoroMode()) return;
-    final session = widget.session!;
-    final stats = session.sessionStats;
-    final remaining = _calculateRemainingSeconds(session);
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: false,
-          pomodoroRemainingSeconds: remaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _resumePomodoro() async {
-    if (!_isPomodoroMode()) return;
-    final session = widget.session!;
-    final stats = session.sessionStats;
-    if (stats.pomodoroFocusMinutes == null ||
-        (stats.pomodoroFocusMinutes ?? 0) <= 0) {
-      return;
+      nextStats = nextStats.copyWith(
+        focusCount: (nextStats.focusCount ?? 0) + 1,
+      );
     }
-    final remaining = _calculateRemainingSeconds(session);
+
+    if (type == 'pause') {
+      nextStats = nextStats.copyWith(
+        pauseCount: (nextStats.pauseCount ?? 0) + 1,
+      );
+    }
+
+    if (type == 'switch') {
+      nextStats = nextStats.copyWith(
+        switchCount: (nextStats.switchCount ?? 0) + 1,
+      );
+    }
+
+    if (type == 'complete') {
+      if (runtimeMode == MindSetModes.checklist) {
+        nextStats = nextStats.copyWith(
+          checklistCompletedCount: (nextStats.checklistCompletedCount ?? 0) + 1,
+        );
+      } else if (runtimeMode == MindSetModes.pomodoro) {
+        nextStats = nextStats.copyWith(
+          pomodoroCompletedCount: (nextStats.pomodoroCompletedCount ?? 0) + 1,
+        );
+      } else if (runtimeMode == MindSetModes.eatTheFrog) {
+        nextStats = nextStats.copyWith(
+          eatTheFrogCompletedCount:
+              (nextStats.eatTheFrogCompletedCount ?? 0) + 1,
+        );
+      }
+    }
+
     await _sessionService.updateSession(
       session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: true,
-          pomodoroRemainingSeconds: remaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
+        sessionWorkedTaskIds: nextWorkedTaskIds,
+        sessionActions: [
+          ...actions,
+          MindSetSessionAction(
+            type: type,
+            taskId: task.taskId,
+            mode: runtimeMode,
+            at: DateTime.now(),
+            fromTaskId: fromTask?.taskId,
+          ),
+        ],
+        sessionStats: nextStats,
       ),
     );
   }
@@ -162,23 +136,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
   Future<void> _focusTask(Task task) async {
     if (task.taskIsDone) return;
     if (_isInProgressStatus(task.taskStatus)) return;
-
-    // In Pomodoro mode, check if timer is configured
-    if (_isPomodoroMode()) {
-      final session = widget.session!;
-      final stats = session.sessionStats;
-      if (stats.pomodoroFocusMinutes == null || stats.pomodoroFocusMinutes! <= 0) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please set a Pomodoro timer duration first'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-        return;
-      }
-    }
+    final isPomodoro = MindSetModePolicy.fromMode(widget.mode).isPomodoro;
 
     final taskProvider = context.read<TaskProvider>();
     Task? focusedTask;
@@ -193,67 +151,370 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
 
     if (focusedTask != null) {
       final activeTask = focusedTask;
-      final shouldPause = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Pause current task?'),
-          content: Text(
-            'You can focus on only one task at a time. Pause "${activeTask.taskTitle}" first.',
+      if (!isPomodoro) {
+        final shouldPause = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Pause current task?'),
+            content: Text(
+              'You can focus on only one task at a time. Pause "${activeTask.taskTitle}" first.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Pause Task'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Pause Task'),
-            ),
-          ],
-        ),
-      );
+        );
 
-      if (shouldPause != true) return;
-      await taskProvider.updateTask(
-        activeTask.copyWith(taskStatus: 'Paused'),
-      );
-      await _pausePomodoro();
+        if (shouldPause != true) return;
+      }
+
+      await taskProvider.updateTask(activeTask.copyWith(taskStatus: 'Paused'));
+      await _logSessionAction(type: 'switch', task: task, fromTask: activeTask);
     }
 
-    await taskProvider.updateTask(
-      task.copyWith(taskStatus: 'In Progress'),
+    await taskProvider.updateTask(task.copyWith(taskStatus: 'In Progress'));
+    await _startPomodoroIfNeeded();
+    if (focusedTask == null) {
+      await _logSessionAction(type: 'focus', task: task);
+    }
+  }
+
+  Future<void> _startPomodoroIfNeeded() async {
+    final session = widget.session;
+    if (session == null) return;
+    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
+    if (runtimeMode != MindSetModes.pomodoro) return;
+
+    final stats = session.sessionStats;
+    final alreadyRunningFocus =
+        (stats.pomodoroIsRunning ?? false) &&
+        !(stats.pomodoroIsOnBreak ?? false);
+    if (alreadyRunningFocus) return;
+
+    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
+        ? (stats.pomodoroFocusMinutes ?? 25)
+        : 25;
+    final resumeRemaining =
+        (!(stats.pomodoroIsOnBreak ?? false) &&
+            (stats.pomodoroRemainingSeconds ?? 0) > 0)
+        ? stats.pomodoroRemainingSeconds!
+        : focusMinutes * 60;
+
+    await _sessionService.updateSession(
+      session.copyWith(
+        sessionStats: stats.copyWith(
+          pomodoroIsRunning: true,
+          pomodoroIsOnBreak: false,
+          pomodoroIsLongBreak: false,
+          pomodoroRemainingSeconds: resumeRemaining,
+          pomodoroLastUpdatedAt: DateTime.now(),
+        ),
+      ),
     );
-    await _resumePomodoro();
   }
 
   Future<void> _pauseTask(Task task) async {
     if (!_isInProgressStatus(task.taskStatus)) return;
     final taskProvider = context.read<TaskProvider>();
-    await taskProvider.updateTask(
-      task.copyWith(taskStatus: 'Paused'),
-    );
-    await _pausePomodoro();
+    await taskProvider.updateTask(task.copyWith(taskStatus: 'Paused'));
+    await _logSessionAction(type: 'pause', task: task);
   }
 
   Future<void> _toggleDoneForTask(Task task, bool? isDone) async {
     final taskProvider = context.read<TaskProvider>();
+    final markDone = isDone ?? false;
     await taskProvider.toggleTaskDone(
       task.copyWith(
-        taskIsDone: isDone ?? false,
-        taskStatus: (isDone ?? false) ? 'COMPLETED' : 'To Do',
+        taskIsDone: markDone,
+        taskStatus: markDone ? 'COMPLETED' : 'To Do',
+      ),
+    );
+    if (markDone) {
+      await _logSessionAction(type: 'complete', task: task);
+      await _handlePostCompletion(task);
+    }
+  }
+
+  Future<void> _handlePostCompletion(Task completedTask) async {
+    if (!mounted) return;
+    final taskProvider = context.read<TaskProvider>();
+    final remainingTasks = taskProvider.tasks
+        .where(
+          (task) =>
+              widget.taskIds.contains(task.taskId) &&
+              task.taskId != completedTask.taskId &&
+              !task.taskIsDone,
+        )
+        .toList();
+
+    final sessionId = widget.session?.sessionId;
+    if (remainingTasks.isEmpty) {
+      final sessionTasks = taskProvider.tasks
+          .where((task) => widget.taskIds.contains(task.taskId))
+          .toList();
+      await _showSessionSummaryAndEnd(sessionTasks, sessionId);
+      return;
+    }
+
+    final session = widget.session;
+    final isPomodoro =
+        session != null &&
+        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
+            MindSetModes.pomodoro;
+
+    if (!isPomodoro) {
+      if (!mounted) return;
+      if (MindSetModePolicy.fromMode(widget.mode).isEatTheFrog) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Frog done. Pick your next hardest task.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final endFocusNow = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Focus Session Complete'),
+        content: const Text(
+          'Do you want to end this Pomodoro focus session now?\n\n'
+          'End now: starts break.\n'
+          'Continue working: timer pauses until you select a new task.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Continue Working'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('End Focus Now'),
+          ),
+        ],
       ),
     );
 
-    if (_isEatTheFrogMode() && (isDone ?? false)) {
-      final frogId = widget.session?.sessionActiveTaskId;
-      if (frogId == task.taskId) {
-        await _clearFrogTask();
+    if (endFocusNow == true) {
+      await _startBreakNow();
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Break started.')));
+      return;
+    }
+
+    await _pausePomodoroIfNeeded();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Timer paused. Focus another task to resume.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showSessionSummaryAndEnd(
+    List<Task> sessionTasks,
+    String? sessionId,
+  ) async {
+    final session = widget.session;
+    if (session == null || !mounted) return;
+
+    final now = DateTime.now();
+    final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
+    final duration = now.difference(startedAt);
+    final tasksTotal = sessionTasks.length;
+    final tasksDone = sessionTasks.where((task) => task.taskIsDone).length;
+    final completionRate = tasksTotal == 0
+        ? 100
+        : ((tasksDone / tasksTotal) * 100).round();
+
+    final shouldFinish = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Session Successful'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Time spent: ${_formatDuration(duration)}'),
+            Text('Tasks completed: $tasksDone/$tasksTotal'),
+            Text('Completion rate: $completionRate%'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep Session Open'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('End Session'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldFinish != true) return;
+
+    await _sessionService.updateSession(
+      session.copyWith(
+        sessionStatus: 'completed',
+        sessionEndedAt: now,
+        sessionStats: session.sessionStats.copyWith(
+          tasksTotalCount: tasksTotal,
+          tasksDoneCount: tasksDone,
+          sessionFocusDurationMinutes: duration.inMinutes,
+          sessionFocusDurationSeconds: duration.inSeconds,
+          pomodoroIsRunning: false,
+        ),
+      ),
+    );
+    if (sessionId != null) {
+      await _sessionService.endSession(sessionId, now);
+    }
+  }
+
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _startBreakNow() async {
+    final session = widget.session;
+    if (session == null) return;
+    final stats = session.sessionStats;
+    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
+    if (runtimeMode != MindSetModes.pomodoro) return;
+
+    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
+    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
+    final targetCount = stats.pomodoroTargetCount ?? 4;
+    final completedCount = stats.pomodoroCount ?? 0;
+
+    final nextCompleted = completedCount + 1;
+    final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
+    final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;
+
+    await _sessionService.updateSession(
+      session.copyWith(
+        sessionStats: stats.copyWith(
+          pomodoroCount: nextCompleted,
+          pomodoroIsRunning: true,
+          pomodoroIsOnBreak: true,
+          pomodoroIsLongBreak: isLongBreak,
+          pomodoroRemainingSeconds: nextBreakMinutes * 60,
+          pomodoroLastUpdatedAt: DateTime.now(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pausePomodoroIfNeeded() async {
+    final session = widget.session;
+    if (session == null) return;
+    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
+    if (runtimeMode != MindSetModes.pomodoro) return;
+
+    final stats = session.sessionStats;
+    if (!(stats.pomodoroIsRunning ?? false)) return;
+
+    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
+        ? (stats.pomodoroFocusMinutes ?? 25)
+        : 25;
+    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
+    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
+
+    final fallbackRemaining =
+        ((stats.pomodoroIsOnBreak ?? false)
+            ? ((stats.pomodoroIsLongBreak ?? false)
+                  ? longBreakMinutes
+                  : breakMinutes)
+            : focusMinutes) *
+        60;
+    final baseRemaining = (stats.pomodoroRemainingSeconds ?? 0) > 0
+        ? stats.pomodoroRemainingSeconds!
+        : fallbackRemaining;
+    final lastUpdated = stats.pomodoroLastUpdatedAt;
+    final elapsed = lastUpdated == null
+        ? 0
+        : DateTime.now().difference(lastUpdated).inSeconds;
+    final nextRemaining = (baseRemaining - elapsed)
+        .clamp(0, baseRemaining)
+        .toInt();
+
+    await _sessionService.updateSession(
+      session.copyWith(
+        sessionStats: stats.copyWith(
+          pomodoroIsRunning: false,
+          pomodoroRemainingSeconds: nextRemaining,
+          pomodoroLastUpdatedAt: DateTime.now(),
+        ),
+      ),
+    );
+  }
+
+  int _priorityToInt(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'low':
+        return 1;
+      case 'medium':
+        return 2;
+      case 'high':
+        return 3;
+      default:
+        return 0;
+    }
+  }
+
+  Task? _resolveFrogTask(List<Task> tasks) {
+    for (final task in tasks) {
+      if (_isInProgressStatus(task.taskStatus)) {
+        return task;
       }
     }
+
+    final candidates = tasks.where((task) => !task.taskIsDone).toList();
+    if (candidates.isEmpty) return null;
+
+    candidates.sort((a, b) {
+      final priority = _priorityToInt(
+        b.taskPriorityLevel,
+      ).compareTo(_priorityToInt(a.taskPriorityLevel));
+      if (priority != 0) return priority;
+
+      final aDeadline = a.taskDeadline ?? DateTime(2099);
+      final bDeadline = b.taskDeadline ?? DateTime(2099);
+      final deadline = aDeadline.compareTo(bDeadline);
+      if (deadline != 0) return deadline;
+
+      return a.taskCreatedAt.compareTo(b.taskCreatedAt);
+    });
+
+    return candidates.first;
   }
 
   @override
   Widget build(BuildContext context) {
+    final modePolicy = MindSetModePolicy.fromMode(widget.mode);
+    final isPomodoroBreak =
+        modePolicy.isPomodoro &&
+        (widget.session?.sessionStats.pomodoroIsOnBreak ?? false);
+
     return Column(
       children: [
         Padding(
@@ -265,28 +526,29 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                 children: [
                   const Text(
                     'Tasks',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Container(
-                      height: 1,
-                      color: Colors.grey[300],
-                    ),
+                    child: Container(height: 1, color: Colors.grey[300]),
                   ),
                   const SizedBox(width: 4),
                   PopupMenuButton<String>(
                     tooltip: 'Filter',
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         border: Border.all(color: Colors.grey[300]!),
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Icon(Icons.filter_list, size: 16, color: Colors.grey[700]),
+                      child: Icon(
+                        Icons.filter_list,
+                        size: 16,
+                        color: Colors.grey[700],
+                      ),
                     ),
                     onSelected: (value) {
                       // TODO: Implement filter
@@ -300,7 +562,10 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey[300]!),
                       borderRadius: BorderRadius.circular(6),
@@ -310,7 +575,11 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                       child: InkWell(
                         onTap: () => _showSortMenu(),
                         borderRadius: BorderRadius.circular(4),
-                        child: Icon(Icons.swap_vert, size: 16, color: Colors.grey[700]),
+                        child: Icon(
+                          Icons.swap_vert,
+                          size: 16,
+                          color: Colors.grey[700],
+                        ),
                       ),
                     ),
                   ),
@@ -333,118 +602,121 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                     padding: EdgeInsets.all(4.0),
                     child: Text(
                       'This plan has no tasks yet.',
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
+                      style: TextStyle(fontSize: 16, color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
                   ),
                 );
               }
 
-              final tasks = _sortTasksByPlan(taskProvider.tasks, widget.taskIds);
-
-              final isEatTheFrog = _isEatTheFrogMode();
-              final frogId = widget.session?.sessionActiveTaskId;
-              Task? frogTask;
-              if (isEatTheFrog && frogId != null) {
-                frogTask = _findTaskById(tasks, frogId);
-                if (frogTask == null || frogTask.taskIsDone) {
-                  _scheduleClearFrogTask();
+              final tasks = _sortTasksByPlan(
+                taskProvider.tasks,
+                widget.taskIds,
+              );
+              final isSessionActive = widget.session?.sessionStatus == 'active';
+              final visibleTasks = tasks;
+              Task? focusedTask;
+              for (final task in visibleTasks) {
+                if (_isInProgressStatus(task.taskStatus)) {
+                  focusedTask = task;
+                  break;
                 }
               }
+              final hasFocusedTask = focusedTask != null;
+              final modeVisibleTasks = visibleTasks
+                  .where(
+                    (task) => modePolicy.taskVisible(
+                      hasFocusedTask: hasFocusedTask,
+                      isTaskFocused: _isInProgressStatus(task.taskStatus),
+                    ),
+                  )
+                  .toList();
+              final frogTask = modePolicy.isEatTheFrog
+                  ? _resolveFrogTask(modeVisibleTasks)
+                  : null;
+              final displayTasks = modePolicy.isEatTheFrog && hasFocusedTask
+                  ? (frogTask == null ? <Task>[] : <Task>[frogTask])
+                  : modeVisibleTasks;
 
-              final visibleTasks = isEatTheFrog
-                  ? (frogId == null
-                      ? tasks
-                      : (frogTask == null ? <Task>[] : <Task>[frogTask]))
-                  : tasks;
-
-              if (visibleTasks.isEmpty) {
-                final emptyMessage = isEatTheFrog && frogId != null
-                    ? 'Frog completed. Pick your next one.'
-                    : 'No tasks found for this plan.';
+              if (displayTasks.isEmpty) {
+                const emptyMessage = 'No tasks found for this plan.';
                 return Center(
                   child: Padding(
                     padding: const EdgeInsets.all(4.0),
                     child: Text(
                       emptyMessage,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
+                      style: const TextStyle(fontSize: 16, color: Colors.grey),
                       textAlign: TextAlign.center,
                     ),
                   ),
                 );
               }
 
-              final isChecklist = widget.mode == 'Checklist';
-              final isPomodoro = widget.mode == 'Pomodoro';
-
               return Column(
                 children: [
-                  if (isEatTheFrog)
+                  if (modePolicy.isEatTheFrog)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
                       child: Text(
-                        frogId == null
-                            ? 'Pick your Frog: choose the hardest task and focus on only that one.'
-                            : 'Frog locked: finish it before moving to the next.',
-                        style: const TextStyle(
+                        hasFocusedTask
+                            ? 'Work on this until you are done.\nOther tasks are hidden to keep focus.'
+                            : 'Pick your next frog task.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.green.shade700,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  if (modePolicy.isChecklist)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 2, 16, 8),
+                      child: Text(
+                        'Focus on one task at a time. You can pause and switch tasks, then mark each one done while focused.',
+                        style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey,
+                          fontWeight: FontWeight.w600,
                         ),
                         textAlign: TextAlign.center,
                       ),
                     ),
                   Expanded(
                     child: ListView.builder(
-                      itemCount: visibleTasks.length,
+                      itemCount: displayTasks.length,
                       itemBuilder: (context, index) {
-                        final task = visibleTasks[index];
-                        final canComplete =
-                            isChecklist && _isInProgressStatus(task.taskStatus);
-                        final canPickFrog = isEatTheFrog && frogId == null;
+                        final task = displayTasks[index];
+                        final isFocused = _isInProgressStatus(task.taskStatus);
+                        final canFocus = modePolicy.canFocusTask(
+                          isSessionActive: isSessionActive,
+                          hasFocusedTask: hasFocusedTask,
+                          isTaskFocused: isFocused,
+                        );
+                        final canPause = modePolicy.canPauseTask(
+                          isSessionActive: isSessionActive,
+                          isTaskFocused: isFocused,
+                        );
+                        final canToggleDone =
+                            isSessionActive &&
+                            modePolicy.doneAllowedOnTask(isFocused: isFocused);
                         final isFrogTask =
-                            isEatTheFrog && frogId == task.taskId;
+                            frogTask != null && frogTask.taskId == task.taskId;
 
                         return TaskCard(
                           task: task,
-                          showFocusAction: (isChecklist || isPomodoro) ||
-                              (isEatTheFrog && (canPickFrog || isFrogTask)),
-                          showFocusInMainRow: (isChecklist || isPomodoro) ||
-                              (isEatTheFrog && (canPickFrog || isFrogTask)),
-                          showCheckboxWhenFocusedOnly: isChecklist,
+                          showFocusAction:
+                              !isPomodoroBreak && (canFocus || canPause),
+                          showFocusInMainRow: true,
+                          showCheckboxWhenFocusedOnly: true,
                           useStatusColor: true,
-                          isPomodoroMode: isPomodoro,
-                          onFocus: (isChecklist || isPomodoro)
-                              ? () => _focusTask(task)
-                              : (isEatTheFrog
-                                  ? () async {
-                                      if (canPickFrog) {
-                                        await _setFrogTask(task);
-                                      }
-                                      await _focusTask(task);
-                                    }
-                                  : null),
-                          onPause: (isChecklist || isPomodoro)
-                              ? () => _pauseTask(task)
-                              : (isEatTheFrog && isFrogTask
-                                  ? () => _pauseTask(task)
-                                  : null),
-                          onToggleDone: isEatTheFrog
-                              ? (isFrogTask
-                                  ? (isDone) => _toggleDoneForTask(task, isDone)
-                                  : null)
-                              : (isChecklist
-                                  ? (canComplete
-                                      ? (isDone) =>
-                                          _toggleDoneForTask(task, isDone)
-                                      : null)
-                                  : (isDone) =>
-                                      _toggleDoneForTask(task, isDone)),
+                          isPomodoroMode: modePolicy.isPomodoro,
+                          showFrogBadge: isFrogTask,
+                          onFocus: canFocus ? () => _focusTask(task) : null,
+                          onPause: canPause ? () => _pauseTask(task) : null,
+                          onToggleDone: canToggleDone
+                              ? (isDone) => _toggleDoneForTask(task, isDone)
+                              : null,
                         );
                       },
                     ),
@@ -475,41 +747,36 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     return _applySorting(sorted);
   }
 
-  int _priorityToInt(String priority) {
-    switch (priority.toLowerCase()) {
-      case 'low':
-        return 1;
-      case 'medium':
-        return 2;
-      case 'high':
-        return 3;
-      default:
-        return 0;
-    }
-  }
-
   List<Task> _applySorting(List<Task> tasks) {
     final sorted = [...tasks];
-    
+
     try {
       switch (_sortBy) {
         case 'priority_asc':
-          sorted.sort((a, b) => _priorityToInt(a.taskPriorityLevel)
-              .compareTo(_priorityToInt(b.taskPriorityLevel)));
+          sorted.sort(
+            (a, b) => _priorityToInt(
+              a.taskPriorityLevel,
+            ).compareTo(_priorityToInt(b.taskPriorityLevel)),
+          );
           break;
         case 'priority_desc':
-          sorted.sort((a, b) => _priorityToInt(b.taskPriorityLevel)
-              .compareTo(_priorityToInt(a.taskPriorityLevel)));
+          sorted.sort(
+            (a, b) => _priorityToInt(
+              b.taskPriorityLevel,
+            ).compareTo(_priorityToInt(a.taskPriorityLevel)),
+          );
           break;
         case 'alphabetical_asc':
-          sorted.sort((a, b) => a.taskTitle
-              .toLowerCase()
-              .compareTo(b.taskTitle.toLowerCase()));
+          sorted.sort(
+            (a, b) =>
+                a.taskTitle.toLowerCase().compareTo(b.taskTitle.toLowerCase()),
+          );
           break;
         case 'alphabetical_desc':
-          sorted.sort((a, b) => b.taskTitle
-              .toLowerCase()
-              .compareTo(a.taskTitle.toLowerCase()));
+          sorted.sort(
+            (a, b) =>
+                b.taskTitle.toLowerCase().compareTo(a.taskTitle.toLowerCase()),
+          );
           break;
         case 'created_asc':
           sorted.sort((a, b) => a.taskCreatedAt.compareTo(b.taskCreatedAt));

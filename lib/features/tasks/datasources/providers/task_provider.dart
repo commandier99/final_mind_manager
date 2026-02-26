@@ -255,6 +255,9 @@ class TaskProvider extends ChangeNotifier {
   }
 
   Future<void> updateTask(Task task) async {
+    var existingIndex = -1;
+    Task? previousTask;
+
     try {
       print(
         '[DEBUG] TaskProvider: updateTask called for taskId = ${task.taskId}',
@@ -264,12 +267,26 @@ class TaskProvider extends ChangeNotifier {
         taskStats: task.taskStats,
       );
 
+      // Optimistic local update for immediate UI feedback.
+      existingIndex = _tasks.indexWhere((t) => t.taskId == updatedTask.taskId);
+      if (existingIndex != -1) {
+        previousTask = _tasks[existingIndex];
+        _tasks[existingIndex] = updatedTask;
+        notifyListeners();
+      }
+
       // Update task in tasks collection using TaskService
       await _taskService.updateTask(updatedTask);
 
-      print('✅ Task ${updatedTask.taskId} updated successfully');
+      print('[DEBUG] TaskProvider: Task ${updatedTask.taskId} updated successfully');
     } catch (e) {
-      print('⚠️ Error updating task: $e');
+      // Roll back optimistic local update if write fails.
+      if (existingIndex != -1 && previousTask != null && existingIndex < _tasks.length) {
+        _tasks[existingIndex] = previousTask;
+        notifyListeners();
+      }
+      print('[DEBUG] TaskProvider: Error updating task: $e');
+      rethrow;
     }
   }
 

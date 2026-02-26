@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:mind_manager_final/shared/modes/mind_set_modes.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
@@ -27,7 +28,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   final _whyController = TextEditingController();
   final MindSetSessionService _sessionService = MindSetSessionService();
 
-  String _selectedMode = 'Checklist';
+  String _selectedMode = MindSetModes.checklist;
   String _flowStyle = 'shuffle'; // shuffle or list
   bool _isSaving = false;
   String? _selectedPlanId;
@@ -183,23 +184,17 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'Checklist',
-                    child: Text('Checklist'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Pomodoro',
-                    child: Text('Pomodoro'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Eat the Frog',
-                    child: Text('Eat the Frog'),
-                  ),
-                ],
+                items: MindSetModes.values
+                    .map(
+                      (mode) => DropdownMenuItem(
+                        value: mode,
+                        child: Text(mode),
+                      ),
+                    )
+                    .toList(),
                 onChanged: (value) {
                   setState(() {
-                    _selectedMode = value ?? 'Checklist';
+                    _selectedMode = value ?? MindSetModes.checklist;
                   });
                 },
               ),
@@ -447,19 +442,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   }
 
   String _mapPlanStyleToMode(String style) {
-    switch (style) {
-      case 'pomodoro':
-      case 'Pomodoro':
-        return 'Pomodoro';
-      case 'eat_the_frog':
-      case 'Eat the Frog':
-        return 'Eat the Frog';
-      case 'quick_todo':
-      case 'Checklist':
-        return 'Checklist';
-      default:
-        return _selectedMode;
-    }
+    return MindSetModes.normalizeFromPlanStyle(style, fallback: _selectedMode);
   }
 
   Future<void> _createSession() async {
