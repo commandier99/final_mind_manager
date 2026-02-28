@@ -21,6 +21,10 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
   final TextEditingController _searchController = TextEditingController();
   SearchProvider? _searchProvider;
 
+  bool get _canAddMembersToThisBoard {
+    return widget.board.boardType == 'team';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -96,6 +100,32 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
   }
 
   Widget _buildUserResults() {
+    if (!_canAddMembersToThisBoard) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.lock_outline, size: 52, color: Colors.grey),
+              const SizedBox(height: 12),
+              const Text(
+                'Members are disabled for this board type.',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Switch this board type to Team to invite members.',
+                style: TextStyle(color: Colors.grey.shade700),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Consumer<SearchProvider>(
       builder: (context, searchProvider, _) {
         if (searchProvider.isLoadingUsers) {
@@ -234,6 +264,19 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
   }
 
   void _handleAddMember(UserModel user) async {
+    if (!_canAddMembersToThisBoard) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Only Team boards can add members.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     // Check if user is already a member
     if (widget.board.memberIds.contains(user.userId)) {
       if (mounted) {

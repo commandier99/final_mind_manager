@@ -21,29 +21,28 @@ import 'shared/features/users/datasources/providers/activity_event_provider.dart
 import 'features/tasks/datasources/providers/upload_progress_provider.dart';
 import 'features/notifications/datasources/providers/in_app_notif_provider.dart';
 import 'features/notifications/datasources/providers/push_notif_provider.dart';
+import 'features/suggestions/datasources/providers/suggestion_provider.dart';
 import 'shared/services/firebase_messaging_service.dart';
 import 'shared/utilities/cloudinary_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize permission handler
   await Permission.notification.isDenied.then((isDenied) {
     if (isDenied) {
       print('[main.dart] Notification permission is denied');
     }
   });
-  
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   // Initialize Firebase Messaging
   await FirebaseMessagingService().initialize();
-  
+
   // Initialize Cloudinary for file uploads
   CloudinaryService().initialize();
-  
+
   runApp(const MyApp());
 }
 
@@ -65,6 +64,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BoardRequestProvider()),
         ChangeNotifierProvider(create: (_) => InAppNotificationProvider()),
         ChangeNotifierProvider(create: (_) => PushNotificationProvider()),
+        ChangeNotifierProvider(create: (_) => SuggestionProvider()),
         ChangeNotifierProvider(create: (_) => ActivityEventProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => UploadProgressProvider()),
@@ -74,7 +74,9 @@ class MyApp extends StatelessWidget {
             // Connect AuthenticationProvider to UserProvider via callback
             if (authProvider != null) {
               authProvider.onUserAuthenticated = (userId) {
-                print('[DEBUG] main.dart: onUserAuthenticated callback triggered for userId: $userId');
+                print(
+                  '[DEBUG] main.dart: onUserAuthenticated callback triggered for userId: $userId',
+                );
                 userProvider.loadUserData(userId);
                 // Register FCM token for user
                 FirebaseMessagingService().registerTokenForUser(userId);
@@ -102,4 +104,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-

@@ -11,12 +11,14 @@ class AddTaskToBoardDialog extends StatefulWidget {
   final String userId;
   final Board board;
   final ValueChanged<String>? onTaskCreated;
+  final bool asSheet;
 
   const AddTaskToBoardDialog({
     super.key,
     required this.userId,
     required this.board,
     this.onTaskCreated,
+    this.asSheet = false,
   });
 
   @override
@@ -24,7 +26,11 @@ class AddTaskToBoardDialog extends StatefulWidget {
 }
 
 class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
+  static const String _laneWorkshop = 'workshop';
+  static const String _laneBillboard = 'billboard';
+
   String _priorityLevel = 'Low';
+  String _taskBoardLane = _laneWorkshop;
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   DateTime? _deadline;
@@ -38,7 +44,6 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   Map<String, String> _boardMembers = {};
   bool _loadingMembers = true;
   String _currentUserName = 'Unknown'; // Store current user's name
-  bool _isLoading = false; // Loading state for task creation
 
   static const List<String> _daysOfWeek = [
     'Monday',
@@ -53,6 +58,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   @override
   void initState() {
     super.initState();
+    if (widget.board.boardType == 'personal') {
+      _taskBoardLane = _laneBillboard;
+    }
     _loadBoardMembers();
   }
 
@@ -108,7 +116,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         _assignedToUserId = members.keys.first;
         _assignedToUserName = members.values.first;
       } else {
-        _assignedToUserId = null;  // Default to None for multi-member boards
+        _assignedToUserId = null; // Default to None for multi-member boards
         _assignedToUserName = null;
       }
       _loadingMembers = false;
@@ -141,8 +149,6 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   }
 
   Future<void> _submit() async {
-    setState(() => _isLoading = true);
-    
     // Show loading modal
     if (mounted) {
       showDialog(
@@ -191,11 +197,11 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           _deadlineTime!.minute,
         );
       }
-      
+
       // Debug logging
-      print('📋 [TaskDialog] Creating task with deadline: $finalDeadline');
+      print('?? [TaskDialog] Creating task with deadline: $finalDeadline');
       if (finalDeadline == null) {
-        print('⚠️ [TaskDialog] No deadline set for this task');
+        print('?? [TaskDialog] No deadline set for this task');
       }
 
       // Convert repeat time to HH:mm format
@@ -228,22 +234,33 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskStatus: 'To Do',
         taskRequiresApproval: false,
         taskIsRepeating: _isRepeating,
-        taskRepeatInterval: _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
+        taskRepeatInterval: _repeatDays.isNotEmpty
+            ? _repeatDays.join(',')
+            : null,
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: repeatTimeStr,
+        taskBoardLane: widget.board.boardType == 'personal'
+            ? _laneBillboard
+            : _taskBoardLane,
         // Set acceptance status to null if self-assigned (single member boards), pending otherwise
-        taskAcceptanceStatus: _assignedToUserId == widget.userId ? null : (_assignedToUserId != null ? 'pending' : null),
+        taskAcceptanceStatus: _assignedToUserId == widget.userId
+            ? null
+            : (_assignedToUserId != null ? 'pending' : null),
       );
 
       // Pass the selected member for assignment notification, not the task itself
-      await taskProvider.addTask(newTask, selectedAssigneeId: _assignedToUserId, selectedAssigneeName: _assignedToUserName);
+      await taskProvider.addTask(
+        newTask,
+        selectedAssigneeId: _assignedToUserId,
+        selectedAssigneeName: _assignedToUserName,
+      );
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {
         Navigator.pop(context); // Close loading modal
         Navigator.pop(context); // Close dialog
-        
+
         // Show snackbar after dialogs are closed and widget tree is stable
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -262,15 +279,13 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
       if (mounted) {
         // Close loading modal only
         Navigator.pop(context);
-        setState(() => _isLoading = false);
-        
         // Close dialog after a brief delay to ensure stable widget tree
         Future.delayed(const Duration(milliseconds: 100), () {
           if (mounted) {
             Navigator.pop(context);
           }
         });
-        
+
         // Show error snackbar after dialog is closed
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
@@ -288,11 +303,11 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text('Add Task to ${widget.board.boardTitle}'),
-      content: SingleChildScrollView(
+    final formContent = SingleChildScrollView(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 650),
+          constraints: widget.asSheet
+              ? const BoxConstraints()
+              : const BoxConstraints(minWidth: 650),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -335,17 +350,58 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                     DropdownMenuItem(value: 'Medium', child: Text('Medium')),
                     DropdownMenuItem(value: 'High', child: Text('High')),
                   ],
-                  onChanged:
-                      (val) => setState(() => _priorityLevel = val ?? 'Low'),
+                  onChanged: (val) =>
+                      setState(() => _priorityLevel = val ?? 'Low'),
                 ),
               ),
               const SizedBox(height: 12),
+              if (widget.board.boardType == 'team') ...[
+                const Text(
+                  'Where should this task go?',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Drafts'),
+                        selected: _taskBoardLane == _laneWorkshop,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() => _taskBoardLane = _laneWorkshop);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Published'),
+                        selected: _taskBoardLane == _laneBillboard,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() => _taskBoardLane = _laneBillboard);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _taskBoardLane == _laneWorkshop
+                      ? 'Drafts keeps this task in manager prep mode.'
+                      : 'Published makes this task visible to members now.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (!_loadingMembers && _boardMembers.isNotEmpty) ...[
                 // Show dropdown for:
                 // - Team boards with any number of members (even 1, to prepare for future members)
                 // - Multi-member boards
                 // Hide dropdown only for personal boards with 1 member
-                if (widget.board.boardType == 'team' || _boardMembers.length > 1)
+                if (widget.board.boardType == 'team' ||
+                    _boardMembers.length > 1)
                   Padding(
                     padding: const EdgeInsets.only(right: 8.0),
                     child: DropdownButtonFormField<String?>(
@@ -371,7 +427,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                       onChanged: (val) {
                         setState(() {
                           _assignedToUserId = val;
-                          _assignedToUserName = val != null ? _boardMembers[val] : null;
+                          _assignedToUserName = val != null
+                              ? _boardMembers[val]
+                              : null;
                         });
                       },
                     ),
@@ -426,18 +484,17 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
-                    onPressed:
-                        _deadline == null
-                            ? null
-                            : () async {
-                              final picked = await showTimePicker(
-                                context: context,
-                                initialTime: _deadlineTime ?? TimeOfDay.now(),
-                              );
-                              if (picked != null) {
-                                setState(() => _deadlineTime = picked);
-                              }
-                            },
+                    onPressed: _deadline == null
+                        ? null
+                        : () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: _deadlineTime ?? TimeOfDay.now(),
+                            );
+                            if (picked != null) {
+                              setState(() => _deadlineTime = picked);
+                            }
+                          },
                     icon: const Icon(Icons.access_time),
                     label: Text(
                       _deadlineTime == null
@@ -465,33 +522,32 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children:
-                        _daysOfWeek
-                            .map(
-                              (day) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(day.substring(0, 3)),
-                                  selected: _repeatDays.contains(day),
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        _repeatDays.add(day);
-                                        // Sort days by week order
-                                        _repeatDays.sort(
-                                          (a, b) =>
-                                              _daysOfWeek.indexOf(a) -
-                                              _daysOfWeek.indexOf(b),
-                                        );
-                                      } else {
-                                        _repeatDays.remove(day);
-                                      }
-                                    });
-                                  },
-                                ),
-                              ),
-                            )
-                            .toList(),
+                    children: _daysOfWeek
+                        .map(
+                          (day) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(day.substring(0, 3)),
+                              selected: _repeatDays.contains(day),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    _repeatDays.add(day);
+                                    // Sort days by week order
+                                    _repeatDays.sort(
+                                      (a, b) =>
+                                          _daysOfWeek.indexOf(a) -
+                                          _daysOfWeek.indexOf(b),
+                                    );
+                                  } else {
+                                    _repeatDays.remove(day);
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -542,18 +598,85 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             ],
           ),
         ),
+    );
+
+    final actions = <Widget>[
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+      ElevatedButton.icon(
+        onPressed: _submit,
+        icon: const Icon(Icons.add),
+        label: const Text('Add Task'),
+      ),
+    ];
+
+    if (!widget.asSheet) {
+      return AlertDialog(
+        title: Text('Add Task to ${widget.board.boardTitle}'),
+        content: formContent,
+        actions: actions,
+      );
+    }
+
+    return SafeArea(
+      child: Material(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.92,
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Add Task to ${widget.board.boardTitle}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: formContent,
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ...actions,
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        ElevatedButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.add),
-          label: const Text('Add Task'),
-        ),
-      ],
+      ),
     );
   }
 }

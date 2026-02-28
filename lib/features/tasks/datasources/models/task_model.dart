@@ -23,7 +23,8 @@ class Task {
   final DateTime? taskDeadline;
   final bool taskDeadlineMissed; // Whether the deadline was missed
   final int taskExtensionCount; // How many times deadline was extended
-  final DateTime? taskReminderSentAt; // When deadline reminder was sent (to prevent duplicates)
+  final DateTime?
+  taskReminderSentAt; // When deadline reminder was sent (to prevent duplicates)
 
   final bool taskIsDone;
   final DateTime? taskIsDoneAt;
@@ -33,8 +34,7 @@ class Task {
   final TaskStats taskStats; // TaskStats model for task stats
 
   // Status field - tracks task workflow state (core statuses only)
-  final String
-  taskStatus; // e.g. 'To Do', 'In Progress', 'Paused', 'Completed'
+  final String taskStatus; // e.g. 'To Do', 'In Progress', 'Paused', 'Completed'
 
   // Approval fields - optional, only used if task requires approval
   final bool taskRequiresApproval; // Whether this task needs approval
@@ -45,11 +45,17 @@ class Task {
   final String? taskRepeatInterval; // Repeat interval (e.g., "daily", "weekly")
   final DateTime? taskRepeatEndDate; // End date for repeating
   final DateTime? taskNextRepeatDate; // Date for the next repeat
-  final String? taskRepeatTime; // Time of day for repeat (HH:mm format, e.g., "14:30")
+  final String?
+  taskRepeatTime; // Time of day for repeat (HH:mm format, e.g., "14:30")
 
   // Acceptance status for assigned tasks
   final String?
   taskAcceptanceStatus; // 'pending', 'accepted', 'declined', null for self-assigned
+
+  // Board task lane:
+  // - 'workshop': manager draft/prep space
+  // - 'billboard': member-facing published task
+  final String taskBoardLane;
 
   Task({
     required this.taskId,
@@ -83,6 +89,7 @@ class Task {
     this.taskNextRepeatDate,
     this.taskRepeatTime,
     this.taskAcceptanceStatus,
+    this.taskBoardLane = 'billboard',
   });
 
   // Helper to map legacy Firestore statuses to core statuses
@@ -118,12 +125,18 @@ class Task {
     if (taskIsDone || taskDeadline == null) return false;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final deadlineDay = DateTime(taskDeadline!.year, taskDeadline!.month, taskDeadline!.day);
+    final deadlineDay = DateTime(
+      taskDeadline!.year,
+      taskDeadline!.month,
+      taskDeadline!.day,
+    );
     return deadlineDay == today;
   }
 
   bool get isDueUpcoming {
-    if (taskIsDone || taskDeadline == null || isOverdue || isDueToday) return false;
+    if (taskIsDone || taskDeadline == null || isOverdue || isDueToday) {
+      return false;
+    }
     return DateTime.now().isBefore(taskDeadline!);
   }
 
@@ -152,20 +165,21 @@ class Task {
       taskIsDone: data['taskIsDone'] as bool? ?? false,
       taskIsDoneAt: (data['taskIsDoneAt'] as Timestamp?)?.toDate(),
       taskFailed: data['taskFailed'] as bool? ?? false,
-      taskStats:
-          data['taskStats'] != null
-              ? TaskStats.fromMap(Map<String, dynamic>.from(data['taskStats']))
-              : TaskStats(), // Fallback to empty TaskStats if null
-      taskStatus: _mapStatusFromFirestore(data['taskStatus'] as String? ?? 'To Do'),
+      taskStats: data['taskStats'] != null
+          ? TaskStats.fromMap(Map<String, dynamic>.from(data['taskStats']))
+          : TaskStats(), // Fallback to empty TaskStats if null
+      taskStatus: _mapStatusFromFirestore(
+        data['taskStatus'] as String? ?? 'To Do',
+      ),
       taskRequiresApproval: data['taskRequiresApproval'] as bool? ?? false,
       taskSubmissionId: data['taskSubmissionId'] as String?,
       taskIsRepeating: data['taskIsRepeating'] as bool? ?? false,
       taskRepeatInterval: data['taskRepeatInterval'] as String?,
       taskRepeatEndDate: (data['taskRepeatEndDate'] as Timestamp?)?.toDate(),
-      taskNextRepeatDate:
-          (data['taskNextRepeatDate'] as Timestamp?)?.toDate(),
+      taskNextRepeatDate: (data['taskNextRepeatDate'] as Timestamp?)?.toDate(),
       taskRepeatTime: data['taskRepeatTime'] as String?,
       taskAcceptanceStatus: data['taskAcceptanceStatus'] as String?,
+      taskBoardLane: data['taskBoardLane'] as String? ?? 'billboard',
     );
   }
 
@@ -209,6 +223,7 @@ class Task {
       if (taskRepeatTime != null) 'taskRepeatTime': taskRepeatTime,
       if (taskAcceptanceStatus != null)
         'taskAcceptanceStatus': taskAcceptanceStatus,
+      'taskBoardLane': taskBoardLane,
     };
   }
 
@@ -244,6 +259,7 @@ class Task {
     DateTime? taskNextRepeatDate,
     String? taskRepeatTime,
     String? taskAcceptanceStatus,
+    String? taskBoardLane,
   }) {
     return Task(
       taskId: taskId ?? this.taskId,
@@ -273,10 +289,10 @@ class Task {
       taskIsRepeating: taskIsRepeating ?? this.taskIsRepeating,
       taskRepeatInterval: taskRepeatInterval ?? this.taskRepeatInterval,
       taskRepeatEndDate: taskRepeatEndDate ?? this.taskRepeatEndDate,
-      taskNextRepeatDate:
-          taskNextRepeatDate ?? this.taskNextRepeatDate,
+      taskNextRepeatDate: taskNextRepeatDate ?? this.taskNextRepeatDate,
       taskRepeatTime: taskRepeatTime ?? this.taskRepeatTime,
       taskAcceptanceStatus: taskAcceptanceStatus ?? this.taskAcceptanceStatus,
+      taskBoardLane: taskBoardLane ?? this.taskBoardLane,
     );
   }
 

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:provider/provider.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../datasources/providers/board_stats_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
-import 'package:provider/provider.dart';
 
 class BoardCard extends StatefulWidget {
   final Board board;
@@ -37,17 +37,15 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
     final userProvider = Provider.of<UserProvider>(context, listen: false);
     for (final memberId in widget.board.memberIds) {
       final profilePicture = await userProvider.getUserProfilePicture(memberId);
-      if (mounted) {
-        setState(() {
-          _profilePictureCache[memberId] = profilePicture;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _profilePictureCache[memberId] = profilePicture;
+      });
     }
   }
 
   @override
   void didPushNext() {
-    // Close slidable when navigating to another page
     Slidable.of(context)?.close();
     super.didPushNext();
   }
@@ -55,28 +53,14 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
   @override
   Widget build(BuildContext context) {
     final canDelete = widget.onDelete != null;
+    final variant = _BoardVariant.fromBoard(widget.board);
+    final colors = _variantColors(variant);
+
     return Consumer<BoardStatsProvider>(
       builder: (context, statsProvider, _) {
-        // Try to get stats from provider first, fallback to board.stats
         final stats =
             statsProvider.getStatsForBoard(widget.board.boardId) ??
             widget.board.stats;
-
-        final isPersonal =
-            widget.board.boardType == 'personal' ||
-            widget.board.boardTitle == 'Personal';
-        final isProject = widget.board.boardPurpose == 'project';
-
-        final accentColor = isPersonal
-            ? Colors.blueGrey.shade700
-            : (isProject ? Colors.orange.shade700 : Colors.green.shade700);
-        final headerColor = isPersonal
-            ? Colors.blueGrey.shade600
-            : (isProject ? Colors.orange.shade600 : Colors.green.shade600);
-        final borderColor = isPersonal
-            ? Colors.blueGrey.shade300
-            : (isProject ? Colors.orange.shade300 : Colors.green.shade300);
-
         final taskDone = stats.boardTasksDoneCount;
         final taskTotal = stats.boardTasksCount;
         final progress = taskTotal > 0 ? taskDone / taskTotal : 0.0;
@@ -86,8 +70,8 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Slidable(
             key: ValueKey(widget.board.boardId),
-            endActionPane: isPersonal || !canDelete
-                ? null // Personal board cannot be deleted
+            endActionPane: variant == _BoardVariant.defaultPersonal || !canDelete
+                ? null
                 : ActionPane(
                     motion: const ScrollMotion(),
                     extentRatio: 0.25,
@@ -110,11 +94,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                 child: const Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(
-                                      Icons.delete,
-                                      color: Colors.white,
-                                      size: 20,
-                                    ),
+                                    Icon(Icons.delete, color: Colors.white, size: 20),
                                     SizedBox(height: 2),
                                     Text(
                                       'Delete',
@@ -136,198 +116,22 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
             child: Builder(
               builder: (context) => GestureDetector(
                 onTap: () {
-                  // Close slidable before tapping on the card
                   Slidable.of(context)?.close();
                   widget.onTap?.call();
                 },
                 child: Card(
                   margin: EdgeInsets.zero,
-                  elevation: 4,
-                  shadowColor: accentColor.withValues(alpha: 0.25),
+                  elevation: 5,
+                  shadowColor: colors.primary.withValues(alpha: 0.25),
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.zero,
-                    side: BorderSide(color: borderColor, width: 1),
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: colors.border, width: 1.2),
                   ),
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(color: Colors.white),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Header with board name
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(color: headerColor),
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                right: -24,
-                                top: -18,
-                                child: Opacity(
-                                  opacity: 0.18,
-                                  child: Icon(
-                                    isPersonal
-                                        ? Icons.person_rounded
-                                        : (isProject
-                                              ? Icons.flag_rounded
-                                              : Icons.category_rounded),
-                                    size: 64,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ),
-                              Positioned(
-                                right: 8,
-                                bottom: -18,
-                                child: Opacity(
-                                  opacity: 0.12,
-                                  child: Container(
-                                    width: 48,
-                                    height: 48,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Container(
-                                    width: 34,
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withValues(
-                                        alpha: 0.18,
-                                      ),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Icon(
-                                      isPersonal
-                                          ? Icons.person_rounded
-                                          : (isProject
-                                                ? Icons.flag_rounded
-                                                : Icons.category_rounded),
-                                      size: 18,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          widget.board.boardTitle,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.white,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: 4),
-                                        _buildPurposePill(
-                                          widget.board.boardPurpose,
-                                          isPersonal,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    "by ${widget.board.boardManagerName}",
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Colors.white70,
-                                    ),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Body with goal, members, and progress
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              // Left column: Goal and Members
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    if (widget.board.boardPurpose !=
-                                        'category') ...[
-                                      // Goal
-                                      Text(
-                                        widget.board.boardGoal.isNotEmpty
-                                            ? widget.board.boardGoal
-                                            : "Goal: None",
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.grey[700],
-                                          height: 1.3,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                      const SizedBox(height: 8),
-                                    ],
-                                    // Description
-                                    Text(
-                                      widget
-                                                  .board
-                                                  .boardDescription
-                                                  ?.isNotEmpty ??
-                                              false
-                                          ? widget.board.boardDescription!
-                                          : widget
-                                                .board
-                                                .boardGoalDescription
-                                                .isNotEmpty
-                                          ? widget.board.boardGoalDescription
-                                          : "Description: None",
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.grey[700],
-                                        height: 1.3,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 8),
-                                    // Members
-                                    _buildMembersRow(widget.board),
-                                  ],
-                                ),
-                              ),
-                              if (isProject) ...[
-                                const SizedBox(width: 12),
-                                // Right: Circular progress indicator
-                                _buildProgressIndicator(
-                                  progress,
-                                  percent,
-                                  accentColor,
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: variant == _BoardVariant.defaultPersonal
+                        ? _buildDefaultPersonalBoard(colors, progress, percent)
+                        : _buildVariantBoard(variant, colors, progress, percent),
                   ),
                 ),
               ),
@@ -338,9 +142,208 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
     );
   }
 
+  Widget _buildDefaultPersonalBoard(
+    _BoardPalette colors,
+    double progress,
+    int percent,
+  ) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [colors.header, colors.primary],
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.auto_awesome, color: Colors.white),
+                ),
+                const SizedBox(width: 10),
+                const Expanded(
+                  child: Text(
+                    'Personal HQ',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              widget.board.boardGoalDescription.isNotEmpty
+                  ? widget.board.boardGoalDescription
+                  : 'Your private command center for daily focus.',
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text(
+                'Default Personal Board',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVariantBoard(
+    _BoardVariant variant,
+    _BoardPalette colors,
+    double progress,
+    int percent,
+  ) {
+    final isTeam = variant == _BoardVariant.teamProject ||
+        variant == _BoardVariant.teamCategory;
+    final showProgress = variant == _BoardVariant.teamProject ||
+        variant == _BoardVariant.personalProject;
+
+    return Container(
+      color: colors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [colors.header, colors.primary],
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  _variantIcon(variant),
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.board.boardTitle,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      _variantLabel(variant).toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'by ${widget.board.boardManagerName}',
+                      style: const TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white70,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.board.boardGoal.isNotEmpty &&
+                          widget.board.boardPurpose == 'project') ...[
+                        Text(
+                          widget.board.boardGoal,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[800],
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      Text(
+                        widget.board.boardGoalDescription.isNotEmpty
+                            ? widget.board.boardGoalDescription
+                            : 'No description',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                      if (isTeam)
+                        _buildMembersRow(widget.board)
+                      else
+                        Text(
+                          'Solo board',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                if (showProgress) ...[
+                  const SizedBox(width: 12),
+                  _buildProgressRing(progress, percent, colors.primary),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMembersRow(Board board) {
     final visibleMembers = board.memberIds.take(3).toList();
-
     if (visibleMembers.isEmpty) {
       return Text(
         'No members',
@@ -348,80 +351,68 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
       );
     }
 
-    return Consumer<UserProvider>(
-      builder: (context, userProvider, _) {
-        return SizedBox(
-          width: 70,
-          height: 24,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              ...visibleMembers.asMap().entries.map((entry) {
-                final index = entry.key;
-                final offset = index * 16.0;
-                final memberId = entry.value;
+    return SizedBox(
+      width: 78,
+      height: 24,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ...visibleMembers.asMap().entries.map((entry) {
+            final index = entry.key;
+            final offset = index * 16.0;
+            final memberId = entry.value;
 
-                return Positioned(
-                  left: offset,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    child: CircleAvatar(
-                      radius: 10,
-                      backgroundImage: _profilePictureCache[memberId] != null
-                          ? NetworkImage(_profilePictureCache[memberId]!)
-                          : null,
-                      backgroundColor: Colors.grey[300],
-                      child: _profilePictureCache[memberId] == null
-                          ? const Icon(
-                              Icons.person,
-                              size: 8,
-                              color: Colors.grey,
-                            )
-                          : null,
-                    ),
-                  ),
-                );
-              }),
-              if (board.memberIds.length > 3)
-                Positioned(
-                  left: 3 * 16.0,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                    ),
-                    child: CircleAvatar(
-                      radius: 10,
-                      backgroundColor: Colors.blue.shade600,
-                      child: Text(
-                        '+${board.memberIds.length - 3}',
-                        style: const TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
+            return Positioned(
+              left: offset,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: CircleAvatar(
+                  radius: 10,
+                  backgroundImage: _profilePictureCache[memberId] != null
+                      ? NetworkImage(_profilePictureCache[memberId]!)
+                      : null,
+                  backgroundColor: Colors.grey[300],
+                  child: _profilePictureCache[memberId] == null
+                      ? const Icon(Icons.person, size: 8, color: Colors.grey)
+                      : null,
+                ),
+              ),
+            );
+          }),
+          if (board.memberIds.length > 3)
+            Positioned(
+              left: 3 * 16.0,
+              child: Container(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1.5),
+                ),
+                child: CircleAvatar(
+                  radius: 10,
+                  backgroundColor: Colors.black87,
+                  child: Text(
+                    '+${board.memberIds.length - 3}',
+                    style: const TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
                 ),
-            ],
-          ),
-        );
-      },
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildProgressIndicator(
-    double progress,
-    int percent,
-    Color accentColor,
-  ) {
+  Widget _buildProgressRing(double progress, int percent, Color color) {
     return SizedBox(
-      width: 60,
-      height: 60,
+      width: 56,
+      height: 56,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -429,48 +420,119 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
             value: progress,
             strokeWidth: 3,
             backgroundColor: Colors.grey.shade300,
-            color: progress == 1.0 ? Colors.green : accentColor,
+            color: progress == 1.0 ? Colors.green : color,
           ),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                "$percent%",
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+          Text(
+            '$percent%',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPurposePill(String boardPurpose, bool isPersonal) {
-    final isProject = boardPurpose == 'project';
-    final label = isPersonal
-        ? 'Personal'
-        : (isProject ? 'Project' : 'Category');
-    final color = isPersonal
-        ? Colors.blueGrey.shade200
-        : (isProject ? Colors.orange.shade200 : Colors.green.shade200);
+  IconData _variantIcon(_BoardVariant variant) {
+    switch (variant) {
+      case _BoardVariant.defaultPersonal:
+        return Icons.auto_awesome;
+      case _BoardVariant.teamProject:
+        return Icons.groups_2_outlined;
+      case _BoardVariant.teamCategory:
+        return Icons.hub_outlined;
+      case _BoardVariant.personalProject:
+        return Icons.rocket_launch_outlined;
+      case _BoardVariant.personalCategory:
+        return Icons.folder_open_outlined;
+    }
+  }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
-        ),
-      ),
-    );
+  String _variantLabel(_BoardVariant variant) {
+    switch (variant) {
+      case _BoardVariant.defaultPersonal:
+        return 'Personal Default';
+      case _BoardVariant.teamProject:
+        return 'Team Project';
+      case _BoardVariant.teamCategory:
+        return 'Team Category';
+      case _BoardVariant.personalProject:
+        return 'Personal Project';
+      case _BoardVariant.personalCategory:
+        return 'Personal Category';
+    }
+  }
+
+  _BoardPalette _variantColors(_BoardVariant variant) {
+    switch (variant) {
+      case _BoardVariant.defaultPersonal:
+        return _BoardPalette(
+          primary: const Color(0xFF206A5D),
+          header: const Color(0xFF2A9D8F),
+          border: const Color(0xFF6CB7AD),
+          surface: const Color(0xFFE8F4F2),
+        );
+      case _BoardVariant.teamProject:
+        return _BoardPalette(
+          primary: const Color(0xFFCC6A00),
+          header: const Color(0xFFE07A00),
+          border: const Color(0xFFE9B26B),
+          surface: const Color(0xFFFFF4E8),
+        );
+      case _BoardVariant.teamCategory:
+        return _BoardPalette(
+          primary: const Color(0xFF2E7D32),
+          header: const Color(0xFF3FA744),
+          border: const Color(0xFF8BCA8E),
+          surface: const Color(0xFFEDF8EE),
+        );
+      case _BoardVariant.personalProject:
+        return _BoardPalette(
+          primary: const Color(0xFF415A77),
+          header: const Color(0xFF4B6A8A),
+          border: const Color(0xFF8AA0B8),
+          surface: const Color(0xFFEFF3F7),
+        );
+      case _BoardVariant.personalCategory:
+        return _BoardPalette(
+          primary: const Color(0xFF7A5C28),
+          header: const Color(0xFF92713A),
+          border: const Color(0xFFB79C6A),
+          surface: const Color(0xFFF8F2E8),
+        );
+    }
+  }
+}
+
+class _BoardPalette {
+  final Color primary;
+  final Color header;
+  final Color border;
+  final Color surface;
+
+  const _BoardPalette({
+    required this.primary,
+    required this.header,
+    required this.border,
+    required this.surface,
+  });
+}
+
+enum _BoardVariant {
+  defaultPersonal,
+  teamProject,
+  teamCategory,
+  personalProject,
+  personalCategory;
+
+  static _BoardVariant fromBoard(Board board) {
+    final type = board.boardType.toLowerCase();
+    final purpose = board.boardPurpose.toLowerCase();
+    final isDefaultPersonal =
+        type == 'personal' && board.boardTitle.toLowerCase() == 'personal';
+
+    if (isDefaultPersonal) return _BoardVariant.defaultPersonal;
+    if (type == 'team' && purpose == 'project') return _BoardVariant.teamProject;
+    if (type == 'team') return _BoardVariant.teamCategory;
+    if (purpose == 'project') return _BoardVariant.personalProject;
+    return _BoardVariant.personalCategory;
   }
 }

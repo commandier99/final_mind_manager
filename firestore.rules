@@ -1,0 +1,380 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Allow authenticated users to read/write their own user document
+    // Allow authenticated users to read public profiles for discovery
+    match /users/{userId} {
+      // Allow users to READ their own document
+      allow read: if request.auth != null &&
+                  request.auth.uid == userId;
+
+      // Allow authenticated users to READ public user profiles
+      allow read: if request.auth != null &&
+                  resource.data.userIsPublic == true;
+
+      // Allow users to WRITE/UPDATE their own document
+      allow write: if request.auth != null &&
+                   request.auth.uid == userId;
+    }
+
+    // Plans collection
+    match /plans/{planId} {
+      function isOwner() {
+        return request.auth != null && resource.data.planOwnerId == request.auth.uid;
+      }
+
+      function isSharedWithUser() {
+        return request.auth != null &&
+          (resource.data.planIsShared == true && request.auth.uid in resource.data.get('sharedWithUserIds', []));
+      }
+
+      allow read: if request.auth != null &&
+        (isOwner() || isSharedWithUser()) &&
+        resource.data.planIsDeleted == false;
+
+      allow create: if request.auth != null &&
+        request.resource.data.planOwnerId == request.auth.uid;
+
+      allow update, delete: if isOwner();
+    }
+
+    // Mind:Set sessions collection
+    match /mindset_sessions/{sessionId} {
+      function isSessionOwner() {
+        return request.auth != null &&
+          resource.data.sessionUserId == request.auth.uid;
+      }
+
+      allow read: if request.auth != null &&
+        resource.data.sessionUserId == request.auth.uid;
+
+      allow create: if request.auth != null &&
+        request.resource.data.sessionUserId == request.auth.uid;
+
+      allow update, delete: if isSessionOwner();
+    }
+
+    // Allow authenticated users to create activity events for themselves or for others (notifications)
+    match /activity_events/{eventId} {
+      allow create: if request.auth != null;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow update: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
+    }
+
+    // Allow authenticated users to read/write their own stats
+    match /user_stats/{userId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Allow authenticated users to read/write their own daily activity
+    match /user_daily_activity/{userId}/days/{dateId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // In-app notifications
+    match /in_app_notifications/{notificationId} {
+      // Allow any authenticated user to CREATE notifications for any user
+      // (for task assignments, board invites, etc)
+      allow create: if request.auth != null;
+
+      // Allow users to READ their own notifications
+      allow read: if request.auth != null &&
+                  resource.data.userId == request.auth.uid;
+
+      // Allow users to UPDATE their own notifications (mark as read, etc)
+      allow update: if request.auth != null &&
+                    resource.data.userId == request.auth.uid;
+
+      // Allow users to DELETE their own notifications
+      allow delete: if request.auth != null &&
+                    resource.data.userId == request.auth.uid;
+    }
+
+    // Push notifications (created by client, sent by Cloud Function)
+    match /push_notifications/{notificationId} {
+      allow read: if request.auth != null &&
+        resource.data.userId == request.auth.uid;
+
+      // Allow any signed-in user to create a push request.
+      allow create: if request.auth != null &&
+        request.resource.data.userId is string;
+
+      allow update, delete: if false;
+    }
+
+    // Boards collection
+    match /boards/{boardId} {
+      // Allow read if user is manager, member, or will become a member (for accepting invitations)
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.boardManagerId ||
+         (request.auth.uid in resource.data.memberIds && resource.data.boardIsDeleted == false));
+
+      // Allow get (single document read) for authenticated users when they're being added
+      allow get: if request.auth != null;
+
+      allow create: if request.auth != null &&
+        request.auth.uid in request.resource.data.memberIds;
+
+      allow update: if request.auth != null &&
+        (request.auth.uid == resource.data.boardManagerId ||
+         request.auth.uid in resource.data.memberIds ||
+         (request.auth.uid in request.resource.data.memberIds &&
+          !(request.auth.uid in resource.data.memberIds)));
+
+      allow delete: if request.auth != null &&
+        request.auth.uid == resource.data.boardManagerId;
+
+      // Board activities subcollection
+      match /activities/{activityId} {
+        function isBoardMember() {
+          return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId ||
+                 request.auth.uid in get(/databases/$(database)/documents/boards/$(boardId)).data.memberIds;
+        }
+
+        // Board members can read activities
+        allow read: if request.auth != null && isBoardMember();
+
+        // Board members can create activities
+        allow create: if request.auth != null &&
+          isBoardMember() &&
+          request.resource.data.userId == request.auth.uid;
+
+        // No updates or deletes for activities (immutable log)
+        allow update, delete: if false;
+      }
+    }
+
+    // Board stats collection
+    match /boardStats/{statsId} {
+      allow read, write, delete: if request.auth != null &&
+        request.auth.uid == resource.data.boardManagerId;
+    }
+
+    // Board join requests collection
+    match /board_join_requests/{requestId} {
+      // Users can read/list their own requests (needed for queries)
+      allow get: if request.auth != null &&
+        request.auth.uid == resource.data.userId;
+
+      allow list: if request.auth != null;
+
+      // Board managers can read requests for their boards
+      allow get: if request.auth != null &&
+        get(/databases/$(database)/documents/boards/$(resource.data.boardId)).data.boardManagerId == request.auth.uid;
+
+      // Managers can create requests (invitations)
+      allow create: if request.auth != null;
+
+      // Managers can approve/reject, users can update their own pending requests
+      allow update: if request.auth != null &&
+        (get(/databases/$(database)/documents/boards/$(resource.data.boardId)).data.boardManagerId == request.auth.uid ||
+         (request.auth.uid == resource.data.userId && resource.data.boardReqStatus == 'pending'));
+
+      // Users can delete their own requests
+      allow delete: if request.auth != null &&
+        request.auth.uid == resource.data.userId;
+    }
+
+    // Suggestions collection
+    match /suggestions/{suggestionId} {
+      function isBoardMember(boardId) {
+        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId ||
+               request.auth.uid in get(/databases/$(database)/documents/boards/$(boardId)).data.memberIds;
+      }
+
+      function isBoardManager(boardId) {
+        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId;
+      }
+
+      allow read: if request.auth != null &&
+        resource.data.suggestionIsDeleted == false &&
+        isBoardMember(resource.data.suggestionBoardId);
+
+      allow create: if request.auth != null &&
+        request.resource.data.suggestionAuthorId == request.auth.uid &&
+        isBoardMember(request.resource.data.suggestionBoardId);
+
+      allow update: if request.auth != null &&
+        (resource.data.suggestionAuthorId == request.auth.uid ||
+         isBoardManager(resource.data.suggestionBoardId));
+
+      allow delete: if request.auth != null &&
+        isBoardManager(resource.data.suggestionBoardId);
+    }
+
+    // Tasks collection
+    match /tasks/{taskId} {
+      function isBoardMember(boardId) {
+        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId ||
+               request.auth.uid in get(/databases/$(database)/documents/boards/$(boardId)).data.memberIds;
+      }
+
+      function isBoardManager(boardId) {
+        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId;
+      }
+
+      allow read: if request.auth != null &&
+        ((resource.data.taskOwnerId == request.auth.uid ||
+         resource.data.taskAssignedTo == request.auth.uid ||
+         (resource.data.taskBoardId != null &&
+          resource.data.taskBoardId != '' &&
+          isBoardMember(resource.data.taskBoardId))) &&
+        resource.data.taskIsDeleted == false);
+
+      allow create: if request.auth != null &&
+        (request.resource.data.taskOwnerId == request.auth.uid ||
+         (request.resource.data.taskBoardId != null &&
+          request.resource.data.taskBoardId != '' &&
+          isBoardManager(request.resource.data.taskBoardId)));
+
+      allow update: if request.auth != null &&
+        (resource.data.taskOwnerId == request.auth.uid ||
+         resource.data.taskAssignedTo == request.auth.uid ||
+         (resource.data.taskBoardId != null &&
+          resource.data.taskBoardId != '' &&
+          isBoardManager(resource.data.taskBoardId)));
+
+      allow delete: if request.auth != null &&
+        (resource.data.taskOwnerId == request.auth.uid ||
+         (resource.data.taskBoardId != null &&
+          resource.data.taskBoardId != '' &&
+          isBoardManager(resource.data.taskBoardId)));
+
+      // Appeals subcollection
+      match /appeals/{appealId} {
+        function isBoardMember() {
+          let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+          return request.auth != null &&
+            (
+              request.auth.uid == task.taskOwnerId ||
+              request.auth.uid == task.taskAssignedTo ||
+              (task.taskBoardId != null &&
+               request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds)
+            );
+        }
+
+        allow read: if isBoardMember();
+
+        allow create: if request.auth != null &&
+          request.resource.data.userId == request.auth.uid;
+
+        allow delete: if request.auth != null &&
+          request.auth.uid == resource.data.userId;
+
+        allow update: if false;
+      }
+    }
+
+    // Task stats collection
+    match /task_stats/{taskId} {
+      function hasTaskAccess() {
+        let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+        return request.auth != null &&
+          (request.auth.uid == task.taskOwnerId ||
+           request.auth.uid == task.taskAssignedTo);
+      }
+
+      allow read: if hasTaskAccess();
+      allow write: if hasTaskAccess();
+      allow create: if hasTaskAccess();
+      allow delete: if hasTaskAccess();
+    }
+
+    // Subtasks collection
+    match /subtasks/{subtaskId} {
+      function isParentTaskAccessible(taskId) {
+        let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+        return request.auth.uid == task.taskOwnerId ||
+               request.auth.uid == task.taskAssignedTo ||
+               (task.taskBoardId != null &&
+                task.taskBoardId != '' &&
+                request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds);
+      }
+
+      allow read: if request.auth != null &&
+        (resource.data.subtaskOwnerId == request.auth.uid ||
+         resource.data.subtaskAssignedTo == request.auth.uid ||
+         isParentTaskAccessible(resource.data.parentTaskId)) &&
+        resource.data.subtaskIsDeleted == false;
+
+      allow create: if request.auth != null &&
+        request.resource.data.subtaskOwnerId == request.auth.uid &&
+        isParentTaskAccessible(request.resource.data.parentTaskId);
+
+      allow update: if request.auth != null &&
+        (resource.data.subtaskOwnerId == request.auth.uid ||
+         isParentTaskAccessible(resource.data.parentTaskId));
+
+      allow delete: if request.auth != null &&
+        resource.data.subtaskOwnerId == request.auth.uid;
+    }
+
+    // Task submissions collection
+    match /task_submissions/{submissionId} {
+      function canAccessTaskSubmissions(taskId) {
+        let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+        let isBoardTask = task.taskBoardId != null && task.taskBoardId != '';
+
+        return request.auth.uid == task.taskOwnerId ||
+               request.auth.uid == task.taskAssignedTo ||
+               (isBoardTask &&
+                (request.auth.uid == get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
+                 request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds));
+      }
+
+      // Allow read if user can access the task
+      allow read: if request.auth != null &&
+        canAccessTaskSubmissions(resource.data.taskId);
+
+      // Only assigned members or task owner can create submissions
+      allow create: if request.auth != null &&
+        request.resource.data.submittedBy == request.auth.uid &&
+        canAccessTaskSubmissions(request.resource.data.taskId);
+
+      // Only the submitter or task owner/manager can update
+      allow update: if request.auth != null &&
+        (resource.data.submittedBy == request.auth.uid ||
+         canAccessTaskSubmissions(resource.data.taskId));
+
+      // Only the submitter or task owner/manager can delete
+      allow delete: if request.auth != null &&
+        (resource.data.submittedBy == request.auth.uid ||
+         canAccessTaskSubmissions(resource.data.taskId));
+    }
+
+    // Task volunteer requests collection
+    match /task_volunteer_requests/{requestId} {
+      function isBoardManagerForRequest() {
+        let boardId = resource.data.boardId;
+        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId;
+      }
+
+      // Board members can read requests for their boards
+      allow read: if request.auth != null &&
+        (request.auth.uid == resource.data.userId ||
+         request.auth.uid in get(/databases/$(database)/documents/boards/$(resource.data.boardId)).data.memberIds);
+
+      // Board members can create volunteer requests
+      allow create: if request.auth != null &&
+        request.resource.data.userId == request.auth.uid &&
+        request.auth.uid in get(/databases/$(database)/documents/boards/$(request.resource.data.boardId)).data.memberIds;
+
+      // Only board manager can update (accept/decline)
+      allow update: if request.auth != null && isBoardManagerForRequest();
+
+      // User can delete their own pending request
+      allow delete: if request.auth != null &&
+        request.auth.uid == resource.data.userId &&
+        resource.data.status == 'pending';
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

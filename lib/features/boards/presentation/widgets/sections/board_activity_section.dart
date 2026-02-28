@@ -90,8 +90,8 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
   Widget _buildActivityList(List<ActivityEvent> activities) {
     final displayCount = _showAllActivities
         ? activities.length
-        : (activities.length > 10 ? 10 : activities.length);
-    final hasMore = activities.length > 10;
+        : (activities.length > 5 ? 5 : activities.length);
+    final hasMore = activities.length > 5;
 
     return Column(
       children: [
@@ -121,7 +121,7 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
               label: Text(
                 _showAllActivities
                     ? 'Show Less'
-                    : 'Read More (${activities.length - 10} more)',
+                    : 'More (${activities.length - 5})',
                 style: TextStyle(
                   color: Colors.blue.shade600,
                   fontWeight: FontWeight.w600,

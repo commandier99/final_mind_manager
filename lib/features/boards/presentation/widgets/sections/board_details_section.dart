@@ -7,15 +7,8 @@ import '../../../../../shared/features/users/datasources/providers/user_provider
 
 class BoardDetailsSection extends StatefulWidget {
   final String boardId;
-  final bool showStats;
-  final Function(bool) onStatsToggle;
 
-  const BoardDetailsSection({
-    super.key,
-    required this.boardId,
-    required this.showStats,
-    required this.onStatsToggle,
-  });
+  const BoardDetailsSection({super.key, required this.boardId});
 
   @override
   State<BoardDetailsSection> createState() => _BoardDetailsSectionState();
@@ -55,7 +48,7 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
             : '0.0';
 
         return Padding(
-          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 4.0),
+          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 0.0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -109,14 +102,6 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                         ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    icon: Icon(
-                      widget.showStats ? Icons.task : Icons.assessment,
-                    ),
-                    onPressed: () {
-                      widget.onStatsToggle(!widget.showStats);
-                    },
                   ),
                 ],
               ),
@@ -218,7 +203,6 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                 ],
               ),
               const SizedBox(height: 12),
-
               // Progress bar
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -249,6 +233,7 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                   ),
                 ),
               ),
+
               const SizedBox(height: 12),
 
               // Board Members Section

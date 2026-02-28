@@ -159,7 +159,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           tooltip: 'Filter',
         ),
         IconButton(
-          icon: const Icon(Icons.sort),
+          icon: const Icon(Icons.swap_vert),
           onPressed: onSortPressed,
           tooltip: 'Sort',
         ),

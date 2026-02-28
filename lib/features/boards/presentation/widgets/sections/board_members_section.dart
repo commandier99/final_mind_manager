@@ -31,10 +31,14 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
   final BoardMemberActionsController _actionsController =
       BoardMemberActionsController();
 
+  bool get _canAddMembersToThisBoard {
+    return widget.board.boardType == 'team';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -109,7 +113,7 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                       },
                     );
                   }),
-                  if (widget.board.boardTitle.toLowerCase() != 'personal' &&
+                  if (_canAddMembersToThisBoard &&
                       widget.currentUserId == widget.board.boardManagerId)
                     Padding(
                       padding: const EdgeInsets.only(right: 12.0),

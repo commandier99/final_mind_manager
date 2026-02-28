@@ -2,20 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../../../datasources/models/board_model.dart';
+import '../../../../suggestions/datasources/models/suggestion_model.dart';
+import '../../../../suggestions/datasources/providers/suggestion_provider.dart';
+import '../../../../tasks/datasources/models/task_model.dart';
+import '../../../../tasks/datasources/models/task_stats_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../controllers/board_tasks_query_controller.dart';
 import '../dialogs/add_task_to_board_dialog.dart';
 import '../cards/board_task_card.dart';
+import '../../../../suggestions/presentation/widgets/suggestion_card.dart';
 
 class BoardTasksSection extends StatefulWidget {
   final String boardId;
   final Board board;
+  final String selectedLane;
 
   const BoardTasksSection({
     super.key,
     required this.boardId,
     required this.board,
+    this.selectedLane = _BoardTasksSectionState.laneBillboard,
   });
 
   @override
@@ -23,11 +32,21 @@ class BoardTasksSection extends StatefulWidget {
 }
 
 class _BoardTasksSectionState extends State<BoardTasksSection> {
+  static const String laneWorkshop = 'workshop';
+  static const String laneBillboard = 'billboard';
+
   final BoardTasksQueryController _queryController =
       BoardTasksQueryController();
   late Set<String> _selectedFilters;
   bool _isLoading = true;
   String _sortBy = 'created_desc';
+  final Set<String> _processingSuggestionIds = <String>{};
+  final Set<String> _publishingTaskIds = <String>{};
+  bool _isSuggestionsQueueOpen = false;
+
+  bool _isPendingSuggestion(String status) {
+    return status.trim().toLowerCase() == 'pending';
+  }
 
   @override
   void initState() {
@@ -36,6 +55,12 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     _loadFilterState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().streamTasksByBoard(widget.boardId);
+      if (widget.board.boardType != 'personal') {
+        context.read<SuggestionProvider>().listenToBoardSuggestions(
+          widget.boardId,
+          includeResolved: false,
+        );
+      }
     });
   }
 
@@ -85,11 +110,70 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       );
       return;
     }
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) =>
-          AddTaskToBoardDialog(userId: user.uid, board: widget.board),
+      isScrollControlled: true,
+      builder: (context) => AddTaskToBoardDialog(
+        userId: user.uid,
+        board: widget.board,
+        asSheet: true,
+      ),
     );
+  }
+
+  Future<void> _showSuggestionsDialog() async {
+    final userProvider = context.read<UserProvider>();
+    final suggestionProvider = context.read<SuggestionProvider>();
+
+    final draft = await showDialog<_SuggestionDraft>(
+      context: context,
+      builder: (_) => const _SuggestionDialog(),
+    );
+
+    if (draft == null) return;
+
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You need to be signed in.')),
+      );
+      return;
+    }
+
+    try {
+      final authorName =
+          (userProvider.currentUser?.userName.isNotEmpty ?? false)
+          ? userProvider.currentUser!.userName
+          : (firebaseUser.displayName ?? 'Unknown');
+
+      final suggestion = Suggestion(
+        suggestionId: const Uuid().v4(),
+        suggestionBoardId: widget.board.boardId,
+        suggestionAuthorId: firebaseUser.uid,
+        suggestionAuthorName: authorName,
+        suggestionAuthorProfilePicture:
+            userProvider.currentUser?.userProfilePicture,
+        suggestionTitle: draft.title,
+        suggestionDescription: draft.description,
+        suggestionCreatedAt: DateTime.now(),
+        suggestionStatus: 'pending',
+      );
+
+      await suggestionProvider.addSuggestion(suggestion);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Suggestion submitted to Drafts.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to submit suggestion: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   @override
@@ -100,14 +184,30 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
     return Consumer<TaskProvider>(
       builder: (context, taskProvider, _) {
+        final isManager =
+            widget.board.boardManagerId ==
+            FirebaseAuth.instance.currentUser?.uid;
+        final isPersonalBoard = widget.board.boardType == 'personal';
+        final activeLane = isManager ? widget.selectedLane : laneBillboard;
+        final suggestions = isPersonalBoard
+            ? const <Suggestion>[]
+            : context.watch<SuggestionProvider>().suggestions;
+        final pendingSuggestions = suggestions
+            .where((s) => _isPendingSuggestion(s.suggestionStatus))
+            .toList();
+
+        final visibleTasks = taskProvider.tasks.where((task) {
+          final lane = task.taskBoardLane;
+          if (!isManager) return lane != laneWorkshop;
+          return lane == activeLane;
+        }).toList();
+
         final sortedTasks = _queryController.applyQuery(
-          tasks: taskProvider.tasks,
+          tasks: visibleTasks,
           selectedFilters: _selectedFilters,
           sortBy: _sortBy,
         );
-        final canAddTask =
-            widget.board.boardManagerId ==
-            FirebaseAuth.instance.currentUser?.uid;
+        final canAddTask = isManager;
 
         return Padding(
           padding: const EdgeInsets.all(16.0),
@@ -116,18 +216,23 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
             children: [
               Row(
                 children: [
-                  const Text(
-                    'Tasks',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(width: 8),
+                  if (!isPersonalBoard) ...[
+                    const Text(
+                      'Tasks',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Container(height: 1, color: Colors.grey[300]),
                   ),
                   const SizedBox(width: 4),
                   PopupMenuButton<String>(
                     tooltip: 'Sort tasks',
-                    child: _buildHeaderIcon(Icons.sort),
+                    child: _buildHeaderIcon(Icons.swap_vert),
                     onSelected: (value) => setState(() => _sortBy = value),
                     itemBuilder: (context) => [
                       const PopupMenuItem(
@@ -214,11 +319,45 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                     },
                   ),
                   const SizedBox(width: 4),
-                  if (canAddTask)
+                  if (canAddTask && activeLane == laneWorkshop) ...[
+                    InkWell(
+                      onTap: () {
+                        if (pendingSuggestions.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('No suggestions right now.'),
+                            ),
+                          );
+                          return;
+                        }
+                        _toggleSuggestionsQueue();
+                      },
+                      borderRadius: BorderRadius.circular(6),
+                      child: _buildMailboxSuggestionButton(
+                        unreadCount: pendingSuggestions.length,
+                        isOpen: _isSuggestionsQueueOpen,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
                     InkWell(
                       onTap: _showAddTaskDialog,
                       borderRadius: BorderRadius.circular(4),
                       child: _buildHeaderIcon(Icons.add),
+                    ),
+                  ] else if (canAddTask && isPersonalBoard)
+                    InkWell(
+                      onTap: _showAddTaskDialog,
+                      borderRadius: BorderRadius.circular(4),
+                      child: _buildHeaderIcon(Icons.add),
+                    )
+                  else if (!isPersonalBoard && activeLane == laneBillboard)
+                    InkWell(
+                      onTap: _showSuggestionsDialog,
+                      borderRadius: BorderRadius.circular(6),
+                      child: _buildHeaderTextButton(
+                        icon: Icons.lightbulb_outline,
+                        label: 'Suggest',
+                      ),
                     ),
                 ],
               ),
@@ -261,7 +400,30 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                   ),
                 ),
               const SizedBox(height: 4),
-              if (sortedTasks.isEmpty) _buildEmptyTasksState(),
+              if (!isPersonalBoard &&
+                  isManager &&
+                  activeLane == laneWorkshop &&
+                  _isSuggestionsQueueOpen &&
+                  pendingSuggestions.isNotEmpty)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: pendingSuggestions
+                      .map(
+                        (suggestion) => SuggestionCard(
+                          suggestion: suggestion,
+                          isConverting: _processingSuggestionIds.contains(
+                            suggestion.suggestionId,
+                          ),
+                          onConvert: () => _convertSuggestionToTask(suggestion),
+                        ),
+                      )
+                      .toList(),
+                ),
+              if (sortedTasks.isEmpty)
+                _buildEmptyTasksState(
+                  isManager: isManager,
+                  activeLane: activeLane,
+                ),
               if (sortedTasks.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -271,6 +433,10 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                           task: task,
                           board: widget.board,
                           currentUserId: FirebaseAuth.instance.currentUser?.uid,
+                          showPublishButton:
+                              isManager && activeLane == laneWorkshop,
+                          isPublishing: _publishingTaskIds.contains(task.taskId),
+                          onPublish: () => _publishTask(task),
                         ),
                       )
                       .toList(),
@@ -282,14 +448,123 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     );
   }
 
-  Widget _buildEmptyTasksState() {
+  Future<void> _convertSuggestionToTask(Suggestion suggestion) async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) return;
+
+    final userProvider = context.read<UserProvider>();
+    final taskProvider = context.read<TaskProvider>();
+    final suggestionProvider = context.read<SuggestionProvider>();
+    final managerName = (userProvider.currentUser?.userName.isNotEmpty ?? false)
+        ? userProvider.currentUser!.userName
+        : (currentUser.displayName ?? widget.board.boardManagerName);
+
+    setState(() {
+      _processingSuggestionIds.add(suggestion.suggestionId);
+    });
+
+    try {
+      final newTask = Task(
+        taskId: const Uuid().v4(),
+        taskBoardId: widget.board.boardId,
+        taskBoardTitle: widget.board.boardTitle,
+        taskOwnerId: currentUser.uid,
+        taskOwnerName: managerName,
+        taskAssignedBy: currentUser.uid,
+        taskAssignedTo: 'None',
+        taskAssignedToName: 'Unassigned',
+        taskPriorityLevel: 'Low',
+        taskCreatedAt: DateTime.now(),
+        taskTitle: suggestion.suggestionTitle.trim().isEmpty
+            ? 'Untitled Task'
+            : suggestion.suggestionTitle.trim(),
+        taskDescription: suggestion.suggestionDescription.trim(),
+        taskIsDone: false,
+        taskIsDoneAt: null,
+        taskIsDeleted: false,
+        taskDeletedAt: null,
+        taskStats: TaskStats(),
+        taskStatus: 'To Do',
+        taskRequiresApproval: false,
+        taskAcceptanceStatus: null,
+        taskBoardLane: laneWorkshop,
+      );
+
+      await taskProvider.addTask(newTask);
+      await suggestionProvider.reviewSuggestion(
+        suggestionId: suggestion.suggestionId,
+        status: 'converted',
+        reviewerId: currentUser.uid,
+        reviewNote: 'Converted into workshop task',
+        convertedTaskId: newTask.taskId,
+      );
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Suggestion converted to Draft task.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to convert suggestion: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingSuggestionIds.remove(suggestion.suggestionId);
+        });
+      }
+    }
+  }
+
+  Future<void> _publishTask(Task task) async {
+    if (_publishingTaskIds.contains(task.taskId)) return;
+    setState(() {
+      _publishingTaskIds.add(task.taskId);
+    });
+
+    try {
+      await context.read<TaskProvider>().updateTask(
+        task.copyWith(taskBoardLane: laneBillboard),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Task moved to Published.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to publish task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _publishingTaskIds.remove(task.taskId);
+        });
+      }
+    }
+  }
+
+  Widget _buildEmptyTasksState({
+    required bool isManager,
+    required String activeLane,
+  }) {
+    final laneLabel = activeLane == laneWorkshop ? 'Drafts' : 'Published';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
           Center(
             child: Text(
-              'No tasks match the selected filters',
+              isManager
+                  ? 'No $laneLabel tasks match the selected filters'
+                  : 'No published tasks match the selected filters',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey[400],
@@ -297,17 +572,19 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
               ),
             ),
           ),
-          const SizedBox(height: 8),
-          Center(
-            child: Text(
-              'Press (+) to add a task!',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey[600],
-                fontStyle: FontStyle.italic,
+          if (isManager && activeLane == laneWorkshop) ...[
+            const SizedBox(height: 8),
+            Center(
+              child: Text(
+                'Press (+) to add a task!',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -318,7 +595,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       value: value,
       child: Text(
         label,
-        style: TextStyle(color: _sortBy == value ? Colors.blue : null),
+        style: TextStyle(color: _sortBy == value ? Colors.black87 : null),
       ),
     );
   }
@@ -331,6 +608,184 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Icon(icon, size: 16, color: Colors.grey[700]),
+    );
+  }
+
+  Widget _buildHeaderTextButton({
+    required IconData icon,
+    required String label,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: Colors.grey[700]),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey[700],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMailboxSuggestionButton({
+    required int unreadCount,
+    required bool isOpen,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(6),
+        color: isOpen ? Colors.grey.shade100 : null,
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.mail_outline, size: 16, color: Colors.grey[700]),
+          if (unreadCount > 0)
+            Positioned(
+              right: -4,
+              top: -4,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 1),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _toggleSuggestionsQueue() {
+    setState(() {
+      _isSuggestionsQueueOpen = !_isSuggestionsQueueOpen;
+    });
+  }
+}
+
+class _SuggestionDraft {
+  final String title;
+  final String description;
+
+  const _SuggestionDraft({required this.title, required this.description});
+}
+
+class _SuggestionDialog extends StatefulWidget {
+  const _SuggestionDialog();
+
+  @override
+  State<_SuggestionDialog> createState() => _SuggestionDialogState();
+}
+
+class _SuggestionDialogState extends State<_SuggestionDialog> {
+  late final TextEditingController _titleController;
+  late final TextEditingController _descriptionController;
+  String? _titleError;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+    _descriptionController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final title = _titleController.text.trim();
+    final description = _descriptionController.text.trim();
+
+    if (title.isEmpty) {
+      setState(() {
+        _titleError = 'Please enter a title.';
+      });
+      return;
+    }
+
+    Navigator.of(
+      context,
+    ).pop(_SuggestionDraft(title: title, description: description));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Drop a Suggestion'),
+      content: SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Suggest a task to the manager for the board.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _titleController,
+                maxLength: 80,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Suggestion title',
+                  border: const OutlineInputBorder(),
+                  errorText: _titleError,
+                ),
+                onChanged: (_) {
+                  if (_titleError != null) {
+                    setState(() => _titleError = null);
+                  }
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _descriptionController,
+                maxLength: 500,
+                minLines: 3,
+                maxLines: 6,
+                decoration: const InputDecoration(
+                  labelText: 'Details',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton.icon(
+          onPressed: _submit,
+          icon: const Icon(Icons.send, size: 16),
+          label: const Text('Submit'),
+        ),
+      ],
     );
   }
 }

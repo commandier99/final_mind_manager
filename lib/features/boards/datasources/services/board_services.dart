@@ -273,6 +273,14 @@ class BoardService {
     // Get current board data to update roles
     final boardDoc = await boardRef.get();
     final data = boardDoc.data() as Map<String, dynamic>?;
+    final boardType = (data?['boardType'] as String? ?? 'team').toLowerCase();
+    final canAcceptMembers = boardType == 'team';
+    if (!canAcceptMembers) {
+      throw Exception(
+        'Only Team boards can add members. Change this board type to Team first.',
+      );
+    }
+
     final currentRoles = Map<String, String>.from(data?['memberRoles'] ?? {});
     currentRoles[userId] = role;
 

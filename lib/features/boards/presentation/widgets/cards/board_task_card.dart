@@ -20,6 +20,9 @@ class BoardTaskCard extends StatefulWidget {
   final ValueChanged<bool?>? onToggleDone;
   final bool showCheckbox;
   final bool isDisabled;
+  final VoidCallback? onPublish;
+  final bool showPublishButton;
+  final bool isPublishing;
 
   const BoardTaskCard({
     super.key,
@@ -31,6 +34,9 @@ class BoardTaskCard extends StatefulWidget {
     this.onToggleDone,
     this.showCheckbox = false,
     this.isDisabled = false,
+    this.onPublish,
+    this.showPublishButton = false,
+    this.isPublishing = false,
   });
 
   @override
@@ -334,10 +340,13 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                 child: InkWell(
                                   onTap: () {
                                     Slidable.of(context)?.close();
-                                    showDialog(
+                                    showModalBottomSheet(
                                       context: context,
-                                      builder: (context) =>
-                                          EditTaskDialog(task: widget.task),
+                                      isScrollControlled: true,
+                                      builder: (context) => EditTaskDialog(
+                                        task: widget.task,
+                                        asSheet: true,
+                                      ),
                                     );
                                   },
                                   borderRadius: BorderRadius.circular(8),
@@ -646,7 +655,9 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                 ),
                                 const SizedBox(width: 8),
                                 // Show interest buttons only if task is unassigned AND unassigned is allowed
-                                if (_isTaskUnassigned() && canHaveUnassigned)
+                                if (_isTaskUnassigned() &&
+                                    canHaveUnassigned &&
+                                    !widget.showPublishButton)
                                   StreamBuilder<bool>(
                                     stream: _isUserInterestedStream(),
                                     builder: (context, snapshot) {
@@ -714,6 +725,24 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                         ),
                                       );
                                     },
+                                  )
+                                else if (widget.showPublishButton)
+                                  Tooltip(
+                                    message: 'Move to Published',
+                                    child: OutlinedButton(
+                                      onPressed: widget.isPublishing
+                                          ? null
+                                          : widget.onPublish,
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                      ),
+                                      child: Icon(
+                                        widget.isPublishing
+                                            ? Icons.hourglass_top
+                                            : Icons.publish_outlined,
+                                        size: 16,
+                                      ),
+                                    ),
                                   )
                                 else if (_hasSubtasks())
                                   const SizedBox(width: 8),

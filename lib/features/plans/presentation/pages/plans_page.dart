@@ -350,7 +350,7 @@ class _PlansPageState extends State<PlansPage> {
                                 : plans.isEmpty
                                 ? _buildNoPlansState()
                                 : ListView.builder(
-                                    padding: const EdgeInsets.only(bottom: 12),
+                                    padding: const EdgeInsets.only(bottom: 80),
                                     itemCount: filteredPlans.length,
                                     itemBuilder: (context, index) {
                                       final plan = filteredPlans[index];

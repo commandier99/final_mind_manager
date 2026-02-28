@@ -8,13 +8,17 @@ import '../../../../notifications/datasources/helpers/notification_helper.dart';
 
 class EditTaskDialog extends StatefulWidget {
   final Task task;
-  const EditTaskDialog({super.key, required this.task});
+  final bool asSheet;
+  const EditTaskDialog({super.key, required this.task, this.asSheet = false});
 
   @override
   State<EditTaskDialog> createState() => _EditTaskDialogState();
 }
 
 class _EditTaskDialogState extends State<EditTaskDialog> {
+  static const String _laneWorkshop = 'workshop';
+  static const String _laneBillboard = 'billboard';
+
   late TextEditingController _titleController;
   late TextEditingController _descriptionController;
   late String _priorityLevel;
@@ -26,6 +30,8 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   late TimeOfDay? _repeatTime;
   String? _assignedToUserId;
   String? _assignedToUserName;
+  late String _taskBoardLane;
+  String _boardType = 'team';
   Map<String, String> _boardMembers = {};
   bool _loadingMembers = true;
 
@@ -76,13 +82,15 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       _repeatTime = null;
     }
     // Handle "None" or empty assignedTo values
-    if (widget.task.taskAssignedTo.isEmpty || widget.task.taskAssignedTo == 'None') {
+    if (widget.task.taskAssignedTo.isEmpty ||
+        widget.task.taskAssignedTo == 'None') {
       _assignedToUserId = null;
       _assignedToUserName = null;
     } else {
       _assignedToUserId = widget.task.taskAssignedTo;
       _assignedToUserName = widget.task.taskAssignedToName;
     }
+    _taskBoardLane = widget.task.taskBoardLane;
     _loadBoardMembers();
   }
 
@@ -122,6 +130,10 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       }
 
       setState(() {
+        _boardType = board.boardType;
+        if (_boardType == 'personal') {
+          _taskBoardLane = _laneBillboard;
+        }
         _boardMembers = members;
         _loadingMembers = false;
       });
@@ -148,73 +160,62 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     try {
       final taskProvider = context.read<TaskProvider>();
 
-      // Track what changed
-      final bool titleChanged =
-          _titleController.text.trim() != widget.task.taskTitle;
-      final bool descriptionChanged =
-          _descriptionController.text.trim() != widget.task.taskDescription;
-      final bool priorityChanged =
-          _priorityLevel != widget.task.taskPriorityLevel;
-      final bool deadlineChanged = _deadline != widget.task.taskDeadline;
       final bool assigneeChanged =
           _assignedToUserId != widget.task.taskAssignedTo;
 
-      final bool hasChanges =
-          titleChanged ||
-          descriptionChanged ||
-          priorityChanged ||
-          deadlineChanged ||
-          assigneeChanged;
       final updatedTask = widget.task.copyWith(
         taskTitle: _titleController.text.trim(),
         taskDescription: _descriptionController.text.trim(),
         taskPriorityLevel: _priorityLevel,
-        taskDeadline:
-            _deadline != null && _deadlineTime != null
-                ? DateTime(
-                  _deadline!.year,
-                  _deadline!.month,
-                  _deadline!.day,
-                  _deadlineTime!.hour,
-                  _deadlineTime!.minute,
-                )
-                : _deadline,
+        taskDeadline: _deadline != null && _deadlineTime != null
+            ? DateTime(
+                _deadline!.year,
+                _deadline!.month,
+                _deadline!.day,
+                _deadlineTime!.hour,
+                _deadlineTime!.minute,
+              )
+            : _deadline,
         taskIsRepeating: _isRepeating,
-        taskRepeatInterval:
-            _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
+        taskRepeatInterval: _repeatDays.isNotEmpty
+            ? _repeatDays.join(',')
+            : null,
         taskRepeatEndDate: _repeatEndDate,
-        taskRepeatTime:
-            _repeatTime != null
-                ? '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}'
-                : null,
+        taskRepeatTime: _repeatTime != null
+            ? '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}'
+            : null,
         // Convert null to "None" for unassigned tasks
         taskAssignedTo: _assignedToUserId ?? 'None',
         taskAssignedToName: _assignedToUserName ?? 'Unassigned',
+        taskBoardLane: _boardType == 'personal'
+            ? _laneBillboard
+            : _taskBoardLane,
         // Reset acceptance status to 'pending' if task is reassigned to a different person
-        taskAcceptanceStatus:
-            assigneeChanged
-                ? (_assignedToUserId != null && _assignedToUserId != widget.task.taskOwnerId
-                    ? 'pending'
-                    : null)
-                : widget.task.taskAcceptanceStatus,
+        taskAcceptanceStatus: assigneeChanged
+            ? (_assignedToUserId != null &&
+                      _assignedToUserId != widget.task.taskOwnerId
+                  ? 'pending'
+                  : null)
+            : widget.task.taskAcceptanceStatus,
       );
 
       await taskProvider.updateTask(updatedTask);
 
       // Send notification if task was reassigned to a different user
-      if (assigneeChanged && 
-          _assignedToUserId != null && 
-          _assignedToUserId != 'None' && 
+      if (assigneeChanged &&
+          _assignedToUserId != null &&
+          _assignedToUserId != 'None' &&
           _assignedToUserId != widget.task.taskOwnerId) {
         try {
-          final deadlineInfo = updatedTask.taskDeadline != null 
-              ? ' with a deadline on ${updatedTask.taskDeadline!.toString().split(' ')[0]}' 
+          final deadlineInfo = updatedTask.taskDeadline != null
+              ? ' with a deadline on ${updatedTask.taskDeadline!.toString().split(' ')[0]}'
               : '';
-          
+
           await NotificationHelper.createInAppOnly(
             userId: _assignedToUserId!,
             title: 'Task Assigned',
-            message: 'You have been assigned to "${updatedTask.taskTitle}"$deadlineInfo',
+            message:
+                'You have been assigned to "${updatedTask.taskTitle}"$deadlineInfo',
             category: 'task_assignment',
             relatedId: updatedTask.taskId,
             metadata: {
@@ -225,9 +226,13 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
               'assignedBy': updatedTask.taskAssignedBy,
             },
           );
-          print('[TaskNotification] ✅ Task reassignment notification sent to: $_assignedToUserId');
+          print(
+            '[TaskNotification] ? Task reassignment notification sent to: $_assignedToUserId',
+          );
         } catch (e) {
-          print('[TaskNotification] ⚠️ Failed to send reassignment notification: $e');
+          print(
+            '[TaskNotification] ?? Failed to send reassignment notification: $e',
+          );
         }
       }
 
@@ -248,11 +253,11 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Edit Task'),
-      content: SingleChildScrollView(
+    final formContent = SingleChildScrollView(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 600),
+          constraints: widget.asSheet
+              ? const BoxConstraints()
+              : const BoxConstraints(maxWidth: 600),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -292,10 +297,38 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                   DropdownMenuItem(value: 'Medium', child: Text('Medium')),
                   DropdownMenuItem(value: 'High', child: Text('High')),
                 ],
-                onChanged:
-                    (val) => setState(() => _priorityLevel = val ?? 'Medium'),
+                onChanged: (val) =>
+                    setState(() => _priorityLevel = val ?? 'Medium'),
               ),
               const SizedBox(height: 12),
+              if (_boardType == 'team') ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Drafts'),
+                        selected: _taskBoardLane == _laneWorkshop,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() => _taskBoardLane = _laneWorkshop);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ChoiceChip(
+                        label: const Text('Published'),
+                        selected: _taskBoardLane == _laneBillboard,
+                        onSelected: (selected) {
+                          if (!selected) return;
+                          setState(() => _taskBoardLane = _laneBillboard);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+              ],
               ...[
                 if (_loadingMembers)
                   const Center(child: CircularProgressIndicator())
@@ -324,7 +357,9 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                     onChanged: (val) {
                       setState(() {
                         _assignedToUserId = val;
-                        _assignedToUserName = val != null ? _boardMembers[val] : null;
+                        _assignedToUserName = val != null
+                            ? _boardMembers[val]
+                            : null;
                       });
                     },
                   ),
@@ -353,18 +388,17 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
-                    onPressed:
-                        _deadline == null
-                            ? null
-                            : () async {
-                              final picked = await showTimePicker(
-                                context: context,
-                                initialTime: _deadlineTime ?? TimeOfDay.now(),
-                              );
-                              if (picked != null) {
-                                setState(() => _deadlineTime = picked);
-                              }
-                            },
+                    onPressed: _deadline == null
+                        ? null
+                        : () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: _deadlineTime ?? TimeOfDay.now(),
+                            );
+                            if (picked != null) {
+                              setState(() => _deadlineTime = picked);
+                            }
+                          },
                     icon: const Icon(Icons.access_time),
                     label: Text(
                       _deadlineTime == null
@@ -391,33 +425,32 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children:
-                        _daysOfWeek
-                            .map(
-                              (day) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(day.substring(0, 3)),
-                                  selected: _repeatDays.contains(day),
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        _repeatDays.add(day);
-                                        // Sort days by week order
-                                        _repeatDays.sort(
-                                          (a, b) =>
-                                              _daysOfWeek.indexOf(a) -
-                                              _daysOfWeek.indexOf(b),
-                                        );
-                                      } else {
-                                        _repeatDays.remove(day);
-                                      }
-                                    });
-                                  },
-                                ),
-                              ),
-                            )
-                            .toList(),
+                    children: _daysOfWeek
+                        .map(
+                          (day) => Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: FilterChip(
+                              label: Text(day.substring(0, 3)),
+                              selected: _repeatDays.contains(day),
+                              onSelected: (selected) {
+                                setState(() {
+                                  if (selected) {
+                                    _repeatDays.add(day);
+                                    // Sort days by week order
+                                    _repeatDays.sort(
+                                      (a, b) =>
+                                          _daysOfWeek.indexOf(a) -
+                                          _daysOfWeek.indexOf(b),
+                                    );
+                                  } else {
+                                    _repeatDays.remove(day);
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -468,18 +501,85 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
             ],
           ),
         ),
+    );
+
+    final actions = <Widget>[
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+      ElevatedButton.icon(
+        onPressed: _submit,
+        icon: const Icon(Icons.save),
+        label: const Text('Save'),
+      ),
+    ];
+
+    if (!widget.asSheet) {
+      return AlertDialog(
+        title: const Text('Edit Task'),
+        content: formContent,
+        actions: actions,
+      );
+    }
+
+    return SafeArea(
+      child: Material(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.92,
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Edit Task',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: formContent,
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    ...actions,
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
-        ElevatedButton.icon(
-          onPressed: _submit,
-          icon: const Icon(Icons.save),
-          label: const Text('Save'),
-        ),
-      ],
+      ),
     );
   }
 }

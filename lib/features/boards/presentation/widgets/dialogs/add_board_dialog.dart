@@ -19,6 +19,10 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
   String _selectedBoardPurpose = 'project';
   bool _isSubmitting = false;
 
+  bool get _membersDisabledForType {
+    return _selectedBoardType == 'personal';
+  }
+
   final List<_BoardChoice> _boardTypeChoices = const [
     _BoardChoice(
       value: 'personal',
@@ -278,6 +282,24 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
                   _selectedBoardType = value;
                 });
               },
+            ),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.orange.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Text(
+                _membersDisabledForType
+                    ? 'Personal boards cannot add members. Switch the board type to Team if you want to invite people.'
+                    : 'Team boards can add members.',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+              ),
             ),
             const SizedBox(height: 80),
           ],

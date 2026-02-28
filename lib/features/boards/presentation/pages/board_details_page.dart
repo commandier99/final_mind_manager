@@ -24,8 +24,13 @@ class BoardDetailsPage extends StatefulWidget {
 }
 
 class _BoardDetailsPageState extends State<BoardDetailsPage> {
-  bool _showStats = false;
+  static const String _tabWorkshop = 'workshop';
+  static const String _tabBillboard = 'billboard';
+  static const String _tabStats = 'stats';
+
   bool _isSearchExpanded = false;
+  bool _isDetailsPanelExpanded = true;
+  String _selectedTab = _tabBillboard;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -54,11 +59,22 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
     });
   }
 
+  void _toggleDetailsPanel() {
+    setState(() {
+      _isDetailsPanelExpanded = !_isDetailsPanelExpanded;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
     final currentUserId = context.watch<UserProvider>().userId;
     final isManager = currentUserId == widget.board.boardManagerId;
+    final showWorkshopTab = isManager && widget.board.boardType == 'team';
+
+    if (!showWorkshopTab && _selectedTab == _tabWorkshop) {
+      _selectedTab = _tabBillboard;
+    }
 
     return Scaffold(
       appBar: AppTopBar(
@@ -80,6 +96,15 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
             IconButton(
               icon: const Icon(Icons.search),
               onPressed: _toggleSearch,
+            ),
+            IconButton(
+              icon: Icon(
+                _isDetailsPanelExpanded ? Icons.expand_less : Icons.expand_more,
+              ),
+              tooltip: _isDetailsPanelExpanded
+                  ? 'Hide board details'
+                  : 'Show board details',
+              onPressed: _toggleDetailsPanel,
             ),
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert),
@@ -126,31 +151,107 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
           physics: const AlwaysScrollableScrollPhysics(),
           child: Column(
             children: [
-              // Board Details Section
-              BoardDetailsSection(
-                boardId: widget.board.boardId,
-                showStats: _showStats,
-                onStatsToggle: (value) {
-                  setState(() {
-                    _showStats = value;
-                  });
-                },
+              Container(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeInOut,
+                      child: _isDetailsPanelExpanded
+                          ? BoardDetailsSection(boardId: widget.board.boardId)
+                          : const SizedBox.shrink(),
+                    ),
+                    GestureDetector(
+                      onTap: _toggleDetailsPanel,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 2,
+                          horizontal: 16,
+                        ),
+                        alignment: Alignment.center,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: Colors.grey[300],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 180),
+                              child: Icon(
+                                _isDetailsPanelExpanded
+                                    ? Icons.keyboard_arrow_up
+                                    : Icons.keyboard_arrow_down,
+                                key: ValueKey(_isDetailsPanelExpanded),
+                                color: Colors.grey[600],
+                                size: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Divider(
+                                height: 1,
+                                thickness: 1,
+                                color: Colors.grey[300],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-
-              // Conditional rendering - Tasks or Stats
-              if (!_showStats) ...[
-                // Board Tasks Section
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                child: Row(
+                  children: [
+                    if (showWorkshopTab)
+                      Expanded(
+                        child: _buildViewTab(
+                          label: 'Drafts',
+                          selected: _selectedTab == _tabWorkshop,
+                          onTap: () =>
+                              setState(() => _selectedTab = _tabWorkshop),
+                        ),
+                      ),
+                    if (showWorkshopTab) const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildViewTab(
+                        label: showWorkshopTab ? 'Published' : 'Tasks',
+                        selected: _selectedTab == _tabBillboard,
+                        onTap: () =>
+                            setState(() => _selectedTab = _tabBillboard),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildViewTab(
+                        label: 'Stats',
+                        selected: _selectedTab == _tabStats,
+                        onTap: () => setState(() => _selectedTab = _tabStats),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_selectedTab != _tabStats)
                 BoardTasksSection(
                   boardId: widget.board.boardId,
                   board: widget.board,
-                ),
-              ] else ...[
-                // Board Stats Section
+                  selectedLane: _selectedTab,
+                )
+              else
                 BoardStatsSection(
                   boardId: widget.board.boardId,
                   board: widget.board,
                 ),
-              ],
             ],
           ),
         ),
@@ -161,6 +262,38 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
           Navigator.of(context).popUntil((route) => route.isFirst);
           navigation.selectFromBottomNav(index);
         },
+      ),
+    );
+  }
+
+  Widget _buildViewTab({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: selected ? Colors.blue : Colors.grey[300]!,
+              width: selected ? 2 : 1,
+            ),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? Colors.blue[700] : Colors.grey[700],
+            ),
+          ),
+        ),
       ),
     );
   }
