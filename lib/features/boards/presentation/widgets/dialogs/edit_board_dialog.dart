@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../datasources/providers/board_provider.dart';
-import '../../../datasources/services/board_services.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 
 class EditBoardDialog extends StatefulWidget {
@@ -79,11 +78,8 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
     }
 
     try {
-      final boardService = BoardService();
-
-      // Update board details and member roles
-      await boardService.updateBoard(
-        widget.board.boardId,
+      await context.read<BoardProvider>().updateBoard(
+        board: widget.board,
         newTitle: _titleController.text.trim(),
         newGoal: _goalController.text.trim(),
         newGoalDescription: _descriptionController.text.trim(),
@@ -97,7 +93,6 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
         );
       }
     } catch (e) {
-      print('Error updating board: $e');
       if (mounted) {
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -196,18 +191,16 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                     ),
                     initialValue:
                         _memberRoles.entries
-                                .firstWhere(
-                                  (entry) => entry.value == 'inspector',
-                                  orElse: () => const MapEntry('', ''),
-                                )
-                                .key
-                                .isEmpty
-                            ? null
-                            : _memberRoles.entries
-                                .firstWhere(
-                                  (entry) => entry.value == 'inspector',
-                                )
-                                .key,
+                            .firstWhere(
+                              (entry) => entry.value == 'inspector',
+                              orElse: () => const MapEntry('', ''),
+                            )
+                            .key
+                            .isEmpty
+                        ? null
+                        : _memberRoles.entries
+                              .firstWhere((entry) => entry.value == 'inspector')
+                              .key,
                     items: [
                       const DropdownMenuItem<String>(
                         value: null,

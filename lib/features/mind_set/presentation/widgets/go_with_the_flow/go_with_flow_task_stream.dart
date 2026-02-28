@@ -6,9 +6,11 @@ import '../../../../tasks/presentation/widgets/cards/task_card.dart';
 import '../../../../../shared/modes/mind_set_modes.dart';
 import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
+import '../../../datasources/services/mind_set_session_runtime_service.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
+import '../../../../../shared/features/query/task_query_controller.dart';
 
 class GoWithFlowTaskStream extends StatefulWidget {
   final String userId;
@@ -28,15 +30,26 @@ class GoWithFlowTaskStream extends StatefulWidget {
 
 class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   final MindSetSessionService _sessionService = MindSetSessionService();
+  final MindSetSessionRuntimeService _runtimeService =
+      MindSetSessionRuntimeService();
+  final TaskQueryController _taskQueryController = TaskQueryController();
 
   Task? _currentFlowTask;
+  Task? _completionPreviewTask;
   final Set<String> _rejectedTaskIds = {};
+  late Set<String> _selectedFilters;
   late String _currentFlowStyle;
+  static const Duration _shuffleCompletionPreviewDuration = Duration(
+    milliseconds: 700,
+  );
 
   @override
   void initState() {
     super.initState();
-    _currentFlowStyle = widget.session?.sessionFlowStyle ?? 'list';
+    _selectedFilters = {TaskQueryController.allFilter};
+    _currentFlowStyle = MindSetModes.normalizeFlowStyle(
+      widget.session?.sessionFlowStyle,
+    );
     _streamTasks();
   }
 
@@ -45,11 +58,8 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     taskProvider.streamUserActiveTasks(widget.userId);
   }
 
-  String _normalizeStatus(String status) =>
-      status.toUpperCase().replaceAll(' ', '_');
-
   bool _isInProgressStatus(String status) =>
-      _normalizeStatus(status) == 'IN_PROGRESS';
+      _runtimeService.isInProgressStatus(status);
 
   Future<void> _logSessionAction({
     required String type,
@@ -58,88 +68,32 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   }) async {
     final session = widget.session;
     if (session == null) return;
-
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    final stats = session.sessionStats;
-    final workedTaskIds = session.sessionWorkedTaskIds;
-    final actions = session.sessionActions;
-
-    var nextStats = stats;
-    var nextWorkedTaskIds = workedTaskIds;
-
-    if (type == 'focus' || type == 'switch') {
-      final wasWorked = workedTaskIds.contains(task.taskId);
-      if (!wasWorked) {
-        nextWorkedTaskIds = [...workedTaskIds, task.taskId];
-        nextStats = nextStats.copyWith(
-          tasksWorkedCount: (stats.tasksWorkedCount ?? 0) + 1,
-        );
-      }
-      nextStats = nextStats.copyWith(
-        focusCount: (nextStats.focusCount ?? 0) + 1,
-      );
-    }
-
-    if (type == 'pause') {
-      nextStats = nextStats.copyWith(
-        pauseCount: (nextStats.pauseCount ?? 0) + 1,
-      );
-    }
-
-    if (type == 'switch') {
-      nextStats = nextStats.copyWith(
-        switchCount: (nextStats.switchCount ?? 0) + 1,
-      );
-    }
-
-    if (type == 'complete') {
-      if (runtimeMode == MindSetModes.checklist) {
-        nextStats = nextStats.copyWith(
-          checklistCompletedCount: (nextStats.checklistCompletedCount ?? 0) + 1,
-        );
-      } else if (runtimeMode == MindSetModes.pomodoro) {
-        nextStats = nextStats.copyWith(
-          pomodoroCompletedCount: (nextStats.pomodoroCompletedCount ?? 0) + 1,
-        );
-      } else if (runtimeMode == MindSetModes.eatTheFrog) {
-        nextStats = nextStats.copyWith(
-          eatTheFrogCompletedCount:
-              (nextStats.eatTheFrogCompletedCount ?? 0) + 1,
-        );
-      }
-    }
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionWorkedTaskIds: nextWorkedTaskIds,
-        sessionActions: [
-          ...actions,
-          MindSetSessionAction(
-            type: type,
-            taskId: task.taskId,
-            mode: runtimeMode,
-            at: DateTime.now(),
-            fromTaskId: fromTask?.taskId,
-          ),
-        ],
-        sessionStats: nextStats,
-      ),
+    await _runtimeService.logSessionAction(
+      session: session,
+      type: type,
+      taskId: task.taskId,
+      fromTaskId: fromTask?.taskId,
     );
   }
 
   void _pickRandomFlowTask(List<Task> tasks) {
-    final available = tasks
-        .where(
-          (t) =>
-              !_rejectedTaskIds.contains(t.taskId) &&
-              !t.taskIsDone &&
-              !_isInProgressStatus(t.taskStatus),
-        )
+    final eligible = tasks
+        .where((t) => !t.taskIsDone && !_isInProgressStatus(t.taskStatus))
         .toList();
 
-    if (available.isEmpty) {
+    if (eligible.isEmpty) {
       _currentFlowTask = null;
       return;
+    }
+
+    var available = eligible
+        .where((t) => !_rejectedTaskIds.contains(t.taskId))
+        .toList();
+
+    // If every eligible task was rejected in this round, start a fresh round.
+    if (available.isEmpty) {
+      _rejectedTaskIds.clear();
+      available = List<Task>.from(eligible);
     }
 
     available.shuffle();
@@ -177,35 +131,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   Future<void> _startPomodoroIfNeeded() async {
     final session = widget.session;
     if (session == null) return;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final stats = session.sessionStats;
-    final alreadyRunningFocus =
-        (stats.pomodoroIsRunning ?? false) &&
-        !(stats.pomodoroIsOnBreak ?? false);
-    if (alreadyRunningFocus) return;
-
-    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
-        ? (stats.pomodoroFocusMinutes ?? 25)
-        : 25;
-    final resumeRemaining =
-        (!(stats.pomodoroIsOnBreak ?? false) &&
-            (stats.pomodoroRemainingSeconds ?? 0) > 0)
-        ? stats.pomodoroRemainingSeconds!
-        : focusMinutes * 60;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: true,
-          pomodoroIsOnBreak: false,
-          pomodoroIsLongBreak: false,
-          pomodoroRemainingSeconds: resumeRemaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.startPomodoroIfNeeded(session);
   }
 
   Future<void> _pauseTask(Task task) async {
@@ -217,22 +143,48 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   Future<void> _toggleDoneForTask(Task task, bool? isDone) async {
     final taskProvider = context.read<TaskProvider>();
     final markDone = isDone ?? false;
-    await taskProvider.toggleTaskDone(
+    final shouldShowShufflePreview =
+        markDone && _currentFlowStyle == MindSetModes.flowStyleShuffle;
+    if (shouldShowShufflePreview) {
+      setState(() {
+        _completionPreviewTask = task.copyWith(
+          taskIsDone: true,
+          taskStatus: 'COMPLETED',
+        );
+      });
+    }
+    final persistToggle = taskProvider.toggleTaskDone(
       task.copyWith(
         taskIsDone: markDone,
         taskStatus: markDone ? 'COMPLETED' : 'To Do',
       ),
     );
     if (markDone) {
-      await _logSessionAction(type: 'complete', task: task);
+      await persistToggle;
+      if (shouldShowShufflePreview) {
+        await Future.delayed(_shuffleCompletionPreviewDuration);
+        if (!mounted) return;
+        setState(() {
+          _completionPreviewTask = null;
+          _currentFlowTask = null;
+        });
+      }
       await _handlePostCompletion(task);
+      await _logSessionAction(type: 'complete', task: task);
+      return;
     }
+    await persistToggle;
   }
 
   Future<void> _handlePostCompletion(Task completedTask) async {
     if (!mounted) return;
     final taskProvider = context.read<TaskProvider>();
     final planProvider = context.read<PlanProvider>();
+    final session = widget.session;
+    final isPomodoro =
+        session != null &&
+        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
+            MindSetModes.pomodoro;
     final plannedTaskIds = <String>{};
     for (final plan in planProvider.userPlans) {
       plannedTaskIds.addAll(plan.taskIds);
@@ -247,20 +199,16 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
         )
         .toList();
 
-    final sessionId = widget.session?.sessionId;
     if (remainingTasks.isEmpty) {
+      if (isPomodoro) {
+        await _showPomodoroFocusDecision();
+      }
       final sessionTasks = taskProvider.tasks
           .where((task) => !plannedTaskIds.contains(task.taskId))
           .toList();
-      await _showSessionSummaryAndEnd(sessionTasks, sessionId);
+      await _showSessionSummaryAndEnd(sessionTasks);
       return;
     }
-
-    final session = widget.session;
-    final isPomodoro =
-        session != null &&
-        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
-            MindSetModes.pomodoro;
 
     if (!isPomodoro) {
       if (!mounted) return;
@@ -274,6 +222,11 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
       return;
     }
 
+    await _showPomodoroFocusDecision();
+  }
+
+  Future<void> _showPomodoroFocusDecision() async {
+    if (!mounted) return;
     final endFocusNow = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -315,12 +268,10 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     }
   }
 
-  Future<void> _showSessionSummaryAndEnd(
-    List<Task> sessionTasks,
-    String? sessionId,
-  ) async {
+  Future<void> _showSessionSummaryAndEnd(List<Task> sessionTasks) async {
     final session = widget.session;
     if (session == null || !mounted) return;
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
 
     final now = DateTime.now();
     final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
@@ -331,9 +282,18 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
         ? 100
         : ((tasksDone / tasksTotal) * 100).round();
 
-    final shouldFinish = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
+    await _pausePomodoroIfNeeded();
+    await _sessionService.completeSession(
+      session: session,
+      endedAt: now,
+      tasksTotal: tasksTotal,
+      tasksDone: tasksDone,
+    );
+
+    await showDialog<void>(
+      // ignore: use_build_context_synchronously
+      context: rootNavigator.context,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Session Successful'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -345,36 +305,13 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Session Open'),
-          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('End Session'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
-
-    if (shouldFinish != true) return;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStatus: 'completed',
-        sessionEndedAt: now,
-        sessionStats: session.sessionStats.copyWith(
-          tasksTotalCount: tasksTotal,
-          tasksDoneCount: tasksDone,
-          sessionFocusDurationMinutes: duration.inMinutes,
-          sessionFocusDurationSeconds: duration.inSeconds,
-          pomodoroIsRunning: false,
-        ),
-      ),
-    );
-    if (sessionId != null) {
-      await _sessionService.endSession(sessionId, now);
-    }
   }
 
   String _formatDuration(Duration duration) {
@@ -390,75 +327,13 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   Future<void> _startBreakNow() async {
     final session = widget.session;
     if (session == null) return;
-    final stats = session.sessionStats;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-    final targetCount = stats.pomodoroTargetCount ?? 4;
-    final completedCount = stats.pomodoroCount ?? 0;
-
-    final nextCompleted = completedCount + 1;
-    final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
-    final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroCount: nextCompleted,
-          pomodoroIsRunning: true,
-          pomodoroIsOnBreak: true,
-          pomodoroIsLongBreak: isLongBreak,
-          pomodoroRemainingSeconds: nextBreakMinutes * 60,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.startBreakNow(session);
   }
 
   Future<void> _pausePomodoroIfNeeded() async {
     final session = widget.session;
     if (session == null) return;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final stats = session.sessionStats;
-    if (!(stats.pomodoroIsRunning ?? false)) return;
-
-    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
-        ? (stats.pomodoroFocusMinutes ?? 25)
-        : 25;
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-
-    final fallbackRemaining =
-        ((stats.pomodoroIsOnBreak ?? false)
-            ? ((stats.pomodoroIsLongBreak ?? false)
-                  ? longBreakMinutes
-                  : breakMinutes)
-            : focusMinutes) *
-        60;
-    final baseRemaining = (stats.pomodoroRemainingSeconds ?? 0) > 0
-        ? stats.pomodoroRemainingSeconds!
-        : fallbackRemaining;
-    final lastUpdated = stats.pomodoroLastUpdatedAt;
-    final elapsed = lastUpdated == null
-        ? 0
-        : DateTime.now().difference(lastUpdated).inSeconds;
-    final nextRemaining = (baseRemaining - elapsed)
-        .clamp(0, baseRemaining)
-        .toInt();
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: false,
-          pomodoroRemainingSeconds: nextRemaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.pausePomodoroIfNeeded(session);
   }
 
   int _priorityToInt(String priority) {
@@ -556,17 +431,43 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
               Expanded(child: Container(height: 1, color: Colors.grey[300])),
               const SizedBox(width: 4),
 
-              /// FILTER BUTTON (placeholder)
-              Icon(Icons.filter_list, size: 18, color: Colors.grey[700]),
+              PopupMenuButton<String>(
+                tooltip: 'Filter',
+                child: Icon(
+                  Icons.filter_list,
+                  size: 18,
+                  color: Colors.grey[700],
+                ),
+                onSelected: (filter) {
+                  setState(() {
+                    _selectedFilters = _taskQueryController.addFilter(
+                      selectedFilters: _selectedFilters,
+                      filter: filter,
+                    );
+                  });
+                },
+                itemBuilder: (context) => TaskQueryController.allFilters
+                    .where((f) => !_selectedFilters.contains(f))
+                    .map((filter) {
+                      return PopupMenuItem(
+                        value: filter,
+                        child: Text(
+                          _taskQueryController.getFilterLabel(filter),
+                        ),
+                      );
+                    })
+                    .toList(),
+              ),
 
               const SizedBox(width: 12),
 
               /// FLOW STYLE TOGGLE
               InkWell(
                 onTap: () async {
-                  final newStyle = _currentFlowStyle == 'shuffle'
-                      ? 'list'
-                      : 'shuffle';
+                  final newStyle =
+                      _currentFlowStyle == MindSetModes.flowStyleShuffle
+                      ? MindSetModes.flowStyleList
+                      : MindSetModes.flowStyleShuffle;
 
                   setState(() {
                     _currentFlowStyle = newStyle;
@@ -581,7 +482,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                   }
                 },
                 child: Icon(
-                  _currentFlowStyle == 'shuffle'
+                  _currentFlowStyle == MindSetModes.flowStyleShuffle
                       ? Icons.shuffle
                       : Icons.view_list,
                   size: 18,
@@ -593,6 +494,36 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
         ),
 
         const SizedBox(height: 8),
+        if (!_selectedFilters.contains(TaskQueryController.allFilter))
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: _selectedFilters.map((filter) {
+                  return Chip(
+                    label: Text(_taskQueryController.getFilterLabel(filter)),
+                    onDeleted: () {
+                      setState(() {
+                        _selectedFilters = _taskQueryController.removeFilter(
+                          selectedFilters: _selectedFilters,
+                          filter: filter,
+                        );
+                      });
+                    },
+                    backgroundColor: Colors.grey[400],
+                    deleteIconColor: Colors.white,
+                    side: BorderSide.none,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  );
+                }).toList(),
+              ),
+            ),
+          ),
+        if (!_selectedFilters.contains(TaskQueryController.allFilter))
+          const SizedBox(height: 8),
 
         /// TASK AREA
         Expanded(
@@ -616,10 +547,11 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                           )
                           .toList();
 
-                      final visibleTasks = unplannedTasks;
-
-                      /// APPLY FILTERS HERE LATER
-                      final filteredTasks = visibleTasks;
+                      final filteredTasks = _taskQueryController.applyQuery(
+                        tasks: unplannedTasks,
+                        selectedFilters: _selectedFilters,
+                        sortBy: null,
+                      );
 
                       Task? focusedTask;
                       for (final t in filteredTasks) {
@@ -642,15 +574,54 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                       final frogTask = modePolicy.isEatTheFrog
                           ? _resolveFrogTask(modeVisibleTasks)
                           : null;
-                      final displayTasks = modePolicy.isEatTheFrog &&
-                              hasFocusedTask
+                      final displayTasks =
+                          modePolicy.isEatTheFrog && hasFocusedTask
                           ? (frogTask == null ? <Task>[] : <Task>[frogTask])
                           : modeVisibleTasks;
 
                       /// ===== SHUFFLE MODE =====
-                      if (_currentFlowStyle == 'shuffle') {
+                      if (_currentFlowStyle == MindSetModes.flowStyleShuffle) {
+                        if (_completionPreviewTask != null) {
+                          final completedTask = _completionPreviewTask!;
+                          return Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(bottom: 8),
+                                child: Text(
+                                  'Task completed',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: TaskCard(
+                                  task: completedTask,
+                                  showFocusAction: false,
+                                  showFocusInMainRow: false,
+                                  showCheckboxWhenFocusedOnly: false,
+                                  useStatusColor: true,
+                                  isPomodoroMode: modePolicy.isPomodoro,
+                                  showFrogBadge:
+                                      modePolicy.isEatTheFrog &&
+                                      frogTask != null &&
+                                      frogTask.taskId == completedTask.taskId,
+                                  onToggleDone: null,
+                                ),
+                              ),
+                            ],
+                          );
+                        }
+
                         /// If already focused → show only that
                         if (focusedTask != null) {
+                          final canToggleDone =
+                              isSessionActive &&
+                              modePolicy.doneAllowedOnTask(isFocused: true);
                           return Column(
                             children: [
                               if (modePolicy.isEatTheFrog)
@@ -679,14 +650,19 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                       showFrogBadge:
                                           modePolicy.isEatTheFrog &&
                                           frogTask != null &&
-                                          frogTask.taskId ==
-                                              focusedTask.taskId,
+                                          frogTask.taskId == focusedTask.taskId,
                                       onPause:
                                           modePolicy.canPauseTask(
                                             isSessionActive: isSessionActive,
                                             isTaskFocused: true,
                                           )
                                           ? () => _pauseTask(focusedTask!)
+                                          : null,
+                                      onToggleDone: canToggleDone
+                                          ? (isDone) => _toggleDoneForTask(
+                                              focusedTask!,
+                                              isDone,
+                                            )
                                           : null,
                                     ),
                                   ],
@@ -785,9 +761,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                       return Column(
                         children: [
                           if (modePolicy.isEatTheFrog)
-                            _buildFrogHint(
-                              hasFocusedTask: hasFocusedTask,
-                            ),
+                            _buildFrogHint(hasFocusedTask: hasFocusedTask),
                           if (modePolicy.isChecklist) _buildChecklistHint(),
                           Expanded(
                             child: ListView.builder(
@@ -818,7 +792,8 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                 return TaskCard(
                                   task: task,
                                   showFocusAction:
-                                      !isPomodoroBreak && (canFocus || canPause),
+                                      !isPomodoroBreak &&
+                                      (canFocus || canPause),
                                   showFocusInMainRow: true,
                                   showCheckboxWhenFocusedOnly: true,
                                   useStatusColor: true,

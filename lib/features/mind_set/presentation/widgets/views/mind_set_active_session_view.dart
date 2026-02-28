@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
+import '../../../datasources/services/mind_set_session_runtime_service.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 import '../sections/mind_set_details_section.dart';
 import '../mind_set_pomodoro_section.dart';
@@ -35,11 +36,15 @@ class MindSetActiveSessionView extends StatefulWidget {
 class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     with SingleTickerProviderStateMixin {
   final MindSetSessionService _sessionService = MindSetSessionService();
+  final MindSetSessionRuntimeService _runtimeService =
+      MindSetSessionRuntimeService();
   late AnimationController _sheetController;
   late Animation<double> _sheetAnimation;
   bool _isSheetExpanded = false;
   late ValueNotifier<Duration> _elapsedTimeNotifier;
   int _modeDropdownEpoch = 0;
+  bool _followThroughAutoSummaryPrompted = false;
+  String? _followThroughAutoSummarySessionId;
 
   @override
   void initState() {
@@ -107,6 +112,13 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                   actualTasksDone = sessionTasks
                       .where((t) => t.taskIsDone)
                       .length;
+                  _maybeAutoPromptFollowThroughSummary(
+                    session,
+                    sessionTasks,
+                    actualTasksDone,
+                    actualTasksCount,
+                    taskProvider,
+                  );
                 } else if (session.sessionType == 'go_with_flow') {
                   actualTasksCount = taskProvider.tasks.length;
                   actualTasksDone = taskProvider.tasks
@@ -363,20 +375,11 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     );
   }
 
-  Future<void> _endSession(String sessionId) async {
-    final taskProvider = context.read<TaskProvider>();
-
-    // Get session from Firestore
-    final session = await _sessionService
-        .streamUserSessions(widget.session.sessionUserId)
-        .first
-        .then(
-          (sessions) => sessions.firstWhere(
-            (s) => s.sessionId == sessionId,
-            orElse: () => widget.session,
-          ),
-        );
-
+  Future<void> _endSession(
+    MindSetSession session,
+    TaskProvider taskProvider,
+    List<Task> sessionTasks,
+  ) async {
     final now = DateTime.now();
 
     // 1️⃣ Pause all focused tasks
@@ -387,39 +390,24 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     for (final task in focusedTasks) {
       await taskProvider.updateTask(task.copyWith(taskStatus: 'Paused'));
     }
-
-    // 2️⃣ Calculate session duration
-    final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
-    final duration = now.difference(startedAt);
-
-    // 3️⃣ Calculate session task stats
-    final sessionTasks = _sessionTasksForSummary(taskProvider, session);
+    await _pausePomodoroIfNeeded(session);
 
     final tasksTotal = sessionTasks.length;
     final tasksDone = sessionTasks.where((task) => task.taskIsDone).length;
 
-    // 4️⃣ Update session with computed stats
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStatus: 'completed',
-        sessionEndedAt: now,
-        sessionStats: session.sessionStats.copyWith(
-          tasksTotalCount: tasksTotal,
-          tasksDoneCount: tasksDone,
-          sessionFocusDurationMinutes: duration.inMinutes,
-          sessionFocusDurationSeconds: duration.inSeconds,
-        ),
-      ),
+    // 3) Persist completed session + completion event in one call
+    await _sessionService.completeSession(
+      session: session,
+      endedAt: now,
+      tasksTotal: tasksTotal,
+      tasksDone: tasksDone,
     );
-
-    // 5️⃣ Log completion event properly
-    await _sessionService.endSession(sessionId, now);
   }
 
   Future<void> _confirmEndSession(MindSetSession session) async {
     final taskProvider = context.read<TaskProvider>();
     final sessionTasks = _sessionTasksForSummary(taskProvider, session);
-    await _showSessionSummaryAndEnd(session, sessionTasks);
+    await _showSessionSummaryAndEnd(session, taskProvider, sessionTasks);
   }
 
   String _getSessionLabel(String sessionType) {
@@ -441,7 +429,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   }
 
   bool _isInProgressStatus(String status) {
-    return status.toUpperCase().replaceAll(' ', '_') == 'IN_PROGRESS';
+    return _runtimeService.isInProgressStatus(status);
   }
 
   Future<PomodoroTransition> _handlePomodoroComplete(
@@ -509,46 +497,11 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     required Task task,
   }) async {
     final session = widget.session;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    final stats = session.sessionStats;
-
-    var nextStats = stats;
-    if (type == 'pause') {
-      nextStats = nextStats.copyWith(
-        pauseCount: (nextStats.pauseCount ?? 0) + 1,
-      );
-    } else if (type == 'complete') {
-      if (runtimeMode == MindSetModes.checklist) {
-        nextStats = nextStats.copyWith(
-          checklistCompletedCount: (nextStats.checklistCompletedCount ?? 0) + 1,
-        );
-      } else if (runtimeMode == MindSetModes.pomodoro) {
-        nextStats = nextStats.copyWith(
-          pomodoroCompletedCount: (nextStats.pomodoroCompletedCount ?? 0) + 1,
-        );
-      } else if (runtimeMode == MindSetModes.eatTheFrog) {
-        nextStats = nextStats.copyWith(
-          eatTheFrogCompletedCount:
-              (nextStats.eatTheFrogCompletedCount ?? 0) + 1,
-        );
-      }
-    } else {
-      return;
-    }
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionActions: [
-          ...session.sessionActions,
-          MindSetSessionAction(
-            type: type,
-            taskId: task.taskId,
-            mode: runtimeMode,
-            at: DateTime.now(),
-          ),
-        ],
-        sessionStats: nextStats,
-      ),
+    if (type != 'pause' && type != 'complete') return;
+    await _runtimeService.logSessionAction(
+      session: session,
+      type: type,
+      taskId: task.taskId,
     );
   }
 
@@ -568,11 +521,12 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
       taskIsDoneAt: isDone ? DateTime.now() : null,
       taskStatus: isDone ? 'COMPLETED' : focusedTask.taskStatus,
     );
-    await taskProvider.updateTask(updatedTask);
+    final persistUpdate = taskProvider.updateTask(updatedTask);
     if (isDone) {
-      await _logSessionAction(type: 'complete', task: focusedTask);
       await _handlePostCompletion(taskProvider, focusedTask);
+      await _logSessionAction(type: 'complete', task: focusedTask);
     }
+    await persistUpdate;
   }
 
   Future<void> _handlePostCompletion(
@@ -580,6 +534,9 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     Task completedTask,
   ) async {
     final session = widget.session;
+    final isPomodoro =
+        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
+        MindSetModes.pomodoro;
     final remainingTasks = _remainingSessionTasks(
       taskProvider,
       session,
@@ -587,53 +544,51 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     );
 
     if (remainingTasks.isEmpty) {
+      if (isPomodoro) {
+        await _showPomodoroFocusDecision(session);
+      }
+      if (!mounted) return;
       if (session.sessionType == 'on_the_spot') {
-        final addMoreTasks = await showDialog<bool>(
+        final shouldEndSession = await showDialog<bool>(
           context: context,
           builder: (context) => AlertDialog(
             title: const Text('All Tasks Completed'),
             content: const Text(
-              'Great work. Do you want to add more tasks to this session?',
+              'Great work. Do you want to keep this session open or end it?',
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Finish Session'),
+                child: const Text('Keep Session Open'),
               ),
               ElevatedButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Add More Tasks'),
+                child: const Text('End Session'),
               ),
             ],
           ),
         );
 
-        if (addMoreTasks == true) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Use the + button in tasks to add more before ending.',
-              ),
-            ),
-          );
+        if (shouldEndSession != true) {
           return;
         }
       }
 
       final sessionTasks = _sessionTasksForSummary(taskProvider, session);
-      await _showSessionSummaryAndEnd(session, sessionTasks);
+      await _showSessionSummaryAndEnd(session, taskProvider, sessionTasks);
       return;
     }
 
     if (!mounted) return;
-    final isPomodoro =
-        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
-        MindSetModes.pomodoro;
     if (!isPomodoro) {
       return;
     }
 
+    await _showPomodoroFocusDecision(session);
+  }
+
+  Future<void> _showPomodoroFocusDecision(MindSetSession session) async {
+    if (!mounted) return;
     final endFocusNow = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -712,9 +667,10 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
 
   Future<void> _showSessionSummaryAndEnd(
     MindSetSession session,
+    TaskProvider taskProvider,
     List<Task> sessionTasks,
   ) async {
-    if (!mounted) return;
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
     final now = DateTime.now();
     final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
     final duration = now.difference(startedAt);
@@ -724,9 +680,12 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
         ? 100
         : ((tasksDone / tasksTotal) * 100).round();
 
-    final shouldFinish = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
+    await _endSession(session, taskProvider, sessionTasks);
+
+    await showDialog<void>(
+      // ignore: use_build_context_synchronously
+      context: rootNavigator.context,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Session Successful'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -738,20 +697,46 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Session Open'),
-          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('End Session'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
+  }
 
-    if (shouldFinish != true) return;
-    await _endSession(session.sessionId);
+  void _maybeAutoPromptFollowThroughSummary(
+    MindSetSession session,
+    List<Task> sessionTasks,
+    int tasksDone,
+    int tasksTotal,
+    TaskProvider taskProvider,
+  ) {
+    if (session.sessionType != 'follow_through' || session.sessionStatus != 'active') {
+      _followThroughAutoSummaryPrompted = false;
+      _followThroughAutoSummarySessionId = session.sessionId;
+      return;
+    }
+
+    if (_followThroughAutoSummarySessionId != session.sessionId) {
+      _followThroughAutoSummarySessionId = session.sessionId;
+      _followThroughAutoSummaryPrompted = false;
+    }
+
+    final isComplete = tasksTotal > 0 && tasksDone >= tasksTotal;
+    if (!isComplete) {
+      _followThroughAutoSummaryPrompted = false;
+      return;
+    }
+
+    if (_followThroughAutoSummaryPrompted || !mounted) return;
+    _followThroughAutoSummaryPrompted = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await _showSessionSummaryAndEnd(session, taskProvider, sessionTasks);
+    });
   }
 
   String _formatDuration(Duration duration) {
@@ -765,72 +750,10 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   }
 
   Future<void> _pausePomodoroIfNeeded(MindSetSession session) async {
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final stats = session.sessionStats;
-    if (!(stats.pomodoroIsRunning ?? false)) return;
-
-    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
-        ? (stats.pomodoroFocusMinutes ?? 25)
-        : 25;
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-
-    final fallbackRemaining =
-        ((stats.pomodoroIsOnBreak ?? false)
-            ? ((stats.pomodoroIsLongBreak ?? false)
-                  ? longBreakMinutes
-                  : breakMinutes)
-            : focusMinutes) *
-        60;
-    final baseRemaining = (stats.pomodoroRemainingSeconds ?? 0) > 0
-        ? stats.pomodoroRemainingSeconds!
-        : fallbackRemaining;
-    final lastUpdated = stats.pomodoroLastUpdatedAt;
-    final elapsed = lastUpdated == null
-        ? 0
-        : DateTime.now().difference(lastUpdated).inSeconds;
-    final nextRemaining = (baseRemaining - elapsed)
-        .clamp(0, baseRemaining)
-        .toInt();
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: false,
-          pomodoroRemainingSeconds: nextRemaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.pausePomodoroIfNeeded(session);
   }
 
   Future<void> _startBreakNow(MindSetSession session) async {
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final stats = session.sessionStats;
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-    final targetCount = stats.pomodoroTargetCount ?? 4;
-    final completedCount = stats.pomodoroCount ?? 0;
-
-    final nextCompleted = completedCount + 1;
-    final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
-    final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroCount: nextCompleted,
-          pomodoroIsRunning: true,
-          pomodoroIsOnBreak: true,
-          pomodoroIsLongBreak: isLongBreak,
-          pomodoroRemainingSeconds: nextBreakMinutes * 60,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.startBreakNow(session);
   }
 }

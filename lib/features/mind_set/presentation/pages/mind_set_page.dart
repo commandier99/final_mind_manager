@@ -24,93 +24,81 @@ class _MindSetPageState extends State<MindSetPage> {
   Widget build(BuildContext context) {
     final userId = context.watch<UserProvider>().userId;
 
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
-        title: const Text('MIND:SET'),
-        centerTitle: true,
-        actions: [
-          if (userId != null)
-            StreamBuilder<MindSetSession?>(
-              stream: _sessionService.streamActiveSession(userId),
-              builder: (context, snapshot) {
-                final activeSession = snapshot.data;
+    if (userId == null) {
+      return Scaffold(
+        appBar: AppBar(
+          backgroundColor: Colors.blue,
+          foregroundColor: Colors.white,
+          title: const Text('MIND:SET'),
+          centerTitle: true,
+        ),
+        body: const MindSetSelectionView(),
+      );
+    }
 
-                if (activeSession != null) {
-                  final modePolicy =
-                      MindSetModePolicy.fromMode(activeSession.sessionMode);
-                  if (modePolicy.hidesSessionTimer && _showTimer) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() => _showTimer = false);
-                      }
-                    });
+    return StreamBuilder<MindSetSession?>(
+      stream: _sessionService.streamActiveSession(userId),
+      builder: (context, snapshot) {
+        final activeSession = snapshot.data;
+        final isTrulyActive = activeSession?.sessionStatus == 'active';
+        final modePolicy = !isTrulyActive
+            ? null
+            : MindSetModePolicy.fromMode(activeSession!.sessionMode);
+
+        if ((modePolicy?.hidesSessionTimer ?? false) && _showTimer) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              setState(() => _showTimer = false);
+            }
+          });
+        }
+
+        final sessionBody = !isTrulyActive
+            ? const MindSetSelectionView()
+            : MindSetActiveSessionView(
+                session: activeSession!,
+                showTimer: _showTimer,
+                onTimerToggle: (value) {
+                  if (!(modePolicy?.hidesSessionTimer ?? false)) {
+                    setState(() => _showTimer = value);
                   }
-                  return IconButton(
-                    icon: const Icon(Icons.more_vert),
-                    tooltip: 'Options',
-                    onPressed: () => showModalBottomSheet(
-                      context: context,
-                      builder: (context) => MindSetDetailsSettingsForm(
-                        showTimer: _showTimer,
-                        onTimerToggle: (value) {
-                          if (!modePolicy.hidesSessionTimer) {
-                            setState(() => _showTimer = value);
-                          }
-                        },
-                        taskCountMode: _taskCountMode,
-                        onTaskCountModeChange: (value) {
-                          setState(() => _taskCountMode = value);
-                        },
-                        selectedMode: activeSession.sessionMode,
-                      ),
+                },
+                taskCountMode: _taskCountMode,
+              );
+
+        return Scaffold(
+          appBar: AppBar(
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+            title: const Text('MIND:SET'),
+            centerTitle: true,
+            actions: [
+              if (isTrulyActive)
+                IconButton(
+                  icon: const Icon(Icons.more_vert),
+                  tooltip: 'Options',
+                  onPressed: () => showModalBottomSheet(
+                    context: context,
+                    builder: (context) => MindSetDetailsSettingsForm(
+                      showTimer: _showTimer,
+                      onTimerToggle: (value) {
+                        if (!(modePolicy?.hidesSessionTimer ?? false)) {
+                          setState(() => _showTimer = value);
+                        }
+                      },
+                      taskCountMode: _taskCountMode,
+                      onTaskCountModeChange: (value) {
+                        setState(() => _taskCountMode = value);
+                      },
+                      selectedMode: activeSession!.sessionMode,
                     ),
-                  );
-                }
-
-                return const SizedBox.shrink();
-              },
-            ),
-        ],
-      ),
-      body: userId == null
-          ? const MindSetSelectionView()
-          : StreamBuilder<MindSetSession?>(
-              stream: _sessionService.streamActiveSession(userId),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const MindSetSelectionView();
-                }
-
-                final activeSession = snapshot.data;
-
-                if (activeSession != null) {
-                  final modePolicy =
-                      MindSetModePolicy.fromMode(activeSession.sessionMode);
-                  if (modePolicy.hidesSessionTimer && _showTimer) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() => _showTimer = false);
-                      }
-                    });
-                  }
-
-                  return MindSetActiveSessionView(
-                    session: activeSession,
-                    showTimer: _showTimer,
-                    onTimerToggle: (value) {
-                      if (!modePolicy.hidesSessionTimer) {
-                        setState(() => _showTimer = value);
-                      }
-                    },
-                    taskCountMode: _taskCountMode,
-                  );
-                }
-
-                return const MindSetSelectionView();
-              },
-            ),
+                  ),
+                ),
+            ],
+          ),
+          body: sessionBody,
+        );
+      },
     );
   }
 }

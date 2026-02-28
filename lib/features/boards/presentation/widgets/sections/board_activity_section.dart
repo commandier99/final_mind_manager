@@ -19,9 +19,7 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
   @override
   void initState() {
     super.initState();
-    // Initialize the activity stream for all board members
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('[DEBUG] BoardActivitySection: Starting activity listener for boardId: ${widget.boardId}');
       context.read<ActivityEventProvider>().listenToBoard(widget.boardId);
     });
   }
@@ -30,21 +28,7 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
   Widget build(BuildContext context) {
     return Consumer<ActivityEventProvider>(
       builder: (context, activityProvider, _) {
-        // All activities are already for this board (no filtering needed)
         final activities = activityProvider.events;
-
-        print(
-          '[DEBUG] BoardActivitySection: Total events in provider: ${activityProvider.events.length}',
-        );
-        print(
-          '[DEBUG] BoardActivitySection: Building with ${activities.length} activities for board ${widget.boardId}',
-        );
-        
-        // Log event details for debugging
-        for (var event in activityProvider.events.take(3)) {
-          print('[DEBUG] BoardActivitySection: Event boardId=${event.ActEvBoardId}, type=${event.ActEvType}');
-        }
-
         if (activities.isEmpty) {
           return _buildEmptyState();
         }
@@ -55,10 +39,10 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: Text(
-                "Board Activity",
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                'Board Activity',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
               ),
             ),
             const SizedBox(height: 8),
@@ -79,10 +63,10 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            "Board Activity",
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+            'Board Activity',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Container(
@@ -104,7 +88,9 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
   }
 
   Widget _buildActivityList(List<ActivityEvent> activities) {
-    final displayCount = _showAllActivities ? activities.length : (activities.length > 10 ? 10 : activities.length);
+    final displayCount = _showAllActivities
+        ? activities.length
+        : (activities.length > 10 ? 10 : activities.length);
     final hasMore = activities.length > 10;
 
     return Column(
@@ -113,7 +99,8 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: displayCount,
-          separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade200),
+          separatorBuilder: (context, index) =>
+              Divider(height: 1, color: Colors.grey.shade200),
           itemBuilder: (context, index) {
             final activity = activities[index];
             return _buildActivityCard(activity);
@@ -128,7 +115,9 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
                   _showAllActivities = !_showAllActivities;
                 });
               },
-              icon: Icon(_showAllActivities ? Icons.expand_less : Icons.expand_more),
+              icon: Icon(
+                _showAllActivities ? Icons.expand_less : Icons.expand_more,
+              ),
               label: Text(
                 _showAllActivities
                     ? 'Show Less'
@@ -157,19 +146,21 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
         leading: CircleAvatar(
           radius: 20,
           backgroundColor: Colors.blue.shade100,
-          child: activity.ActEvUserProfilePicture != null && activity.ActEvUserProfilePicture!.isNotEmpty
+          child:
+              activity.ActEvUserProfilePicture != null &&
+                  activity.ActEvUserProfilePicture!.isNotEmpty
               ? ClipOval(
-                child: Image.network(
-                  activity.ActEvUserProfilePicture!,
-                  width: 40,
-                  height: 40,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Text('👤', style: TextStyle(fontSize: 18));
-                  },
-                ),
-              )
-              : const Text('👤', style: TextStyle(fontSize: 18)),
+                  child: Image.network(
+                    activity.ActEvUserProfilePicture!,
+                    width: 40,
+                    height: 40,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.person, size: 18);
+                    },
+                  ),
+                )
+              : const Icon(Icons.person, size: 18),
         ),
         title: RichText(
           text: TextSpan(
@@ -179,7 +170,8 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
                 text: displayName,
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
-              if (activity.ActEvDescription != null && activity.ActEvDescription!.isNotEmpty)
+              if (activity.ActEvDescription != null &&
+                  activity.ActEvDescription!.isNotEmpty)
                 TextSpan(text: ' ${activity.ActEvDescription}'),
             ],
           ),
@@ -208,4 +200,3 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
     }
   }
 }
-

@@ -22,10 +22,10 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
   late Set<String> _selectedFilters;
   String? _lastStreamedUserId;
   String _sortBy = 'created_desc';
-  
+
   // Special filter
   static const String allFilter = 'All';
-  
+
   // Define available task statuses for filtering
   static const List<String> taskStatuses = [
     'To Do',
@@ -33,7 +33,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     'Paused',
     'COMPLETED',
   ];
-  
+
   // Deadline filter options
   static const List<String> deadlineFilters = [
     'Overdue',
@@ -41,20 +41,20 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     'Upcoming',
     'None',
   ];
-  
+
   static final List<String> allFilters = [
     allFilter,
     ...taskStatuses,
     ...deadlineFilters,
   ];
-  
+
   static const Map<String, String> statusLabels = {
     'To Do': 'To Do',
     'In Progress': 'In Progress',
     'Paused': 'Paused',
     'COMPLETED': 'Completed',
   };
-  
+
   static const Map<String, String> deadlineLabels = {
     'Overdue': 'Overdue',
     'Today': 'Today',
@@ -67,7 +67,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     super.initState();
     _selectedFilters = {allFilter}; // Show all by default
   }
-  
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -85,7 +85,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     _benefitController.dispose();
     super.dispose();
   }
-  
+
   bool _matchesDeadlineFilter(dynamic task, String filter) {
     switch (filter) {
       case 'Overdue':
@@ -112,11 +112,11 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
         return true;
     }
   }
-  
+
   String _getFilterLabel(String filter) {
     return statusLabels[filter] ?? deadlineLabels[filter] ?? filter;
   }
-  
+
   int _priorityToInt(String priority) {
     switch (priority.toLowerCase()) {
       case 'high':
@@ -129,18 +129,24 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
         return 0;
     }
   }
-  
+
   List<dynamic> _applySorting(List<dynamic> tasks) {
     final sortedTasks = List.from(tasks);
-    
+
     switch (_sortBy) {
       case 'priority_asc':
-        sortedTasks.sort((a, b) => _priorityToInt(a.taskPriorityLevel ?? 'low')
-            .compareTo(_priorityToInt(b.taskPriorityLevel ?? 'low')));
+        sortedTasks.sort(
+          (a, b) => _priorityToInt(
+            a.taskPriorityLevel ?? 'low',
+          ).compareTo(_priorityToInt(b.taskPriorityLevel ?? 'low')),
+        );
         break;
       case 'priority_desc':
-        sortedTasks.sort((a, b) => _priorityToInt(b.taskPriorityLevel ?? 'low')
-            .compareTo(_priorityToInt(a.taskPriorityLevel ?? 'low')));
+        sortedTasks.sort(
+          (a, b) => _priorityToInt(
+            b.taskPriorityLevel ?? 'low',
+          ).compareTo(_priorityToInt(a.taskPriorityLevel ?? 'low')),
+        );
         break;
       case 'alphabetical_asc':
         sortedTasks.sort((a, b) => a.taskTitle.compareTo(b.taskTitle));
@@ -173,16 +179,14 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
       default:
         break;
     }
-    
+
     return sortedTasks;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Plan'),
-      ),
+      appBar: AppBar(title: const Text('Create Plan')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -239,7 +243,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                   TextButton.icon(
                     onPressed: _pickDate,
                     icon: const Icon(Icons.calendar_today, size: 18),
-                    label: Text(_scheduledDate == null ? 'Schedule Date' : 'Change Date'),
+                    label: Text(
+                      _scheduledDate == null ? 'Schedule Date' : 'Change Date',
+                    ),
                   ),
                 ],
               ),
@@ -247,7 +253,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
               Consumer<TaskProvider>(
                 builder: (context, taskProvider, _) {
                   final tasks = taskProvider.tasks;
-                  
+
                   if (taskProvider.isLoading && tasks.isEmpty) {
                     return const Center(child: CircularProgressIndicator());
                   }
@@ -255,7 +261,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                   // Filter tasks
                   List<dynamic> filteredTasks;
                   if (_selectedFilters.contains(allFilter)) {
-                    filteredTasks = tasks.where((task) => !task.taskIsDone).toList();
+                    filteredTasks = tasks
+                        .where((task) => !task.taskIsDone)
+                        .toList();
                   } else {
                     final selectedStatuses = _selectedFilters
                         .where((f) => taskStatuses.contains(f))
@@ -266,25 +274,29 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
 
                     filteredTasks = tasks.where((task) {
                       if (task.taskIsDone) return false;
-                      
+
                       if (selectedStatuses.isEmpty) {
                         return false;
                       }
 
-                      final statusMatch = selectedStatuses.contains(task.taskStatus);
+                      final statusMatch = selectedStatuses.contains(
+                        task.taskStatus,
+                      );
 
                       if (selectedDeadlineFilters.isEmpty) {
                         return statusMatch;
                       }
 
-                      final deadlineMatch = selectedDeadlineFilters.any((filter) {
+                      final deadlineMatch = selectedDeadlineFilters.any((
+                        filter,
+                      ) {
                         return _matchesDeadlineFilter(task, filter);
                       });
 
                       return statusMatch && deadlineMatch;
                     }).toList();
                   }
-                  
+
                   // Apply sorting
                   final sortedTasks = _applySorting(filteredTasks);
 
@@ -313,12 +325,19 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           PopupMenuButton<String>(
                             tooltip: 'Sort tasks',
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.grey[300]!),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: Icon(Icons.sort, size: 16, color: Colors.grey[700]),
+                              child: Icon(
+                                Icons.sort,
+                                size: 16,
+                                color: Colors.grey[700],
+                              ),
                             ),
                             onSelected: (value) {
                               setState(() {
@@ -341,7 +360,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'Low → High',
                                   style: TextStyle(
-                                    color: _sortBy == 'priority_asc' ? Colors.blue : null,
+                                    color: _sortBy == 'priority_asc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -350,7 +371,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'High → Low',
                                   style: TextStyle(
-                                    color: _sortBy == 'priority_desc' ? Colors.blue : null,
+                                    color: _sortBy == 'priority_desc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -370,7 +393,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'A → Z',
                                   style: TextStyle(
-                                    color: _sortBy == 'alphabetical_asc' ? Colors.blue : null,
+                                    color: _sortBy == 'alphabetical_asc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -379,7 +404,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'Z → A',
                                   style: TextStyle(
-                                    color: _sortBy == 'alphabetical_desc' ? Colors.blue : null,
+                                    color: _sortBy == 'alphabetical_desc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -399,7 +426,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'Oldest',
                                   style: TextStyle(
-                                    color: _sortBy == 'created_asc' ? Colors.blue : null,
+                                    color: _sortBy == 'created_asc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -408,7 +437,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'Newest',
                                   style: TextStyle(
-                                    color: _sortBy == 'created_desc' ? Colors.blue : null,
+                                    color: _sortBy == 'created_desc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -428,7 +459,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'Soonest',
                                   style: TextStyle(
-                                    color: _sortBy == 'deadline_asc' ? Colors.blue : null,
+                                    color: _sortBy == 'deadline_asc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -437,7 +470,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 child: Text(
                                   'Latest',
                                   style: TextStyle(
-                                    color: _sortBy == 'deadline_desc' ? Colors.blue : null,
+                                    color: _sortBy == 'deadline_desc'
+                                        ? Colors.blue
+                                        : null,
                                   ),
                                 ),
                               ),
@@ -447,12 +482,19 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           PopupMenuButton<String>(
                             tooltip: 'Add filters',
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
                               decoration: BoxDecoration(
                                 border: Border.all(color: Colors.grey[300]!),
                                 borderRadius: BorderRadius.circular(6),
                               ),
-                              child: Icon(Icons.filter_list, size: 16, color: Colors.grey[700]),
+                              child: Icon(
+                                Icons.filter_list,
+                                size: 16,
+                                color: Colors.grey[700],
+                              ),
                             ),
                             onSelected: (filter) {
                               setState(() {
@@ -461,7 +503,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                 } else {
                                   _selectedFilters.remove(allFilter);
                                   _selectedFilters.add(filter);
-                                  
+
                                   if (_selectedFilters.isEmpty) {
                                     _selectedFilters.add(filter);
                                   }
@@ -472,12 +514,16 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                               return allFilters
                                   .where((f) => !_selectedFilters.contains(f))
                                   .map((filter) {
-                                final label = _getFilterLabel(filter);
-                                return PopupMenuItem<String>(
-                                  value: filter,
-                                  child: Text(label, style: const TextStyle(fontSize: 12)),
-                                );
-                              }).toList();
+                                    final label = _getFilterLabel(filter);
+                                    return PopupMenuItem<String>(
+                                      value: filter,
+                                      child: Text(
+                                        label,
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    );
+                                  })
+                                  .toList();
                             },
                           ),
                         ],
@@ -488,10 +534,15 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              ...(_selectedFilters.toList()..sort()).map((filter) {
+                              ...(_selectedFilters.toList()..sort()).map((
+                                filter,
+                              ) {
                                 final label = _getFilterLabel(filter);
                                 return Padding(
-                                  padding: const EdgeInsets.only(right: 8, top: 8),
+                                  padding: const EdgeInsets.only(
+                                    right: 8,
+                                    top: 8,
+                                  ),
                                   child: InputChip(
                                     label: Text(
                                       label,
@@ -512,7 +563,8 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                                     backgroundColor: Colors.grey[400],
                                     deleteIconColor: Colors.white,
                                     side: BorderSide.none,
-                                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    materialTapTargetSize:
+                                        MaterialTapTargetSize.shrinkWrap,
                                   ),
                                 );
                               }),
@@ -520,7 +572,7 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           ),
                         ),
                       const SizedBox(height: 4),
-                      
+
                       // Task list
                       if (sortedTasks.isEmpty)
                         Padding(
@@ -542,8 +594,11 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
                           itemCount: sortedTasks.length,
                           itemBuilder: (context, index) {
                             final task = sortedTasks[index];
-                            final isSelected = _selectedTaskIds.contains(task.taskId);
-                            final boardLabel = (task.taskBoardTitle ?? '').isNotEmpty
+                            final isSelected = _selectedTaskIds.contains(
+                              task.taskId,
+                            );
+                            final boardLabel =
+                                (task.taskBoardTitle ?? '').isNotEmpty
                                 ? task.taskBoardTitle!
                                 : 'No board';
 
@@ -664,15 +719,14 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
     });
 
     final plan = await context.read<PlanProvider>().createPlan(
-          userId: userId,
-          userName: userName,
-          title: _titleController.text.trim(),
-          description: _descriptionController.text.trim(),
-          benefit: _benefitController.text.trim(),
-          style: 'Checklist',
-          scheduledFor: _scheduledDate,
-          taskIds: _collectTaskIds(),
-        );
+      userId: userId,
+      userName: userName,
+      title: _titleController.text.trim(),
+      description: _descriptionController.text.trim(),
+      benefit: _benefitController.text.trim(),
+      scheduledFor: _scheduledDate,
+      taskIds: _collectTaskIds(),
+    );
 
     if (!mounted) return;
 
@@ -684,7 +738,9 @@ class _CreatePlanPageState extends State<CreatePlanPage> {
       Navigator.pop<Plan>(context, plan);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not create plan. Please try again.')),
+        const SnackBar(
+          content: Text('Could not create plan. Please try again.'),
+        ),
       );
     }
   }

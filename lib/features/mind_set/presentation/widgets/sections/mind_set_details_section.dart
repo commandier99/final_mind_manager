@@ -52,8 +52,24 @@ class MindSetDetails extends StatelessWidget {
     this.modeDropdownKey,
   });
 
+  String _normalizeTaskCountMode(String mode) {
+    switch (mode) {
+      case 'tasks remaining':
+      case 'remaining':
+        return 'remaining';
+      case 'hide':
+      case 'hidden':
+        return 'hidden';
+      case 'tasks completed':
+      case 'progress':
+      default:
+        return 'progress';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final normalizedTaskCountMode = _normalizeTaskCountMode(taskCountMode);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       child: Column(
@@ -134,9 +150,7 @@ class MindSetDetails extends StatelessWidget {
           const Divider(thickness: 1),
           if (timerElapsed != null ||
               (selectedMode != null && onModeChanged != null) ||
-              (tasksDoneCount != null &&
-                  tasksCount != null &&
-                  taskCountMode != 'hidden')) ...[
+              (tasksDoneCount != null && tasksCount != null)) ...[
             LayoutBuilder(
               builder: (context, constraints) {
                 const sectionWidth = 125.0;
@@ -151,15 +165,16 @@ class MindSetDetails extends StatelessWidget {
                         child: SizedBox(
                           width: sectionWidth,
                           child:
-                              (tasksDoneCount != null &&
-                                  tasksCount != null &&
-                                  taskCountMode != 'hidden')
+                              (tasksDoneCount != null && tasksCount != null)
                               ? Column(
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      taskCountMode == 'remaining'
+                                      normalizedTaskCountMode == 'hidden'
+                                          ? 'Tasks'
+                                          : normalizedTaskCountMode ==
+                                                'remaining'
                                           ? 'Tasks Remaining'
                                           : 'Tasks Completed',
                                       style: const TextStyle(
@@ -168,16 +183,22 @@ class MindSetDetails extends StatelessWidget {
                                       ),
                                     ),
                                     const SizedBox(height: 2),
-                                    Text(
-                                      taskCountMode == 'remaining'
-                                          ? '${(tasksCount ?? 0) - (tasksDoneCount ?? 0)}'
-                                          : '$tasksDoneCount',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                    Opacity(
+                                      opacity:
+                                          normalizedTaskCountMode == 'hidden'
+                                          ? 0
+                                          : 1,
+                                      child: Text(
+                                        normalizedTaskCountMode == 'remaining'
+                                            ? '${(tasksCount ?? 0) - (tasksDoneCount ?? 0)}'
+                                            : '$tasksDoneCount',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
+                                        ),
                                       ),
                                     ),
                                   ],

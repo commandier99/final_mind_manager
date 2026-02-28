@@ -13,16 +13,14 @@ class Plan {
 
   // Execution fields
   final DateTime? planDeadline;
-  final DateTime? planScheduledFor; // Date user wants to do this plan (primary scheduling)
+  final DateTime?
+  planScheduledFor; // Date user wants to do this plan (primary scheduling)
 
   // Task organization
   final List<String> taskIds; // Tasks included in this plan
   final Map<String, int> taskOrder; // taskId -> position mapping
   final int totalTasks;
   final int completedTasks;
-
-  // Style/Methodology
-  final String planStyle; // 'Pomodoro', 'Timeblocking', 'GTD', 'Checklist'
 
   Plan({
     required this.planId,
@@ -40,7 +38,6 @@ class Plan {
     this.taskOrder = const {},
     this.totalTasks = 0,
     this.completedTasks = 0,
-    this.planStyle = 'Checklist',
   });
 
   // Computed properties
@@ -71,7 +68,6 @@ class Plan {
       taskOrder: Map<String, int>.from(data['taskOrder'] ?? {}),
       totalTasks: data['totalTasks'] as int? ?? 0,
       completedTasks: data['completedTasks'] as int? ?? 0,
-      planStyle: data['planStyle'] as String? ?? 'Checklist',
     );
   }
 
@@ -83,15 +79,17 @@ class Plan {
       'planDescription': planDescription,
       'planBenefit': planBenefit,
       'planCreatedAt': Timestamp.fromDate(planCreatedAt),
-      if (planDeletedAt != null) 'planDeletedAt': Timestamp.fromDate(planDeletedAt!),
+      if (planDeletedAt != null)
+        'planDeletedAt': Timestamp.fromDate(planDeletedAt!),
       'planIsDeleted': planIsDeleted,
-      if (planDeadline != null) 'planDeadline': Timestamp.fromDate(planDeadline!),
-      if (planScheduledFor != null) 'planScheduledFor': Timestamp.fromDate(planScheduledFor!),
+      if (planDeadline != null)
+        'planDeadline': Timestamp.fromDate(planDeadline!),
+      if (planScheduledFor != null)
+        'planScheduledFor': Timestamp.fromDate(planScheduledFor!),
       'taskIds': taskIds,
       'taskOrder': taskOrder,
       'totalTasks': totalTasks,
       'completedTasks': completedTasks,
-      'planStyle': planStyle,
     };
   }
 
@@ -111,7 +109,6 @@ class Plan {
     Map<String, int>? taskOrder,
     int? totalTasks,
     int? completedTasks,
-    String? planStyle,
   }) {
     return Plan(
       planId: planId ?? this.planId,
@@ -129,7 +126,6 @@ class Plan {
       taskOrder: taskOrder ?? this.taskOrder,
       totalTasks: totalTasks ?? this.totalTasks,
       completedTasks: completedTasks ?? this.completedTasks,
-      planStyle: planStyle ?? this.planStyle,
     );
   }
 

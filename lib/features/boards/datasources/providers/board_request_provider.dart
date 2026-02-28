@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/board_request_model.dart';
 import '../services/board_request_services.dart';
+import 'package:flutter/foundation.dart';
 
 class BoardRequestProvider extends ChangeNotifier {
   final BoardRequestService _service = BoardRequestService();
@@ -32,7 +33,7 @@ class BoardRequestProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            print(
+            debugPrint(
               '[BoardRequestProvider] ERROR streaming pending requests: $error',
             );
           },
@@ -49,7 +50,9 @@ class BoardRequestProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            print('[BoardRequestProvider] ERROR streaming invitations: $error');
+            debugPrint(
+              '[BoardRequestProvider] ERROR streaming invitations: $error',
+            );
           },
         );
   }
@@ -64,7 +67,9 @@ class BoardRequestProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            print('[BoardRequestProvider] ERROR streaming join requests: $error');
+            debugPrint(
+              '[BoardRequestProvider] ERROR streaming join requests: $error',
+            );
           },
         );
   }
@@ -79,7 +84,9 @@ class BoardRequestProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            print('[BoardRequestProvider] ERROR streaming user invitations: $error');
+            debugPrint(
+              '[BoardRequestProvider] ERROR streaming user invitations: $error',
+            );
           },
         );
   }
@@ -94,26 +101,28 @@ class BoardRequestProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            print('[BoardRequestProvider] ERROR streaming user join requests: $error');
+            debugPrint(
+              '[BoardRequestProvider] ERROR streaming user join requests: $error',
+            );
           },
         );
   }
 
   /// Stream requests by user (for users to track their own requests)
   void streamRequestsByUser(String userId) {
-    print('[BoardRequestProvider] Streaming requests for user: $userId');
+    debugPrint('[BoardRequestProvider] Streaming requests for user: $userId');
     _service
         .streamRequestsByUser(userId)
         .listen(
           (requests) {
-            print(
+            debugPrint(
               '[BoardRequestProvider] Received ${requests.length} requests',
             );
             _userRequests = requests;
             notifyListeners();
           },
           onError: (error) {
-            print(
+            debugPrint(
               '[BoardRequestProvider] ERROR streaming requests: $error',
             );
           },

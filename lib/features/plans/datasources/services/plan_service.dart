@@ -5,7 +5,7 @@ class PlanService {
   final FirebaseFirestore _firestore;
 
   PlanService({FirebaseFirestore? firestore})
-      : _firestore = firestore ?? FirebaseFirestore.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   static const String _plansCollection = 'plans';
 
@@ -18,7 +18,6 @@ class PlanService {
     required String title,
     required String description,
     String benefit = '',
-    String style = 'Checklist',
     int estimatedDurationMinutes = 0,
     int plannedFocusIntervals = 0,
     int focusIntervalMinutes = 25,
@@ -39,7 +38,6 @@ class PlanService {
         planDescription: description,
         planBenefit: benefit,
         planCreatedAt: now,
-        planStyle: style,
         planDeadline: deadline,
         planScheduledFor: scheduledFor,
         taskIds: taskIds,
@@ -56,7 +54,10 @@ class PlanService {
   /// Get a specific plan by ID
   Future<Plan?> getPlan(String planId) async {
     try {
-      final doc = await _firestore.collection(_plansCollection).doc(planId).get();
+      final doc = await _firestore
+          .collection(_plansCollection)
+          .doc(planId)
+          .get();
       if (doc.exists) {
         return Plan.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }
@@ -76,9 +77,10 @@ class PlanService {
           .orderBy('planCreatedAt', descending: true)
           .get();
 
-      return query.docs
+      final plans = query.docs
           .map((doc) => Plan.fromMap(doc.data(), doc.id))
           .toList();
+      return _withComputedProgress(plans);
     } catch (e) {
       throw Exception('Error fetching user plans: $e');
     }
@@ -93,9 +95,12 @@ class PlanService {
           .where('planIsDeleted', isEqualTo: false)
           .orderBy('planCreatedAt', descending: true)
           .snapshots()
-          .map((query) => query.docs
-              .map((doc) => Plan.fromMap(doc.data(), doc.id))
-              .toList());
+          .asyncMap((query) async {
+            final plans = query.docs
+                .map((doc) => Plan.fromMap(doc.data(), doc.id))
+                .toList();
+            return _withComputedProgress(plans);
+          });
     } catch (e) {
       throw Exception('Error streaming user plans: $e');
     }
@@ -110,9 +115,7 @@ class PlanService {
           .orderBy('planCreatedAt', descending: true)
           .get();
 
-      return query.docs
-          .map((doc) => Plan.fromMap(doc.data(), doc.id))
-          .toList();
+      return query.docs.map((doc) => Plan.fromMap(doc.data(), doc.id)).toList();
     } catch (e) {
       throw Exception('Error fetching templates: $e');
     }
@@ -147,17 +150,26 @@ class PlanService {
   /// Add a task to a plan
   Future<void> addTaskToPlan(String planId, String taskId) async {
     try {
-      final planDoc = await _firestore.collection(_plansCollection).doc(planId).get();
+      final planDoc = await _firestore
+          .collection(_plansCollection)
+          .doc(planId)
+          .get();
       if (!planDoc.exists) throw Exception('Plan not found');
 
-      final plan = Plan.fromMap(planDoc.data() as Map<String, dynamic>, planDoc.id);
+      final plan = Plan.fromMap(
+        planDoc.data() as Map<String, dynamic>,
+        planDoc.id,
+      );
 
       if (plan.taskIds.contains(taskId)) {
         return; // Task already in plan
       }
 
       final updatedTaskIds = [...plan.taskIds, taskId];
-      final updatedTaskOrder = {...plan.taskOrder, taskId: updatedTaskIds.length - 1};
+      final updatedTaskOrder = {
+        ...plan.taskOrder,
+        taskId: updatedTaskIds.length - 1,
+      };
 
       await _firestore.collection(_plansCollection).doc(planId).update({
         'taskIds': updatedTaskIds,
@@ -172,10 +184,16 @@ class PlanService {
   /// Remove a task from a plan
   Future<void> removeTaskFromPlan(String planId, String taskId) async {
     try {
-      final planDoc = await _firestore.collection(_plansCollection).doc(planId).get();
+      final planDoc = await _firestore
+          .collection(_plansCollection)
+          .doc(planId)
+          .get();
       if (!planDoc.exists) throw Exception('Plan not found');
 
-      final plan = Plan.fromMap(planDoc.data() as Map<String, dynamic>, planDoc.id);
+      final plan = Plan.fromMap(
+        planDoc.data() as Map<String, dynamic>,
+        planDoc.id,
+      );
 
       final updatedTaskIds = plan.taskIds.where((id) => id != taskId).toList();
       final updatedTaskOrder = {...plan.taskOrder};
@@ -216,12 +234,21 @@ class PlanService {
   /// Mark a task as completed within the plan
   Future<void> markTaskCompletedInPlan(String planId) async {
     try {
-      final planDoc = await _firestore.collection(_plansCollection).doc(planId).get();
+      final planDoc = await _firestore
+          .collection(_plansCollection)
+          .doc(planId)
+          .get();
       if (!planDoc.exists) throw Exception('Plan not found');
 
-      final plan = Plan.fromMap(planDoc.data() as Map<String, dynamic>, planDoc.id);
+      final plan = Plan.fromMap(
+        planDoc.data() as Map<String, dynamic>,
+        planDoc.id,
+      );
 
-      final newCompletedCount = (plan.completedTasks + 1).clamp(0, plan.totalTasks);
+      final newCompletedCount = (plan.completedTasks + 1).clamp(
+        0,
+        plan.totalTasks,
+      );
 
       await _firestore.collection(_plansCollection).doc(planId).update({
         'completedTasks': newCompletedCount,
@@ -235,5 +262,62 @@ class PlanService {
   Future<List<Plan>> getSharedPlansForUser(String userId) async {
     // No sharing functionality - return empty list
     return [];
+  }
+
+  Future<List<Plan>> _withComputedProgress(List<Plan> plans) async {
+    if (plans.isEmpty) return plans;
+
+    final allTaskIds = <String>{};
+    for (final plan in plans) {
+      allTaskIds.addAll(plan.taskIds);
+    }
+
+    if (allTaskIds.isEmpty) {
+      return plans
+          .map(
+            (plan) => plan.copyWith(
+              totalTasks: plan.taskIds.length,
+              completedTasks: 0,
+            ),
+          )
+          .toList();
+    }
+
+    final doneTaskIds = await _fetchDoneTaskIds(allTaskIds.toList());
+
+    return plans.map((plan) {
+      final totalTasks = plan.taskIds.length;
+      final completedTasks = plan.taskIds.where(doneTaskIds.contains).length;
+      return plan.copyWith(
+        totalTasks: totalTasks,
+        completedTasks: completedTasks,
+      );
+    }).toList();
+  }
+
+  Future<Set<String>> _fetchDoneTaskIds(List<String> taskIds) async {
+    const batchSize = 10;
+    final doneTaskIds = <String>{};
+
+    for (var i = 0; i < taskIds.length; i += batchSize) {
+      final end = (i + batchSize < taskIds.length)
+          ? i + batchSize
+          : taskIds.length;
+      final batch = taskIds.sublist(i, end);
+      final snapshot = await _firestore
+          .collection('tasks')
+          .where(FieldPath.documentId, whereIn: batch)
+          .where('taskIsDeleted', isEqualTo: false)
+          .get();
+
+      for (final doc in snapshot.docs) {
+        final data = doc.data();
+        if ((data['taskIsDone'] as bool?) ?? false) {
+          doneTaskIds.add(doc.id);
+        }
+      }
+    }
+
+    return doneTaskIds;
   }
 }

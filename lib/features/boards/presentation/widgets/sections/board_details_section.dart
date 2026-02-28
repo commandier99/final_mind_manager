@@ -3,7 +3,6 @@ import '../../../datasources/providers/board_stats_provider.dart';
 import '../../../datasources/providers/board_provider.dart';
 import 'package:provider/provider.dart';
 import 'board_members_section.dart';
-import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 
 class BoardDetailsSection extends StatefulWidget {
@@ -29,14 +28,7 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
   @override
   void initState() {
     super.initState();
-    print(
-      '[BoardDetailsSection] initState called for boardId: ${widget.boardId}',
-    );
-    // Start streaming board stats when section loads
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print(
-        '[BoardDetailsSection] Post frame callback - starting stats stream for boardId: ${widget.boardId}',
-      );
       context.read<BoardStatsProvider>().streamStatsForBoard(widget.boardId);
     });
   }
@@ -57,12 +49,10 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
         final stats = statsProvider.getStatsForBoard(board.boardId);
         final taskDone = stats?.boardTasksDoneCount ?? 0;
         final taskTotal = stats?.boardTasksCount ?? 0;
-        print(
-          '[BoardDetailsSection] Building with stats - taskDone: $taskDone, taskTotal: $taskTotal',
-        );
         final progress = taskTotal > 0 ? taskDone / taskTotal : 0.0;
-        final percentage =
-            taskTotal > 0 ? (progress * 100).toStringAsFixed(1) : '0.0';
+        final percentage = taskTotal > 0
+            ? (progress * 100).toStringAsFixed(1)
+            : '0.0';
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 4.0),
@@ -81,20 +71,18 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                               if (board.boardTitle.isNotEmpty) {
                                 showDialog(
                                   context: context,
-                                  builder:
-                                      (context) => AlertDialog(
-                                        title: const Text('Board Title'),
-                                        content: SingleChildScrollView(
-                                          child: Text(board.boardTitle),
-                                        ),
-                                        actions: [
-                                          TextButton(
-                                            onPressed:
-                                                () => Navigator.pop(context),
-                                            child: const Text('Close'),
-                                          ),
-                                        ],
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Board Title'),
+                                    content: SingleChildScrollView(
+                                      child: Text(board.boardTitle),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(context),
+                                        child: const Text('Close'),
                                       ),
+                                    ],
+                                  ),
                                 );
                               }
                             },
@@ -112,10 +100,9 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                             'by ${board.boardManagerName}',
                             style: TextStyle(
                               fontSize: 14,
-                              color:
-                                  Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -155,10 +142,9 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: _isGoalExpanded ? null : 2,
-                    overflow:
-                        _isGoalExpanded
-                            ? TextOverflow.visible
-                            : TextOverflow.ellipsis,
+                    overflow: _isGoalExpanded
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                   ),
                   if (board.boardGoal.isNotEmpty && board.boardGoal.length > 80)
                     GestureDetector(
@@ -205,10 +191,9 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
                       color: Theme.of(context).colorScheme.onSurface,
                     ),
                     maxLines: _isDescriptionExpanded ? null : 3,
-                    overflow:
-                        _isDescriptionExpanded
-                            ? TextOverflow.visible
-                            : TextOverflow.ellipsis,
+                    overflow: _isDescriptionExpanded
+                        ? TextOverflow.visible
+                        : TextOverflow.ellipsis,
                   ),
                   if (board.boardGoalDescription.isNotEmpty &&
                       board.boardGoalDescription.length > 120)
@@ -269,8 +254,6 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
               // Board Members Section
               BoardMembersSection(
                 memberIds: board.memberIds,
-                getUserName: (uid) => _getUserName(uid),
-                getUserProfilePicture: (uid) => _getUserProfilePicture(uid),
                 boardId: board.boardId,
                 currentUserId: currentUserId,
                 board: board,
@@ -280,26 +263,5 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
         );
       },
     );
-  }
-
-  // Helper methods to fetch user data
-  Future<String?> _getUserName(String userId) async {
-    try {
-      final user = await UserService().getUserById(userId);
-      return user?.userName;
-    } catch (e) {
-      print('[BoardDetailsSection] Error fetching user name: $e');
-      return null;
-    }
-  }
-
-  Future<String?> _getUserProfilePicture(String userId) async {
-    try {
-      final user = await UserService().getUserById(userId);
-      return user?.userProfilePicture;
-    } catch (e) {
-      print('[BoardDetailsSection] Error fetching user profile picture: $e');
-      return null;
-    }
   }
 }

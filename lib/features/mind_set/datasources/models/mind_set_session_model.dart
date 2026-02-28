@@ -7,7 +7,7 @@ class MindSetSession {
   final String sessionUserId;
   final String sessionType; // on_the_spot, go_with_flow, follow_through
   final String sessionMode; // Checklist, Pomodoro, Eat the Frog
-  final String sessionFlowStyle; // flow, list
+  final String sessionFlowStyle; // shuffle, list
   final List<MindSetModeChange> sessionModeHistory;
   final String sessionTitle;
   final String sessionPurpose;
@@ -27,7 +27,7 @@ class MindSetSession {
     required this.sessionUserId,
     required this.sessionType,
     required this.sessionMode,
-    this.sessionFlowStyle = 'list',
+    this.sessionFlowStyle = MindSetModes.flowStyleList,
     this.sessionModeHistory = const [],
     required this.sessionTitle,
     required this.sessionPurpose,
@@ -52,9 +52,11 @@ class MindSetSession {
       sessionUserId: data['sessionUserId'] as String,
       sessionType: data['sessionType'] as String,
       sessionMode: data['sessionMode'] as String,
-      sessionFlowStyle:
-          data['sessionFlowStyle'] as String? ?? 'list',
-      sessionModeHistory: historyData
+      sessionFlowStyle: MindSetModes.normalizeFlowStyle(
+        data['sessionFlowStyle'] as String?,
+      ),
+      sessionModeHistory:
+          historyData
               ?.map(
                 (entry) => MindSetModeChange.fromMap(
                   Map<String, dynamic>.from(entry as Map),
@@ -66,21 +68,20 @@ class MindSetSession {
       sessionPurpose: data['sessionPurpose'] as String? ?? '',
       sessionWhy: data['sessionWhy'] as String? ?? '',
       sessionStatus: data['sessionStatus'] as String? ?? 'active',
-      sessionCreatedAt:
-          (data['sessionCreatedAt'] as Timestamp).toDate(),
+      sessionCreatedAt: (data['sessionCreatedAt'] as Timestamp).toDate(),
       sessionStartedAt: data['sessionStartedAt'] != null
           ? (data['sessionStartedAt'] as Timestamp).toDate()
           : null,
       sessionEndedAt: data['sessionEndedAt'] != null
           ? (data['sessionEndedAt'] as Timestamp).toDate()
           : null,
-      sessionActiveTaskId:
-          data['sessionActiveTaskId'] as String?,
-      sessionTaskIds:
-          List<String>.from(data['sessionTaskIds'] ?? const []),
-      sessionWorkedTaskIds:
-          List<String>.from(data['sessionWorkedTaskIds'] ?? const []),
-      sessionActions: actionsData
+      sessionActiveTaskId: data['sessionActiveTaskId'] as String?,
+      sessionTaskIds: List<String>.from(data['sessionTaskIds'] ?? const []),
+      sessionWorkedTaskIds: List<String>.from(
+        data['sessionWorkedTaskIds'] ?? const [],
+      ),
+      sessionActions:
+          actionsData
               ?.map(
                 (entry) => MindSetSessionAction.fromMap(
                   Map<String, dynamic>.from(entry as Map),
@@ -89,9 +90,7 @@ class MindSetSession {
               .toList() ??
           const [],
       sessionStats: MindSetSessionStats.fromMap(
-        (data['sessionStats']
-                as Map<String, dynamic>? ??
-            const {}),
+        (data['sessionStats'] as Map<String, dynamic>? ?? const {}),
       ),
     );
   }
@@ -102,15 +101,13 @@ class MindSetSession {
       'sessionUserId': sessionUserId,
       'sessionType': sessionType,
       'sessionMode': sessionMode,
-      'sessionFlowStyle': sessionFlowStyle,
-      'sessionModeHistory':
-          sessionModeHistory.map((e) => e.toMap()).toList(),
+      'sessionFlowStyle': MindSetModes.normalizeFlowStyle(sessionFlowStyle),
+      'sessionModeHistory': sessionModeHistory.map((e) => e.toMap()).toList(),
       'sessionTitle': sessionTitle,
       'sessionPurpose': sessionPurpose,
       'sessionWhy': sessionWhy,
       'sessionStatus': sessionStatus,
-      'sessionCreatedAt':
-          Timestamp.fromDate(sessionCreatedAt),
+      'sessionCreatedAt': Timestamp.fromDate(sessionCreatedAt),
       'sessionStartedAt': sessionStartedAt != null
           ? Timestamp.fromDate(sessionStartedAt!)
           : null,
@@ -147,36 +144,25 @@ class MindSetSession {
   }) {
     return MindSetSession(
       sessionId: sessionId ?? this.sessionId,
-      sessionUserId:
-          sessionUserId ?? this.sessionUserId,
+      sessionUserId: sessionUserId ?? this.sessionUserId,
       sessionType: sessionType ?? this.sessionType,
       sessionMode: sessionMode ?? this.sessionMode,
-      sessionFlowStyle:
-          sessionFlowStyle ?? this.sessionFlowStyle,
-      sessionModeHistory:
-          sessionModeHistory ?? this.sessionModeHistory,
+      sessionFlowStyle: MindSetModes.normalizeFlowStyle(
+        sessionFlowStyle ?? this.sessionFlowStyle,
+      ),
+      sessionModeHistory: sessionModeHistory ?? this.sessionModeHistory,
       sessionTitle: sessionTitle ?? this.sessionTitle,
-      sessionPurpose:
-          sessionPurpose ?? this.sessionPurpose,
+      sessionPurpose: sessionPurpose ?? this.sessionPurpose,
       sessionWhy: sessionWhy ?? this.sessionWhy,
-      sessionStatus:
-          sessionStatus ?? this.sessionStatus,
-      sessionCreatedAt:
-          sessionCreatedAt ?? this.sessionCreatedAt,
-      sessionStartedAt:
-          sessionStartedAt ?? this.sessionStartedAt,
-      sessionEndedAt:
-          sessionEndedAt ?? this.sessionEndedAt,
-      sessionActiveTaskId:
-          sessionActiveTaskId ?? this.sessionActiveTaskId,
-      sessionTaskIds:
-          sessionTaskIds ?? this.sessionTaskIds,
-      sessionWorkedTaskIds:
-          sessionWorkedTaskIds ?? this.sessionWorkedTaskIds,
-      sessionActions:
-          sessionActions ?? this.sessionActions,
-      sessionStats:
-          sessionStats ?? this.sessionStats,
+      sessionStatus: sessionStatus ?? this.sessionStatus,
+      sessionCreatedAt: sessionCreatedAt ?? this.sessionCreatedAt,
+      sessionStartedAt: sessionStartedAt ?? this.sessionStartedAt,
+      sessionEndedAt: sessionEndedAt ?? this.sessionEndedAt,
+      sessionActiveTaskId: sessionActiveTaskId ?? this.sessionActiveTaskId,
+      sessionTaskIds: sessionTaskIds ?? this.sessionTaskIds,
+      sessionWorkedTaskIds: sessionWorkedTaskIds ?? this.sessionWorkedTaskIds,
+      sessionActions: sessionActions ?? this.sessionActions,
+      sessionStats: sessionStats ?? this.sessionStats,
     );
   }
 }
@@ -185,28 +171,17 @@ class MindSetModeChange {
   final String mode;
   final DateTime changedAt;
 
-  const MindSetModeChange({
-    required this.mode,
-    required this.changedAt,
-  });
+  const MindSetModeChange({required this.mode, required this.changedAt});
 
-  factory MindSetModeChange.fromMap(
-      Map<String, dynamic> data) {
+  factory MindSetModeChange.fromMap(Map<String, dynamic> data) {
     return MindSetModeChange(
       mode: data['mode'] as String? ?? MindSetModes.checklist,
-      changedAt:
-          (data['changedAt'] as Timestamp?)
-                  ?.toDate() ??
-              DateTime.now(),
+      changedAt: (data['changedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
   Map<String, dynamic> toMap() {
-    return {
-      'mode': mode,
-      'changedAt':
-          Timestamp.fromDate(changedAt),
-    };
+    return {'mode': mode, 'changedAt': Timestamp.fromDate(changedAt)};
   }
 }
 

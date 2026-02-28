@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/board_model.dart';
 import '../models/board_stats_model.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
+import 'package:flutter/foundation.dart';
 
 class BoardService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -12,6 +13,57 @@ class BoardService {
   final ActivityEventService _activityEventService = ActivityEventService();
 
   String? get currentUserId => _auth.currentUser?.uid;
+
+  Future<Board?> _findPersonalBoardForUser(String userId) async {
+    final personalByTypeSnapshot = await _boardCollection
+        .where('boardManagerId', isEqualTo: userId)
+        .where('boardIsDeleted', isEqualTo: false)
+        .where('boardType', isEqualTo: 'personal')
+        .limit(1)
+        .get();
+
+    if (personalByTypeSnapshot.docs.isNotEmpty) {
+      final doc = personalByTypeSnapshot.docs.first;
+      return Board.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+    }
+
+    // Legacy fallback for older records that may not have boardType set.
+    final legacyPersonalSnapshot = await _boardCollection
+        .where('boardManagerId', isEqualTo: userId)
+        .where('boardIsDeleted', isEqualTo: false)
+        .where('boardTitle', isEqualTo: 'Personal')
+        .limit(1)
+        .get();
+
+    if (legacyPersonalSnapshot.docs.isNotEmpty) {
+      final doc = legacyPersonalSnapshot.docs.first;
+      return Board.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+    }
+
+    return null;
+  }
+
+  Future<Board> ensurePersonalBoardForCurrentUser() async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception("User not signed in");
+
+    final existing = await _findPersonalBoardForUser(user.uid);
+    if (existing != null) return existing;
+
+    await addBoard(
+      boardTitle: 'Personal',
+      boardGoal: 'Personal tasks and projects',
+      boardGoalDescription:
+          'A space to manage your personal tasks and projects',
+      boardType: 'personal',
+      boardPurpose: 'category',
+    );
+
+    final created = await _findPersonalBoardForUser(user.uid);
+    if (created != null) return created;
+
+    throw Exception('Failed to provision Personal board for user ${user.uid}');
+  }
 
   // ------------------------
   // CREATE
@@ -29,21 +81,23 @@ class BoardService {
     final boardRef = _boardCollection.doc();
     final now = DateTime.now();
 
-    print('[DEBUG] BoardService: Creating new board with ID = ${boardRef.id}');
-    print('[DEBUG] BoardService: Title = $boardTitle');
+    debugPrint(
+      '[DEBUG] BoardService: Creating new board with ID = ${boardRef.id}',
+    );
+    debugPrint('[DEBUG] BoardService: Title = $boardTitle');
 
     final newBoard = Board(
       boardId: boardRef.id,
       boardManagerId: user.uid,
       boardManagerName: user.displayName ?? 'Unknown',
       boardCreatedAt: now,
-      boardTitle:
-          boardTitle?.isNotEmpty == true ? boardTitle! : 'Untitled Board',
+      boardTitle: boardTitle?.isNotEmpty == true
+          ? boardTitle!
+          : 'Untitled Board',
       boardGoal: boardGoal?.isNotEmpty == true ? boardGoal! : 'No goal set',
-      boardGoalDescription:
-          boardGoalDescription?.isNotEmpty == true
-              ? boardGoalDescription!
-              : 'No description',
+      boardGoalDescription: boardGoalDescription?.isNotEmpty == true
+          ? boardGoalDescription!
+          : 'No description',
       stats: BoardStats(),
       memberIds: [user.uid],
       boardDeletedAt: null,
@@ -114,18 +168,16 @@ class BoardService {
     if (userId == null) return [];
 
     // Get boards where user is manager
-    final managerSnapshot =
-        await _boardCollection
-            .where('boardManagerId', isEqualTo: userId)
-            .where('boardIsDeleted', isEqualTo: false)
-            .get();
+    final managerSnapshot = await _boardCollection
+        .where('boardManagerId', isEqualTo: userId)
+        .where('boardIsDeleted', isEqualTo: false)
+        .get();
 
     // Get boards where user is a member
-    final memberSnapshot =
-        await _boardCollection
-            .where('memberIds', arrayContains: userId)
-            .where('boardIsDeleted', isEqualTo: false)
-            .get();
+    final memberSnapshot = await _boardCollection
+        .where('memberIds', arrayContains: userId)
+        .where('boardIsDeleted', isEqualTo: false)
+        .get();
 
     final allBoards = [...managerSnapshot.docs, ...memberSnapshot.docs];
 
@@ -243,7 +295,7 @@ class BoardService {
           metadata: {'boardId': boardId},
         );
       } catch (e) {
-        print('[ERROR] Failed to log member joined event: $e');
+        debugPrint('[ERROR] Failed to log member joined event: $e');
       }
     }
   }
@@ -279,29 +331,29 @@ class BoardService {
           metadata: {'boardId': boardId},
         );
       } catch (e) {
-        print('[ERROR] Failed to log member removed event: $e');
+        debugPrint('[ERROR] Failed to log member removed event: $e');
       }
     }
   }
 
   /// Member voluntarily leaves the board
-  Future<void> leaveBoard({
-    required String boardId,
-  }) async {
+  Future<void> leaveBoard({required String boardId}) async {
     final userId = _auth.currentUser?.uid;
     if (userId == null) throw Exception("User not signed in");
 
     final boardRef = _boardCollection.doc(boardId);
     final boardDoc = await boardRef.get();
-    
+
     if (!boardDoc.exists) throw Exception("Board not found");
-    
+
     final data = boardDoc.data() as Map<String, dynamic>;
     final boardManagerId = data['boardManagerId'] as String;
-    
+
     // Manager cannot leave their own board
     if (userId == boardManagerId) {
-      throw Exception("Board manager cannot leave the board. Transfer ownership or delete the board instead.");
+      throw Exception(
+        "Board manager cannot leave the board. Transfer ownership or delete the board instead.",
+      );
     }
 
     // Remove member
@@ -322,18 +374,20 @@ class BoardService {
     required String memberIdToKick,
     String? memberName,
   }) async {
-    print('[DEBUG] BoardService.kickMember called - boardId: $boardId, memberName: $memberName');
+    debugPrint(
+      '[DEBUG] BoardService.kickMember called - boardId: $boardId, memberName: $memberName',
+    );
     final managerId = _auth.currentUser?.uid;
     if (managerId == null) throw Exception("User not signed in");
 
     final boardRef = _boardCollection.doc(boardId);
     final boardDoc = await boardRef.get();
-    
+
     if (!boardDoc.exists) throw Exception("Board not found");
-    
+
     final data = boardDoc.data() as Map<String, dynamic>;
     final boardManagerId = data['boardManagerId'] as String;
-    
+
     // Only board manager can kick members
     if (managerId != boardManagerId) {
       throw Exception("Only the board manager can kick members");
@@ -369,11 +423,10 @@ class BoardService {
   }
 
   Future<List<Board>> getBoardsForUserWithMembership(String userId) async {
-    final snapshot =
-        await _boardCollection
-            .where('memberIds', arrayContains: userId)
-            .where('boardIsDeleted', isEqualTo: false)
-            .get();
+    final snapshot = await _boardCollection
+        .where('memberIds', arrayContains: userId)
+        .where('boardIsDeleted', isEqualTo: false)
+        .get();
 
     return snapshot.docs
         .map((doc) => Board.fromMap(doc.data() as Map<String, dynamic>, doc.id))
@@ -388,7 +441,9 @@ class BoardService {
   }
 
   Future<void> softDeleteBoard(Board board) async {
-    print('[DEBUG] BoardService: soft deleting board ${board.boardId} with title ${board.boardTitle}');
+    debugPrint(
+      '[DEBUG] BoardService: soft deleting board ${board.boardId} with title ${board.boardTitle}',
+    );
     final user = _auth.currentUser;
     final updatedBoard = board.copyWith(
       boardIsDeleted: true,
@@ -398,7 +453,9 @@ class BoardService {
     );
 
     await _boardCollection.doc(board.boardId).update(updatedBoard.toMap());
-    print('[DEBUG] BoardService: board ${board.boardId} soft-deleted successfully');
+    debugPrint(
+      '[DEBUG] BoardService: board ${board.boardId} soft-deleted successfully',
+    );
   }
 
   Future<void> restoreBoard(Board board) async {

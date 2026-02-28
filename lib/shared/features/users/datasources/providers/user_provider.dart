@@ -3,10 +3,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import '../services/user_services.dart';
 import 'package:mind_manager_final/features/notifications/datasources/services/push_messaging_service.dart';
+import '../../../../../features/boards/datasources/services/board_services.dart';
 
 class UserProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final UserService _userService = UserService();
+  final BoardService _boardService = BoardService();
 
   UserModel? _currentUser;
   UserModel? get currentUser => _currentUser;
@@ -27,6 +29,15 @@ class UserProvider extends ChangeNotifier {
       notifyListeners();
     } else {
       await loadUserData(firebaseUser.uid);
+
+      // System-level invariant: every signed-in user must have a Personal board.
+      try {
+        await _boardService.ensurePersonalBoardForCurrentUser();
+      } catch (e) {
+        if (kDebugMode) {
+          print('⚠️ [UserProvider] Error ensuring Personal board: $e');
+        }
+      }
       
       // Only register FCM token if user document exists (prevents creating empty user docs)
       if (_currentUser != null) {

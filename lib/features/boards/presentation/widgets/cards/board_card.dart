@@ -54,14 +54,17 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    final canDelete = widget.onDelete != null;
     return Consumer<BoardStatsProvider>(
       builder: (context, statsProvider, _) {
         // Try to get stats from provider first, fallback to board.stats
         final stats =
-            statsProvider.getStatsForBoard(widget.board.boardId) ?? widget.board.stats;
+            statsProvider.getStatsForBoard(widget.board.boardId) ??
+            widget.board.stats;
 
         final isPersonal =
-            widget.board.boardType == 'personal' || widget.board.boardTitle == 'Personal';
+            widget.board.boardType == 'personal' ||
+            widget.board.boardTitle == 'Personal';
         final isProject = widget.board.boardPurpose == 'project';
 
         final accentColor = isPersonal
@@ -79,57 +82,57 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
         final progress = taskTotal > 0 ? taskDone / taskTotal : 0.0;
         final percent = taskTotal > 0 ? (progress * 100).round() : 0;
 
-        print(
-          '[BoardCard] boardId: ${widget.board.boardId}, taskDone: $taskDone, taskTotal: $taskTotal, progress: $progress',
-        );
-
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Slidable(
             key: ValueKey(widget.board.boardId),
-            endActionPane: isPersonal
+            endActionPane: isPersonal || !canDelete
                 ? null // Personal board cannot be deleted
                 : ActionPane(
-              motion: const ScrollMotion(),
-              extentRatio: 0.25,
-              children: [
-                Expanded(
-                  child: Container(
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 60,
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade400,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: widget.onDelete,
-                          borderRadius: BorderRadius.circular(8),
-                          child: const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.delete, color: Colors.white, size: 20),
-                              SizedBox(height: 2),
-                              Text(
-                                'Delete',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w500,
+                    motion: const ScrollMotion(),
+                    extentRatio: 0.25,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade400,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: widget.onDelete,
+                                borderRadius: BorderRadius.circular(8),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.delete,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Delete',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ],
-            ),
             child: Builder(
               builder: (context) => GestureDetector(
                 onTap: () {
@@ -138,21 +141,16 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                   widget.onTap?.call();
                 },
                 child: Card(
-                margin: EdgeInsets.zero,
-                elevation: 4,
-                shadowColor: accentColor.withOpacity(0.25),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.zero,
-                  side: BorderSide(
-                    color: borderColor,
-                    width: 1,
+                  margin: EdgeInsets.zero,
+                  elevation: 4,
+                  shadowColor: accentColor.withValues(alpha: 0.25),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.zero,
+                    side: BorderSide(color: borderColor, width: 1),
                   ),
-                ),
-                child: Container(
+                  child: Container(
                     width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                    ),
+                    decoration: BoxDecoration(color: Colors.white),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -163,9 +161,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                             horizontal: 16,
                             vertical: 10,
                           ),
-                          decoration: BoxDecoration(
-                            color: headerColor,
-                          ),
+                          decoration: BoxDecoration(color: headerColor),
                           child: Stack(
                             children: [
                               Positioned(
@@ -177,8 +173,8 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                     isPersonal
                                         ? Icons.person_rounded
                                         : (isProject
-                                            ? Icons.flag_rounded
-                                            : Icons.category_rounded),
+                                              ? Icons.flag_rounded
+                                              : Icons.category_rounded),
                                     size: 64,
                                     color: Colors.white,
                                   ),
@@ -206,15 +202,17 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                     width: 34,
                                     height: 34,
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.18),
+                                      color: Colors.white.withValues(
+                                        alpha: 0.18,
+                                      ),
                                       borderRadius: BorderRadius.circular(10),
                                     ),
                                     child: Icon(
                                       isPersonal
                                           ? Icons.person_rounded
                                           : (isProject
-                                              ? Icons.flag_rounded
-                                              : Icons.category_rounded),
+                                                ? Icons.flag_rounded
+                                                : Icons.category_rounded),
                                       size: 18,
                                       color: Colors.white,
                                     ),
@@ -222,7 +220,8 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                   const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           widget.board.boardTitle,
@@ -269,11 +268,12 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    if (widget.board.boardPurpose != 'category') ...[
+                                    if (widget.board.boardPurpose !=
+                                        'category') ...[
                                       // Goal
                                       Text(
-                                        widget.board.boardGoal?.isNotEmpty ?? false
-                                            ? widget.board.boardGoal!
+                                        widget.board.boardGoal.isNotEmpty
+                                            ? widget.board.boardGoal
                                             : "Goal: None",
                                         style: TextStyle(
                                           fontSize: 12,
@@ -288,8 +288,17 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                     ],
                                     // Description
                                     Text(
-                                      widget.board.boardDescription?.isNotEmpty ?? false
+                                      widget
+                                                  .board
+                                                  .boardDescription
+                                                  ?.isNotEmpty ??
+                                              false
                                           ? widget.board.boardDescription!
+                                          : widget
+                                                .board
+                                                .boardGoalDescription
+                                                .isNotEmpty
+                                          ? widget.board.boardGoalDescription
                                           : "Description: None",
                                       style: TextStyle(
                                         fontSize: 12,
@@ -309,7 +318,6 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                 const SizedBox(width: 12),
                                 // Right: Circular progress indicator
                                 _buildProgressIndicator(
-                                  stats,
                                   progress,
                                   percent,
                                   accentColor,
@@ -336,10 +344,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
     if (visibleMembers.isEmpty) {
       return Text(
         'No members',
-        style: TextStyle(
-          fontSize: 11,
-          color: Colors.grey[600],
-        ),
+        style: TextStyle(fontSize: 11, color: Colors.grey[600]),
       );
     }
 
@@ -361,10 +366,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 1.5,
-                      ),
+                      border: Border.all(color: Colors.white, width: 1.5),
                     ),
                     child: CircleAvatar(
                       radius: 10,
@@ -389,10 +391,7 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white,
-                        width: 1.5,
-                      ),
+                      border: Border.all(color: Colors.white, width: 1.5),
                     ),
                     child: CircleAvatar(
                       radius: 10,
@@ -415,8 +414,11 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
     );
   }
 
-    Widget _buildProgressIndicator(
-      dynamic stats, double progress, int percent, Color accentColor) {
+  Widget _buildProgressIndicator(
+    double progress,
+    int percent,
+    Color accentColor,
+  ) {
     return SizedBox(
       width: 60,
       height: 60,
@@ -448,7 +450,9 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
 
   Widget _buildPurposePill(String boardPurpose, bool isPersonal) {
     final isProject = boardPurpose == 'project';
-    final label = isPersonal ? 'Personal' : (isProject ? 'Project' : 'Category');
+    final label = isPersonal
+        ? 'Personal'
+        : (isProject ? 'Project' : 'Category');
     final color = isPersonal
         ? Colors.blueGrey.shade200
         : (isProject ? Colors.orange.shade200 : Colors.green.shade200);

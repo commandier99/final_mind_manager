@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/board_model.dart';
 import '../models/board_stats_model.dart';
 import '../services/board_services.dart';
+import 'package:flutter/foundation.dart';
 
 class BoardProvider extends ChangeNotifier {
   final BoardService _boardService = BoardService();
@@ -84,6 +85,7 @@ class BoardProvider extends ChangeNotifier {
     String? newGoal,
     String? newGoalDescription,
     BoardStats? newStats,
+    Map<String, String>? memberRoles,
   }) async {
     _setLoading(true);
     try {
@@ -93,6 +95,7 @@ class BoardProvider extends ChangeNotifier {
         newGoal: newGoal,
         newGoalDescription: newGoalDescription,
         newStats: newStats,
+        memberRoles: memberRoles,
       );
       await refreshBoards();
     } finally {
@@ -187,7 +190,9 @@ class BoardProvider extends ChangeNotifier {
   /// ONE-TIME MIGRATION: Initialize stats for existing boards
   /// ------------------------
   Future<void> initializeStatsForAllBoards() async {
-    print('[BoardProvider] Starting stats initialization for all boards...');
+    debugPrint(
+      '[BoardProvider] Starting stats initialization for all boards...',
+    );
     _setLoading(true);
 
     try {
@@ -200,13 +205,15 @@ class BoardProvider extends ChangeNotifier {
             board.boardId,
             newStats: BoardStats(), // Initialize with zeros
           );
-          print('[BoardProvider] Initialized stats for board ${board.boardId}');
+          debugPrint(
+            '[BoardProvider] Initialized stats for board ${board.boardId}',
+          );
         }
       }
       await refreshBoards();
-      print('[BoardProvider] Stats initialization complete!');
+      debugPrint('[BoardProvider] Stats initialization complete!');
     } catch (e) {
-      print('[BoardProvider] Error initializing stats: $e');
+      debugPrint('[BoardProvider] Error initializing stats: $e');
     } finally {
       _setLoading(false);
     }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../shared/features/users/datasources/models/activity_event_model.dart';
+import 'package:flutter/foundation.dart';
 
 class BoardMemberActivityService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -11,8 +12,10 @@ class BoardMemberActivityService {
     int limit = 50,
   }) async {
     try {
-      print('[DEBUG] BoardMemberActivityService: Getting activities for boardId=$boardId, memberId=$memberId');
-      
+      debugPrint(
+        '[DEBUG] BoardMemberActivityService: Getting activities for boardId=$boardId, memberId=$memberId',
+      );
+
       final query = _firestore
           .collection('activity_events')
           .where('boardId', isEqualTo: boardId)
@@ -21,15 +24,19 @@ class BoardMemberActivityService {
           .limit(limit);
 
       final snapshot = await query.get();
-      
+
       final activities = snapshot.docs
           .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
           .toList();
 
-      print('[DEBUG] BoardMemberActivityService: Found ${activities.length} activities');
+      debugPrint(
+        '[DEBUG] BoardMemberActivityService: Found ${activities.length} activities',
+      );
       return activities;
     } catch (e) {
-      print('[ERROR] BoardMemberActivityService: Error getting member activities: $e');
+      debugPrint(
+        '[ERROR] BoardMemberActivityService: Error getting member activities: $e',
+      );
       rethrow;
     }
   }
@@ -40,8 +47,10 @@ class BoardMemberActivityService {
     int limit = 100,
   }) async {
     try {
-      print('[DEBUG] BoardMemberActivityService: Getting all activities for boardId=$boardId');
-      
+      debugPrint(
+        '[DEBUG] BoardMemberActivityService: Getting all activities for boardId=$boardId',
+      );
+
       final query = _firestore
           .collection('activity_events')
           .where('boardId', isEqualTo: boardId)
@@ -49,15 +58,19 @@ class BoardMemberActivityService {
           .limit(limit);
 
       final snapshot = await query.get();
-      
+
       final activities = snapshot.docs
           .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
           .toList();
 
-      print('[DEBUG] BoardMemberActivityService: Found ${activities.length} activities');
+      debugPrint(
+        '[DEBUG] BoardMemberActivityService: Found ${activities.length} activities',
+      );
       return activities;
     } catch (e) {
-      print('[ERROR] BoardMemberActivityService: Error getting board activities: $e');
+      debugPrint(
+        '[ERROR] BoardMemberActivityService: Error getting board activities: $e',
+      );
       rethrow;
     }
   }
@@ -68,8 +81,10 @@ class BoardMemberActivityService {
     required String memberId,
     int limit = 50,
   }) {
-    print('[DEBUG] BoardMemberActivityService: Streaming activities for boardId=$boardId, memberId=$memberId');
-    
+    debugPrint(
+      '[DEBUG] BoardMemberActivityService: Streaming activities for boardId=$boardId, memberId=$memberId',
+    );
+
     return _firestore
         .collection('activity_events')
         .where('boardId', isEqualTo: boardId)
@@ -77,9 +92,11 @@ class BoardMemberActivityService {
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
   }
 
   /// Stream all activities for a board
@@ -87,17 +104,21 @@ class BoardMemberActivityService {
     required String boardId,
     int limit = 100,
   }) {
-    print('[DEBUG] BoardMemberActivityService: Streaming all activities for boardId=$boardId');
-    
+    debugPrint(
+      '[DEBUG] BoardMemberActivityService: Streaming all activities for boardId=$boardId',
+    );
+
     return _firestore
         .collection('activity_events')
         .where('boardId', isEqualTo: boardId)
         .orderBy('timestamp', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
+              .toList(),
+        );
   }
 
   /// Get activities filtered by type (e.g., 'task_assigned', 'task_submitted', etc.)
@@ -107,8 +128,10 @@ class BoardMemberActivityService {
     int limit = 50,
   }) async {
     try {
-      print('[DEBUG] BoardMemberActivityService: Getting $activityType activities for boardId=$boardId');
-      
+      debugPrint(
+        '[DEBUG] BoardMemberActivityService: Getting $activityType activities for boardId=$boardId',
+      );
+
       final query = _firestore
           .collection('activity_events')
           .where('boardId', isEqualTo: boardId)
@@ -117,15 +140,19 @@ class BoardMemberActivityService {
           .limit(limit);
 
       final snapshot = await query.get();
-      
+
       final activities = snapshot.docs
           .map((doc) => ActivityEvent.fromMap(doc.data(), doc.id))
           .toList();
 
-      print('[DEBUG] BoardMemberActivityService: Found ${activities.length} $activityType activities');
+      debugPrint(
+        '[DEBUG] BoardMemberActivityService: Found ${activities.length} $activityType activities',
+      );
       return activities;
     } catch (e) {
-      print('[ERROR] BoardMemberActivityService: Error getting activities by type: $e');
+      debugPrint(
+        '[ERROR] BoardMemberActivityService: Error getting activities by type: $e',
+      );
       rethrow;
     }
   }

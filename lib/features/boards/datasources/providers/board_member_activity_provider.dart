@@ -27,7 +27,9 @@ class BoardMemberActivityProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      print('[DEBUG] BoardMemberActivityProvider: Fetching activities for member=$memberId');
+      debugPrint(
+        '[DEBUG] BoardMemberActivityProvider: Fetching activities for member=$memberId',
+      );
       _boardMemberActivities = await _service.getBoardMemberActivities(
         boardId: boardId,
         memberId: memberId,
@@ -39,7 +41,7 @@ class BoardMemberActivityProvider extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       _error = e.toString();
-      print('[ERROR] BoardMemberActivityProvider: $e');
+      debugPrint('[ERROR] BoardMemberActivityProvider: $e');
       notifyListeners();
     }
   }
@@ -54,7 +56,9 @@ class BoardMemberActivityProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      print('[DEBUG] BoardMemberActivityProvider: Fetching all board activities');
+      debugPrint(
+        '[DEBUG] BoardMemberActivityProvider: Fetching all board activities',
+      );
       _boardActivities = await _service.getBoardActivities(
         boardId: boardId,
         limit: limit,
@@ -65,7 +69,7 @@ class BoardMemberActivityProvider extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       _error = e.toString();
-      print('[ERROR] BoardMemberActivityProvider: $e');
+      debugPrint('[ERROR] BoardMemberActivityProvider: $e');
       notifyListeners();
     }
   }
@@ -76,7 +80,9 @@ class BoardMemberActivityProvider extends ChangeNotifier {
     required String memberId,
     int limit = 50,
   }) {
-    print('[DEBUG] BoardMemberActivityProvider: Streaming member activities');
+    debugPrint(
+      '[DEBUG] BoardMemberActivityProvider: Streaming member activities',
+    );
     return _service.streamBoardMemberActivities(
       boardId: boardId,
       memberId: memberId,
@@ -89,11 +95,10 @@ class BoardMemberActivityProvider extends ChangeNotifier {
     required String boardId,
     int limit = 100,
   }) {
-    print('[DEBUG] BoardMemberActivityProvider: Streaming board activities');
-    return _service.streamBoardActivities(
-      boardId: boardId,
-      limit: limit,
+    debugPrint(
+      '[DEBUG] BoardMemberActivityProvider: Streaming board activities',
     );
+    return _service.streamBoardActivities(boardId: boardId, limit: limit);
   }
 
   /// Get activities filtered by type
@@ -107,7 +112,9 @@ class BoardMemberActivityProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      print('[DEBUG] BoardMemberActivityProvider: Fetching $activityType activities');
+      debugPrint(
+        '[DEBUG] BoardMemberActivityProvider: Fetching $activityType activities',
+      );
       _boardActivities = await _service.getBoardActivitiesByType(
         boardId: boardId,
         activityType: activityType,
@@ -119,7 +126,7 @@ class BoardMemberActivityProvider extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       _error = e.toString();
-      print('[ERROR] BoardMemberActivityProvider: $e');
+      debugPrint('[ERROR] BoardMemberActivityProvider: $e');
       notifyListeners();
     }
   }

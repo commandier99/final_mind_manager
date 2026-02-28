@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/providers/board_provider.dart';
+import '../../controllers/boards_query_controller.dart';
 
 class AddBoardFormPage extends StatefulWidget {
   const AddBoardFormPage({super.key});
@@ -10,6 +11,7 @@ class AddBoardFormPage extends StatefulWidget {
 }
 
 class _AddBoardFormPageState extends State<AddBoardFormPage> {
+  final BoardsQueryController _boardsQueryController = BoardsQueryController();
   late TextEditingController _titleController;
   late TextEditingController _goalController;
   late TextEditingController _descriptionController;
@@ -19,16 +21,16 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
 
   final List<_BoardChoice> _boardTypeChoices = const [
     _BoardChoice(
-      value: 'team',
-      shortLabel: 'Team',
-      title: 'Team Board',
-      description: 'For group projects. Shows assignment options.',
-    ),
-    _BoardChoice(
       value: 'personal',
       shortLabel: 'Personal',
       title: 'Personal Board',
       description: 'For solo work. Tasks auto-assign to you.',
+    ),
+    _BoardChoice(
+      value: 'team',
+      shortLabel: 'Team',
+      title: 'Team Board',
+      description: 'For group projects. Shows assignment options.',
     ),
   ];
 
@@ -43,7 +45,8 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
       value: 'category',
       shortLabel: 'Category',
       title: 'Category Board',
-      description: 'Organize tasks into a category without a specific end goal.',
+      description:
+          'Organize tasks into a category without a specific end goal.',
     ),
   ];
 
@@ -63,23 +66,6 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
     super.dispose();
   }
 
-  int _getNextUntitledBoardNumber(List<dynamic> existingBoards) {
-    int maxNumber = 0;
-    final regex = RegExp(r'^Board (\d+)$');
-
-    for (var board in existingBoards) {
-      final match = regex.firstMatch(board.boardTitle ?? '');
-      if (match != null) {
-        final number = int.parse(match.group(1)!);
-        if (number > maxNumber) {
-          maxNumber = number;
-        }
-      }
-    }
-
-    return maxNumber + 1;
-  }
-
   Future<void> _submit() async {
     if (_isSubmitting) return;
 
@@ -88,17 +74,16 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
     });
 
     var title = _titleController.text.trim();
-    final goal = _selectedBoardPurpose == 'project'
-      ? _goalController.text
-      : '';
+    final goal = _selectedBoardPurpose == 'project' ? _goalController.text : '';
     final description = _descriptionController.text;
 
     try {
       final boardProvider = context.read<BoardProvider>();
 
       if (title.isEmpty) {
-        final nextNumber =
-            _getNextUntitledBoardNumber(boardProvider.boards);
+        final nextNumber = _boardsQueryController.getNextUntitledBoardNumber(
+          boardProvider.boards,
+        );
         title = 'Board ${nextNumber.toString().padLeft(2, '0')}';
       }
 
@@ -118,9 +103,9 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error creating board: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error creating board: $e')));
     } finally {
       if (mounted) {
         setState(() {
@@ -137,18 +122,16 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
     required String selectedValue,
     required ValueChanged<String> onChanged,
   }) {
-    final selectedOption =
-        options.firstWhere((option) => option.value == selectedValue);
+    final selectedOption = options.firstWhere(
+      (option) => option.value == selectedValue,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           title,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
         LayoutBuilder(
@@ -180,8 +163,7 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
                       option.shortLabel,
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color:
-                            isSelected ? accentColor : Colors.grey.shade800,
+                        color: isSelected ? accentColor : Colors.grey.shade800,
                       ),
                     ),
                   ),
@@ -212,10 +194,7 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
               const SizedBox(height: 4),
               Text(
                 selectedOption.description,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade700,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
           ),
@@ -227,9 +206,7 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create New Board'),
-      ),
+      appBar: AppBar(title: const Text('Create New Board')),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -288,10 +265,7 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
             const SizedBox(height: 6),
             Text(
               'Goal is required only for Project boards.',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
-              ),
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 16),
             _buildChoiceSelector(

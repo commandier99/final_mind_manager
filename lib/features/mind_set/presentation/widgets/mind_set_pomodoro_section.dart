@@ -233,6 +233,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
     String? motivation,
     List<Map<String, dynamic>>? customPresets,
   }) async {
+    if (_isTimerRunningNow()) {
+      return;
+    }
     final stats = widget.session.sessionStats;
     final currentRemaining = _effectiveRemainingSeconds();
     final safeFocus = focusMinutes < 1 ? 1 : focusMinutes;
@@ -313,6 +316,7 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
         .map(_PomodoroPreset.fromMap)
         .whereType<_PomodoroPreset>()
         .toList();
+    final settingsLocked = _isTimerRunningNow();
 
     bool isPresetSelected(_PomodoroPreset preset) {
       return selectedFocus == preset.focusMinutes &&
@@ -376,7 +380,7 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
       required String label,
       required List<int> options,
       required int selectedValue,
-      required ValueChanged<int> onSelected,
+      required ValueChanged<int>? onSelected,
       String suffix = 'm',
     }) {
       return Column(
@@ -392,7 +396,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                   (value) => ChoiceChip(
                     label: Text('$value$suffix'),
                     selected: selectedValue == value,
-                    onSelected: (_) => onSelected(value),
+                    onSelected: onSelected == null
+                        ? null
+                        : (_) => onSelected(value),
                   ),
                 )
                 .toList(),
@@ -431,12 +437,33 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                     ),
                     const Spacer(),
                     TextButton.icon(
-                      onPressed: () => saveCustomPreset(setState),
+                      onPressed: settingsLocked
+                          ? null
+                          : () => saveCustomPreset(setState),
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('Save current'),
                     ),
                   ],
                 ),
+                if (settingsLocked) ...[
+                  const SizedBox(height: 4),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      'Timer is running. Settings can be viewed but cannot be changed until the timer stops.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -448,7 +475,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                         label: Text(preset.name),
                         selected: isSelected,
                         showCheckmark: false,
-                        onSelected: (_) {
+                        onSelected: settingsLocked
+                            ? null
+                            : (_) {
                           setState(() {
                             selectedFocus = preset.focusMinutes;
                             selectedBreak = preset.breakMinutes;
@@ -464,7 +493,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                         label: Text(preset.name),
                         selected: isSelected,
                         showCheckmark: false,
-                        onSelected: (_) {
+                        onSelected: settingsLocked
+                            ? null
+                            : (_) {
                           setState(() {
                             selectedFocus = preset.focusMinutes;
                             selectedBreak = preset.breakMinutes;
@@ -472,7 +503,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                             selectedTarget = preset.targetCount;
                           });
                         },
-                        onDeleted: () {
+                        onDeleted: settingsLocked
+                            ? null
+                            : () {
                           setState(() {
                             customPresets = customPresets
                                 .where((p) => p.name != preset.name)
@@ -488,21 +521,27 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                   label: 'Focus length',
                   options: focusOptions,
                   selectedValue: selectedFocus,
-                  onSelected: (v) => setState(() => selectedFocus = v),
+                  onSelected: settingsLocked
+                      ? null
+                      : (v) => setState(() => selectedFocus = v),
                 ),
                 const SizedBox(height: 12),
                 optionGroup(
                   label: 'Short break',
                   options: breakOptions,
                   selectedValue: selectedBreak,
-                  onSelected: (v) => setState(() => selectedBreak = v),
+                  onSelected: settingsLocked
+                      ? null
+                      : (v) => setState(() => selectedBreak = v),
                 ),
                 const SizedBox(height: 12),
                 optionGroup(
                   label: 'Long break',
                   options: longBreakOptions,
                   selectedValue: selectedLongBreak,
-                  onSelected: (v) => setState(() => selectedLongBreak = v),
+                  onSelected: settingsLocked
+                      ? null
+                      : (v) => setState(() => selectedLongBreak = v),
                 ),
                 const SizedBox(height: 12),
                 Row(
@@ -514,7 +553,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                       ),
                     ),
                     IconButton(
-                      onPressed: selectedTarget > minTarget
+                      onPressed: settingsLocked
+                          ? null
+                          : selectedTarget > minTarget
                           ? () => setState(() => selectedTarget--)
                           : null,
                       icon: const Icon(Icons.remove_circle_outline),
@@ -531,7 +572,9 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                       ),
                     ),
                     IconButton(
-                      onPressed: selectedTarget < maxTarget
+                      onPressed: settingsLocked
+                          ? null
+                          : selectedTarget < maxTarget
                           ? () => setState(() => selectedTarget++)
                           : null,
                       icon: const Icon(Icons.add_circle_outline),
@@ -550,7 +593,13 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () {
+                    onPressed: settingsLocked
+                        ? null
+                        : () {
+                      if (_isTimerRunningNow()) {
+                        Navigator.pop(context);
+                        return;
+                      }
                       final motivation = _motivationForMinutes(selectedFocus);
                       _updateSettings(
                         focusMinutes: selectedFocus,
@@ -636,6 +685,10 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
   Future<void> _skipCurrentInterval() async {
     if (!_isRunning) return;
     await _handleIntervalComplete();
+  }
+
+  bool _isTimerRunningNow() {
+    return widget.session.sessionStats.pomodoroIsRunning ?? false;
   }
 
   @override

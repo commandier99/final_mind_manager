@@ -2,6 +2,8 @@ class MindSetModes {
   static const String checklist = 'Checklist';
   static const String pomodoro = 'Pomodoro';
   static const String eatTheFrog = 'Eat the Frog';
+  static const String flowStyleList = 'list';
+  static const String flowStyleShuffle = 'shuffle';
 
   static const List<String> values = [checklist, pomodoro, eatTheFrog];
 
@@ -24,20 +26,16 @@ class MindSetModes {
     return checklist;
   }
 
-  static String normalizeFromPlanStyle(
-    String style, {
-    String fallback = checklist,
+  static String normalizeFlowStyle(
+    String? style, {
+    String fallback = flowStyleList,
   }) {
-    switch (style) {
-      case 'pomodoro':
-      case pomodoro:
-        return pomodoro;
-      case 'eat_the_frog':
-      case eatTheFrog:
-        return eatTheFrog;
-      case 'quick_todo':
-      case checklist:
-        return checklist;
+    switch ((style ?? '').trim().toLowerCase()) {
+      case 'shuffle':
+      case 'flow':
+        return flowStyleShuffle;
+      case 'list':
+        return flowStyleList;
       default:
         return fallback;
     }

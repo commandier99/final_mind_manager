@@ -42,7 +42,7 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    
+
                     // Stats Grid
                     GridView.count(
                       crossAxisCount: 2,
@@ -69,7 +69,7 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                   ],
                 ),
               ),
-              
+
               // Board Activity Section
               BoardActivitySection(boardId: widget.boardId),
             ],
@@ -77,14 +77,6 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
         );
       },
     );
-  }
-
-  String _getCompletionPercentage(dynamic stats) {
-    if (stats == null || stats.boardTasksCount == 0) {
-      return '0%';
-    }
-    final percentage = (stats.boardTasksDoneCount / stats.boardTasksCount * 100).toStringAsFixed(1);
-    return '$percentage%';
   }
 
   Widget _buildStatCard(
@@ -101,10 +93,7 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              color.withOpacity(0.1),
-              color.withOpacity(0.05),
-            ],
+            colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
           ),
         ),
         child: Padding(
@@ -123,10 +112,7 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
               const SizedBox(height: 8),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey.shade600,
-                ),
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 textAlign: TextAlign.center,
               ),
             ],

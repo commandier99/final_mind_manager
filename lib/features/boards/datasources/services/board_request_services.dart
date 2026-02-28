@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/board_request_model.dart';
 import 'board_services.dart';
+import 'package:flutter/foundation.dart';
 
 class BoardRequestService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -52,10 +53,10 @@ class BoardRequestService {
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
-      
-      print('✅ Invitation created for user $userId to board $boardId');
+
+      debugPrint('✅ Invitation created for user $userId to board $boardId');
     } catch (e) {
-      print('⚠️ Error creating invitation: $e');
+      debugPrint('⚠️ Error creating invitation: $e');
       rethrow;
     }
   }
@@ -71,7 +72,10 @@ class BoardRequestService {
       if (currentUser == null) throw Exception('User not authenticated');
 
       // Get user data
-      final userDoc = await _firestore.collection('users').doc(currentUser.uid).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
       final userData = userDoc.data();
 
       // Get board data for manager info
@@ -81,7 +85,9 @@ class BoardRequestService {
       // Check if board is public
       final isPublic = boardData?['boardIsPublic'] ?? false;
       if (!isPublic) {
-        throw Exception('This board is private and does not accept join requests');
+        throw Exception(
+          'This board is private and does not accept join requests',
+        );
       }
 
       final requestId = _requestsCollection.doc().id;
@@ -102,10 +108,12 @@ class BoardRequestService {
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
-      
-      print('✅ Join request created by ${currentUser.uid} for board $boardId');
+
+      debugPrint(
+        '✅ Join request created by ${currentUser.uid} for board $boardId',
+      );
     } catch (e) {
-      print('⚠️ Error creating join request: $e');
+      debugPrint('⚠️ Error creating join request: $e');
       rethrow;
     }
   }
@@ -209,22 +217,22 @@ class BoardRequestService {
 
   /// Get all requests made by a user
   Stream<List<BoardRequest>> streamRequestsByUser(String userId) {
-    print('[BoardRequestService] Setting up stream for userId: $userId');
+    debugPrint('[BoardRequestService] Setting up stream for userId: $userId');
     try {
       return _requestsCollection
           .where('userId', isEqualTo: userId)
           .orderBy('boardReqCreatedAt', descending: true)
           .snapshots()
           .handleError((error) {
-            print('[BoardRequestService] ERROR in stream: $error');
+            debugPrint('[BoardRequestService] ERROR in stream: $error');
             throw error;
           })
           .map((snapshot) {
-            print(
+            debugPrint(
               '[BoardRequestService] Snapshot received with ${snapshot.docs.length} documents',
             );
             return snapshot.docs.map((doc) {
-              print('[BoardRequestService] Request: ${doc.data()}');
+              debugPrint('[BoardRequestService] Request: ${doc.data()}');
               return BoardRequest.fromMap(
                 doc.data() as Map<String, dynamic>,
                 doc.id,
@@ -232,19 +240,18 @@ class BoardRequestService {
             }).toList();
           });
     } catch (e) {
-      print('[BoardRequestService] Exception setting up stream: $e');
+      debugPrint('[BoardRequestService] Exception setting up stream: $e');
       rethrow;
     }
   }
 
   /// Check if user has pending request for a board
   Future<bool> hasPendingRequest(String boardId, String userId) async {
-    final snapshot =
-        await _requestsCollection
-            .where('boardId', isEqualTo: boardId)
-            .where('userId', isEqualTo: userId)
-            .where('boardReqStatus', isEqualTo: 'pending')
-            .get();
+    final snapshot = await _requestsCollection
+        .where('boardId', isEqualTo: boardId)
+        .where('userId', isEqualTo: userId)
+        .where('boardReqStatus', isEqualTo: 'pending')
+        .get();
 
     return snapshot.docs.isNotEmpty;
   }
@@ -276,9 +283,9 @@ class BoardRequestService {
         if (responseMessage != null) 'boardReqResponseMessage': responseMessage,
       });
 
-      print('✅ Join request approved for user ${request.userId}');
+      debugPrint('✅ Join request approved for user ${request.userId}');
     } catch (e) {
-      print('⚠️ Error approving join request: $e');
+      debugPrint('⚠️ Error approving join request: $e');
       rethrow;
     }
   }
@@ -299,9 +306,9 @@ class BoardRequestService {
         if (responseMessage != null) 'boardReqResponseMessage': responseMessage,
       });
 
-      print('✅ Join request rejected for user ${request.userId}');
+      debugPrint('✅ Join request rejected for user ${request.userId}');
     } catch (e) {
-      print('⚠️ Error rejecting join request: $e');
+      debugPrint('⚠️ Error rejecting join request: $e');
       rethrow;
     }
   }
@@ -314,9 +321,9 @@ class BoardRequestService {
   Future<void> cancelRequest(String requestId) async {
     try {
       await _requestsCollection.doc(requestId).delete();
-      print('✅ Join request cancelled');
+      debugPrint('✅ Join request cancelled');
     } catch (e) {
-      print('⚠️ Error cancelling join request: $e');
+      debugPrint('⚠️ Error cancelling join request: $e');
       rethrow;
     }
   }

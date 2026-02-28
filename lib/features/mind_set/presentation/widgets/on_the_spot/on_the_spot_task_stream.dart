@@ -10,8 +10,10 @@ import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/task_card.dart';
 import '../../../../../shared/modes/mind_set_modes.dart';
 import '../../../../../shared/modes/mind_set_mode_policy.dart';
+import '../../../datasources/services/mind_set_session_runtime_service.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
+import '../../../../../shared/features/query/task_query_controller.dart';
 
 class OnTheSpotTaskStream extends StatefulWidget {
   final String sessionId;
@@ -38,35 +40,18 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   bool _isLoadingBoard = true;
   final String _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   final MindSetSessionService _sessionService = MindSetSessionService();
+  final MindSetSessionRuntimeService _runtimeService =
+      MindSetSessionRuntimeService();
+  final TaskQueryController _taskQueryController = TaskQueryController();
   String _sortBy = 'created_desc'; // format: 'field_direction'
   late Set<String> _selectedFilters;
-
-  // Filter options
-  static const String allFilter = 'All';
-  static const List<String> taskStatuses = [
-    'To Do',
-    'In Progress',
-    'Paused',
-    'COMPLETED',
-  ];
-  static const List<String> deadlineFilters = [
-    'Overdue',
-    'Today',
-    'Upcoming',
-    'None',
-  ];
-  static final List<String> allFilters = [
-    allFilter,
-    ...taskStatuses,
-    ...deadlineFilters,
-  ];
 
   @override
   void initState() {
     super.initState();
-    _selectedFilters = {allFilter};
+    _selectedFilters = {TaskQueryController.allFilter};
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensurePersonalBoard();
+      _loadPersonalBoard();
       _streamTasks();
     });
   }
@@ -101,7 +86,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     }
   }
 
-  Future<void> _ensurePersonalBoard() async {
+  Future<void> _loadPersonalBoard() async {
     final boardProvider = context.read<BoardProvider>();
     final existing = _findPersonalBoard(boardProvider);
     if (existing != null) {
@@ -113,17 +98,11 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       _isLoadingBoard = true;
     });
 
-    await boardProvider.addBoard(
-      title: 'Personal',
-      goal: 'Personal Tasks',
-      description: 'Personal tasks created from Mind:Set.',
-      boardType: 'personal', // Mark as personal board
-    );
     await boardProvider.refreshBoards();
 
-    final created = _findPersonalBoard(boardProvider);
-    if (created != null) {
-      _setPersonalBoard(created);
+    final refreshed = _findPersonalBoard(boardProvider);
+    if (refreshed != null) {
+      _setPersonalBoard(refreshed);
       return;
     }
 
@@ -147,12 +126,8 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     taskProvider.streamTasksByIds(widget.sessionTaskIds);
   }
 
-  String _normalizeStatus(String status) {
-    return status.toUpperCase().replaceAll(' ', '_');
-  }
-
   bool _isInProgressStatus(String status) {
-    return _normalizeStatus(status) == 'IN_PROGRESS';
+    return _runtimeService.isInProgressStatus(status);
   }
 
   Future<void> _logSessionAction({
@@ -162,104 +137,12 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   }) async {
     final session = widget.session;
     if (session == null) return;
-
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    final stats = session.sessionStats;
-    final workedTaskIds = session.sessionWorkedTaskIds;
-    final actions = session.sessionActions;
-
-    var nextStats = stats;
-    var nextWorkedTaskIds = workedTaskIds;
-
-    if (type == 'focus' || type == 'switch') {
-      final wasWorked = workedTaskIds.contains(task.taskId);
-      if (!wasWorked) {
-        nextWorkedTaskIds = [...workedTaskIds, task.taskId];
-        nextStats = nextStats.copyWith(
-          tasksWorkedCount: (stats.tasksWorkedCount ?? 0) + 1,
-        );
-      }
-      nextStats = nextStats.copyWith(
-        focusCount: (nextStats.focusCount ?? 0) + 1,
-      );
-    }
-
-    if (type == 'pause') {
-      nextStats = nextStats.copyWith(
-        pauseCount: (nextStats.pauseCount ?? 0) + 1,
-      );
-    }
-
-    if (type == 'switch') {
-      nextStats = nextStats.copyWith(
-        switchCount: (nextStats.switchCount ?? 0) + 1,
-      );
-    }
-
-    if (type == 'complete') {
-      if (runtimeMode == MindSetModes.checklist) {
-        nextStats = nextStats.copyWith(
-          checklistCompletedCount: (nextStats.checklistCompletedCount ?? 0) + 1,
-        );
-      } else if (runtimeMode == MindSetModes.pomodoro) {
-        nextStats = nextStats.copyWith(
-          pomodoroCompletedCount: (nextStats.pomodoroCompletedCount ?? 0) + 1,
-        );
-      } else if (runtimeMode == MindSetModes.eatTheFrog) {
-        nextStats = nextStats.copyWith(
-          eatTheFrogCompletedCount:
-              (nextStats.eatTheFrogCompletedCount ?? 0) + 1,
-        );
-      }
-    }
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionWorkedTaskIds: nextWorkedTaskIds,
-        sessionActions: [
-          ...actions,
-          MindSetSessionAction(
-            type: type,
-            taskId: task.taskId,
-            mode: runtimeMode,
-            at: DateTime.now(),
-            fromTaskId: fromTask?.taskId,
-          ),
-        ],
-        sessionStats: nextStats,
-      ),
+    await _runtimeService.logSessionAction(
+      session: session,
+      type: type,
+      taskId: task.taskId,
+      fromTaskId: fromTask?.taskId,
     );
-  }
-
-  bool _matchesDeadlineFilter(Task task, String filter) {
-    switch (filter) {
-      case 'Overdue':
-        return task.taskDeadline != null &&
-            task.taskDeadline!.isBefore(DateTime.now()) &&
-            !task.taskIsDone;
-      case 'Today':
-        final today = DateTime.now();
-        return task.taskDeadline != null &&
-            task.taskDeadline!.year == today.year &&
-            task.taskDeadline!.month == today.month &&
-            task.taskDeadline!.day == today.day;
-      case 'Upcoming':
-        return task.taskDeadline != null &&
-            task.taskDeadline!.isAfter(DateTime.now());
-      case 'None':
-        return task.taskDeadline == null;
-      default:
-        return false;
-    }
-  }
-
-  String _getFilterLabel(String filter) {
-    if (taskStatuses.contains(filter)) {
-      return 'Status: $filter';
-    } else if (deadlineFilters.contains(filter)) {
-      return 'Deadline: $filter';
-    }
-    return filter;
   }
 
   Future<void> _focusTask(Task task) async {
@@ -317,35 +200,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   Future<void> _startPomodoroIfNeeded() async {
     final session = widget.session;
     if (session == null) return;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final stats = session.sessionStats;
-    final alreadyRunningFocus =
-        (stats.pomodoroIsRunning ?? false) &&
-        !(stats.pomodoroIsOnBreak ?? false);
-    if (alreadyRunningFocus) return;
-
-    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
-        ? (stats.pomodoroFocusMinutes ?? 25)
-        : 25;
-    final resumeRemaining =
-        (!(stats.pomodoroIsOnBreak ?? false) &&
-            (stats.pomodoroRemainingSeconds ?? 0) > 0)
-        ? stats.pomodoroRemainingSeconds!
-        : focusMinutes * 60;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: true,
-          pomodoroIsOnBreak: false,
-          pomodoroIsLongBreak: false,
-          pomodoroRemainingSeconds: resumeRemaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.startPomodoroIfNeeded(session);
   }
 
   Future<void> _pauseTask(Task task) async {
@@ -361,21 +216,27 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     final taskProvider = context.read<TaskProvider>();
     final markDone = isDone ?? false;
 
-    await taskProvider.toggleTaskDone(
+    final persistToggle = taskProvider.toggleTaskDone(
       task.copyWith(
         taskIsDone: markDone,
         taskStatus: markDone ? 'COMPLETED' : 'To Do',
       ),
     );
     if (markDone) {
-      await _logSessionAction(type: 'complete', task: task);
       await _handlePostCompletion(task);
+      await _logSessionAction(type: 'complete', task: task);
     }
+    await persistToggle;
   }
 
   Future<void> _handlePostCompletion(Task completedTask) async {
     if (!mounted) return;
     final taskProvider = context.read<TaskProvider>();
+    final session = widget.session;
+    final isPomodoro =
+        session != null &&
+        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
+            MindSetModes.pomodoro;
     final remainingTasks = taskProvider.tasks
         .where(
           (task) =>
@@ -386,29 +247,31 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
         .toList();
 
     if (remainingTasks.isEmpty) {
-      final addMoreTasks = await showDialog<bool>(
+      if (isPomodoro) {
+        await _showPomodoroFocusDecision();
+      }
+      if (!mounted) return;
+      final shouldEndSession = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
           title: const Text('All Tasks Completed'),
           content: const Text(
-            'Great work. Do you want to add more tasks to this session?',
+            'Great work. Do you want to keep this session open or end it?',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context, false),
-              child: const Text('Finish Session'),
+              child: const Text('Keep Session Open'),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(context, true),
-              child: const Text('Add More Tasks'),
+              child: const Text('End Session'),
             ),
           ],
         ),
       );
 
-      if (addMoreTasks == true) {
-        if (!mounted) return;
-        _showAddTaskDialog();
+      if (shouldEndSession != true) {
         return;
       }
 
@@ -418,12 +281,6 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       await _showSessionSummaryAndEnd(sessionTasks);
       return;
     }
-
-    final session = widget.session;
-    final isPomodoro =
-        session != null &&
-        MindSetModes.resolveRuntimeMode(session.sessionMode) ==
-            MindSetModes.pomodoro;
 
     if (!isPomodoro) {
       if (!mounted) return;
@@ -437,6 +294,11 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       return;
     }
 
+    await _showPomodoroFocusDecision();
+  }
+
+  Future<void> _showPomodoroFocusDecision() async {
+    if (!mounted) return;
     final endFocusNow = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -481,6 +343,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   Future<void> _showSessionSummaryAndEnd(List<Task> sessionTasks) async {
     final session = widget.session;
     if (session == null || !mounted) return;
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
 
     final now = DateTime.now();
     final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
@@ -491,9 +354,18 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
         ? 100
         : ((tasksDone / tasksTotal) * 100).round();
 
-    final shouldFinish = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
+    await _pausePomodoroIfNeeded();
+    await _sessionService.completeSession(
+      session: session,
+      endedAt: now,
+      tasksTotal: tasksTotal,
+      tasksDone: tasksDone,
+    );
+
+    await showDialog<void>(
+      // ignore: use_build_context_synchronously
+      context: rootNavigator.context,
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Session Successful'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -505,34 +377,13 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep Session Open'),
-          ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('End Session'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
           ),
         ],
       ),
     );
-
-    if (shouldFinish != true) return;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStatus: 'completed',
-        sessionEndedAt: now,
-        sessionStats: session.sessionStats.copyWith(
-          tasksTotalCount: tasksTotal,
-          tasksDoneCount: tasksDone,
-          sessionFocusDurationMinutes: duration.inMinutes,
-          sessionFocusDurationSeconds: duration.inSeconds,
-          pomodoroIsRunning: false,
-        ),
-      ),
-    );
-    await _sessionService.endSession(session.sessionId, now);
   }
 
   String _formatDuration(Duration duration) {
@@ -548,75 +399,13 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   Future<void> _startBreakNow() async {
     final session = widget.session;
     if (session == null) return;
-    final stats = session.sessionStats;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-    final targetCount = stats.pomodoroTargetCount ?? 4;
-    final completedCount = stats.pomodoroCount ?? 0;
-
-    final nextCompleted = completedCount + 1;
-    final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
-    final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroCount: nextCompleted,
-          pomodoroIsRunning: true,
-          pomodoroIsOnBreak: true,
-          pomodoroIsLongBreak: isLongBreak,
-          pomodoroRemainingSeconds: nextBreakMinutes * 60,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.startBreakNow(session);
   }
 
   Future<void> _pausePomodoroIfNeeded() async {
     final session = widget.session;
     if (session == null) return;
-    final runtimeMode = MindSetModes.resolveRuntimeMode(session.sessionMode);
-    if (runtimeMode != MindSetModes.pomodoro) return;
-
-    final stats = session.sessionStats;
-    if (!(stats.pomodoroIsRunning ?? false)) return;
-
-    final focusMinutes = (stats.pomodoroFocusMinutes ?? 25) > 0
-        ? (stats.pomodoroFocusMinutes ?? 25)
-        : 25;
-    final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
-    final longBreakMinutes = stats.pomodoroLongBreakMinutes ?? 60;
-
-    final fallbackRemaining =
-        ((stats.pomodoroIsOnBreak ?? false)
-            ? ((stats.pomodoroIsLongBreak ?? false)
-                  ? longBreakMinutes
-                  : breakMinutes)
-            : focusMinutes) *
-        60;
-    final baseRemaining = (stats.pomodoroRemainingSeconds ?? 0) > 0
-        ? stats.pomodoroRemainingSeconds!
-        : fallbackRemaining;
-    final lastUpdated = stats.pomodoroLastUpdatedAt;
-    final elapsed = lastUpdated == null
-        ? 0
-        : DateTime.now().difference(lastUpdated).inSeconds;
-    final nextRemaining = (baseRemaining - elapsed)
-        .clamp(0, baseRemaining)
-        .toInt();
-
-    await _sessionService.updateSession(
-      session.copyWith(
-        sessionStats: stats.copyWith(
-          pomodoroIsRunning: false,
-          pomodoroRemainingSeconds: nextRemaining,
-          pomodoroLastUpdatedAt: DateTime.now(),
-        ),
-      ),
-    );
+    await _runtimeService.pausePomodoroIfNeeded(session);
   }
 
   @override
@@ -672,22 +461,19 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                     ),
                     onSelected: (filter) {
                       setState(() {
-                        if (filter == allFilter) {
-                          _selectedFilters = {allFilter};
-                        } else {
-                          _selectedFilters.remove(allFilter);
-                          _selectedFilters.add(filter);
-                          if (_selectedFilters.isEmpty) {
-                            _selectedFilters.add(filter);
-                          }
-                        }
+                        _selectedFilters = _taskQueryController.addFilter(
+                          selectedFilters: _selectedFilters,
+                          filter: filter,
+                        );
                       });
                     },
                     itemBuilder: (context) {
-                      return allFilters
+                      return TaskQueryController.allFilters
                           .where((f) => !_selectedFilters.contains(f))
                           .map((filter) {
-                            final label = _getFilterLabel(filter);
+                            final label = _taskQueryController.getFilterLabel(
+                              filter,
+                            );
                             return PopupMenuItem<String>(
                               value: filter,
                               child: Text(label),
@@ -756,7 +542,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                   ),
                 ),
               // Active filters display
-              if (!_selectedFilters.contains(allFilter))
+              if (!_selectedFilters.contains(TaskQueryController.allFilter))
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Wrap(
@@ -764,13 +550,16 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                     runSpacing: 4,
                     children: _selectedFilters.map((filter) {
                       return Chip(
-                        label: Text(_getFilterLabel(filter)),
+                        label: Text(
+                          _taskQueryController.getFilterLabel(filter),
+                        ),
                         onDeleted: () {
                           setState(() {
-                            _selectedFilters.remove(filter);
-                            if (_selectedFilters.isEmpty) {
-                              _selectedFilters.add(allFilter);
-                            }
+                            _selectedFilters = _taskQueryController
+                                .removeFilter(
+                                  selectedFilters: _selectedFilters,
+                                  filter: filter,
+                                );
                           });
                         },
                         backgroundColor: Colors.grey[400],
@@ -795,31 +584,11 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
               final tasks = taskProvider.tasks;
 
-              // Apply filtering
-              final List<Task> filteredTasks;
-              if (_selectedFilters.contains(allFilter)) {
-                filteredTasks = tasks;
-              } else {
-                final selectedStatuses = _selectedFilters
-                    .where((f) => taskStatuses.contains(f))
-                    .toSet();
-                final selectedDeadlineFilters = _selectedFilters
-                    .where((f) => deadlineFilters.contains(f))
-                    .toSet();
-                filteredTasks = tasks.where((task) {
-                  if (selectedStatuses.isEmpty) return false;
-                  final statusMatch = selectedStatuses.contains(
-                    task.taskStatus,
-                  );
-                  if (selectedDeadlineFilters.isEmpty) return statusMatch;
-                  final deadlineMatch = selectedDeadlineFilters.any(
-                    (filter) => _matchesDeadlineFilter(task, filter),
-                  );
-                  return statusMatch && deadlineMatch;
-                }).toList();
-              }
-
-              final sortedTasks = _applySorting(filteredTasks);
+              final sortedTasks = _taskQueryController.applyQuery(
+                tasks: tasks,
+                selectedFilters: _selectedFilters,
+                sortBy: _sortBy,
+              );
               Task? focusedTask;
               for (final task in sortedTasks) {
                 if (_isInProgressStatus(task.taskStatus)) {
@@ -928,6 +697,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                           onToggleDone: canToggleDone
                               ? (isDone) => _toggleDoneForTask(task, isDone)
                               : null,
+                          onDelete: () => _deleteTask(task),
                         );
                       },
                     ),
@@ -961,6 +731,45 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
     final updatedIds = {...widget.sessionTaskIds, taskId}.toList();
     context.read<TaskProvider>().streamTasksByIds(updatedIds);
+  }
+
+  Future<void> _deleteTask(Task task) async {
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Task'),
+        content: Text('Delete "${task.taskTitle}" from this session?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+    if (!mounted) return;
+
+    final taskProvider = context.read<TaskProvider>();
+    await taskProvider.softDeleteTask(task);
+    await _sessionService.removeTaskFromSession(widget.sessionId, task.taskId);
+
+    if (!mounted) return;
+
+    final updatedIds = widget.sessionTaskIds
+        .where((id) => id != task.taskId)
+        .toList();
+    taskProvider.streamTasksByIds(updatedIds);
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Task deleted from session')));
   }
 
   int _priorityToInt(String priority) {
@@ -1001,68 +810,6 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     });
 
     return candidates.first;
-  }
-
-  List<Task> _applySorting(List<Task> tasks) {
-    final sorted = [...tasks];
-
-    try {
-      switch (_sortBy) {
-        case 'priority_asc':
-          sorted.sort(
-            (a, b) => _priorityToInt(
-              a.taskPriorityLevel,
-            ).compareTo(_priorityToInt(b.taskPriorityLevel)),
-          );
-          break;
-        case 'priority_desc':
-          sorted.sort(
-            (a, b) => _priorityToInt(
-              b.taskPriorityLevel,
-            ).compareTo(_priorityToInt(a.taskPriorityLevel)),
-          );
-          break;
-        case 'alphabetical_asc':
-          sorted.sort(
-            (a, b) =>
-                a.taskTitle.toLowerCase().compareTo(b.taskTitle.toLowerCase()),
-          );
-          break;
-        case 'alphabetical_desc':
-          sorted.sort(
-            (a, b) =>
-                b.taskTitle.toLowerCase().compareTo(a.taskTitle.toLowerCase()),
-          );
-          break;
-        case 'created_asc':
-          sorted.sort((a, b) => a.taskCreatedAt.compareTo(b.taskCreatedAt));
-          break;
-        case 'created_desc':
-          sorted.sort((a, b) => b.taskCreatedAt.compareTo(a.taskCreatedAt));
-          break;
-        case 'deadline_asc':
-          sorted.sort((a, b) {
-            final aDeadline = a.taskDeadline ?? DateTime(2099);
-            final bDeadline = b.taskDeadline ?? DateTime(2099);
-            return aDeadline.compareTo(bDeadline);
-          });
-          break;
-        case 'deadline_desc':
-          sorted.sort((a, b) {
-            final aDeadline = a.taskDeadline ?? DateTime(1970);
-            final bDeadline = b.taskDeadline ?? DateTime(1970);
-            return bDeadline.compareTo(aDeadline);
-          });
-          break;
-        default:
-          break;
-      }
-    } catch (e) {
-      // If sorting fails, return unsorted list
-      return tasks;
-    }
-
-    return sorted;
   }
 
   void _showSortMenu() {

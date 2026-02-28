@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/board_stats_model.dart';
+import 'package:flutter/foundation.dart';
 
 class BoardStatsService {
   final CollectionReference _boardCollection = FirebaseFirestore.instance
@@ -7,29 +8,31 @@ class BoardStatsService {
 
   /// Fetch the stats for a specific board
   Future<BoardStats> getStats(String boardId) async {
-    print('[BoardStatsService] Fetching stats for boardId: $boardId');
+    debugPrint('[BoardStatsService] Fetching stats for boardId: $boardId');
     final doc = await _boardCollection.doc(boardId).get();
 
     if (!doc.exists) {
-      print('[BoardStatsService] Board document does not exist');
+      debugPrint('[BoardStatsService] Board document does not exist');
       return BoardStats();
     }
 
     final data = doc.get('stats') as Map<String, dynamic>? ?? {};
-    print('[BoardStatsService] Stats data: $data');
+    debugPrint('[BoardStatsService] Stats data: $data');
     return BoardStats.fromMap(Map<String, dynamic>.from(data));
   }
 
   /// Stream stats for a board
   Stream<BoardStats> streamStatsByBoardId(String boardId) {
-    print('[BoardStatsService] Starting stream for boardId: $boardId');
+    debugPrint('[BoardStatsService] Starting stream for boardId: $boardId');
     return _boardCollection.doc(boardId).snapshots().map((snapshot) {
       if (!snapshot.exists) {
-        print('[BoardStatsService] Board document does not exist in stream');
+        debugPrint(
+          '[BoardStatsService] Board document does not exist in stream',
+        );
         return BoardStats();
       }
       final data = snapshot.get('stats') as Map<String, dynamic>? ?? {};
-      print('[BoardStatsService] Stream stats data: $data');
+      debugPrint('[BoardStatsService] Stream stats data: $data');
       return BoardStats.fromMap(Map<String, dynamic>.from(data));
     });
   }
@@ -53,8 +56,10 @@ class BoardStatsService {
     int subtasksDeleted = 0,
     int messagesSent = 0,
   }) async {
-    print('[BoardStatsService] incrementStats called for boardId: $boardId');
-    print(
+    debugPrint(
+      '[BoardStatsService] incrementStats called for boardId: $boardId',
+    );
+    debugPrint(
       '[BoardStatsService] tasksAdded=$tasksAdded, tasksDone=$tasksDone, tasksDeleted=$tasksDeleted',
     );
 
@@ -69,7 +74,7 @@ class BoardStatsService {
     };
 
     await _boardCollection.doc(boardId).update(incrementData);
-    print('[BoardStatsService] Stats incremented successfully');
+    debugPrint('[BoardStatsService] Stats incremented successfully');
   }
 
   /// Reset stats to zero

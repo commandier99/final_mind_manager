@@ -12,7 +12,7 @@ class PlanProvider extends ChangeNotifier {
   String? _error;
 
   PlanProvider({PlanService? planService})
-      : _planService = planService ?? PlanService();
+    : _planService = planService ?? PlanService();
 
   // ============ Getters ============
 
@@ -63,7 +63,6 @@ class PlanProvider extends ChangeNotifier {
     required String title,
     required String description,
     String benefit = '',
-    String style = 'Checklist',
     int estimatedDurationMinutes = 0,
     int plannedFocusIntervals = 0,
     int focusIntervalMinutes = 25,
@@ -79,7 +78,6 @@ class PlanProvider extends ChangeNotifier {
         title: title,
         description: description,
         benefit: benefit,
-        style: style,
         estimatedDurationMinutes: estimatedDurationMinutes,
         plannedFocusIntervals: plannedFocusIntervals,
         focusIntervalMinutes: focusIntervalMinutes,
@@ -117,7 +115,10 @@ class PlanProvider extends ChangeNotifier {
     try {
       await _planService.addTaskToPlan(_activePlan!.planId, taskId);
       final updatedTasks = [..._activePlan!.taskIds, taskId];
-      final updatedOrder = {..._activePlan!.taskOrder, taskId: updatedTasks.length - 1};
+      final updatedOrder = {
+        ..._activePlan!.taskOrder,
+        taskId: updatedTasks.length - 1,
+      };
 
       _activePlan = _activePlan!.copyWith(
         taskIds: updatedTasks,
@@ -140,7 +141,9 @@ class PlanProvider extends ChangeNotifier {
 
     try {
       await _planService.removeTaskFromPlan(_activePlan!.planId, taskId);
-      final updatedTasks = _activePlan!.taskIds.where((id) => id != taskId).toList();
+      final updatedTasks = _activePlan!.taskIds
+          .where((id) => id != taskId)
+          .toList();
       final updatedOrder = {..._activePlan!.taskOrder};
       updatedOrder.remove(taskId);
 
@@ -187,8 +190,6 @@ class PlanProvider extends ChangeNotifier {
       return false;
     }
   }
-
-
 
   // ============ Plan Updates ============
 

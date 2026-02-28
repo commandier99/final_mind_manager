@@ -33,8 +33,12 @@ class _MindSetDetailsSettingsFormState
       case 'tasks remaining':
       case 'hide':
         return mode;
+      case 'progress':
+        return 'tasks completed';
       case 'remaining':
         return 'tasks remaining';
+      case 'hidden':
+        return 'hide';
       default:
         return 'tasks completed';
     }

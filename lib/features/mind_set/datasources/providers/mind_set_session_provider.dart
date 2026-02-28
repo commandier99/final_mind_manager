@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 import '../models/mind_set_session_model.dart';
 import '../services/mind_set_session_service.dart';
 
@@ -18,13 +19,16 @@ class MindSetSessionProvider extends ChangeNotifier {
 
   Stream<MindSetSession?>? _activeSessionStream;
   Stream<MindSetSession?>? get activeSessionStream => _activeSessionStream;
+  StreamSubscription<List<MindSetSession>>? _sessionSubscription;
+  StreamSubscription<MindSetSession?>? _activeSessionSubscription;
 
   void streamUserSessions() {
     final userId = _auth.currentUser?.uid;
     if (userId == null) return;
 
     _sessionStream = _service.streamUserSessions(userId);
-    _sessionStream!.listen((sessions) {
+    _sessionSubscription?.cancel();
+    _sessionSubscription = _sessionStream!.listen((sessions) {
       _sessions = sessions;
       notifyListeners();
     });
@@ -35,7 +39,8 @@ class MindSetSessionProvider extends ChangeNotifier {
     if (userId == null) return;
 
     _activeSessionStream = _service.streamActiveSession(userId);
-    _activeSessionStream!.listen((session) {
+    _activeSessionSubscription?.cancel();
+    _activeSessionSubscription = _activeSessionStream!.listen((session) {
       _activeSession = session;
       notifyListeners();
     });
@@ -55,5 +60,12 @@ class MindSetSessionProvider extends ChangeNotifier {
 
   Future<void> cancelSession(String sessionId) async {
     await _service.cancelSession(sessionId);
+  }
+
+  @override
+  void dispose() {
+    _sessionSubscription?.cancel();
+    _activeSessionSubscription?.cancel();
+    super.dispose();
   }
 }

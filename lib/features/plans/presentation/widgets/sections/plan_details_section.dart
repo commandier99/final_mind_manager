@@ -18,26 +18,12 @@ class PlanDetailsSection extends StatefulWidget {
 class _PlanDetailsSectionState extends State<PlanDetailsSection> {
   bool _isDescriptionExpanded = false;
 
-  Color _getStyleColor(String style) {
-    switch (style.toLowerCase()) {
-      case 'pomodoro':
-        return Colors.red.shade400;
-      case 'timeblocking':
-        return Colors.blue.shade400;
-      case 'gtd':
-        return Colors.purple.shade400;
-      default:
-        return Colors.teal.shade400;
-    }
-  }
-
   String _formatDate(DateTime date) {
     return '${date.day}/${date.month}/${date.year}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final styleColor = _getStyleColor(widget.plan.planStyle);
     final progress = widget.plan.totalTasks > 0
         ? widget.plan.completedTasks / widget.plan.totalTasks
         : 0.0;
@@ -50,7 +36,7 @@ class _PlanDetailsSectionState extends State<PlanDetailsSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Title with style badge
+          // Title
           Row(
             children: [
               Expanded(
@@ -85,25 +71,6 @@ class _PlanDetailsSectionState extends State<PlanDetailsSection> {
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: styleColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  widget.plan.planStyle.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: styleColor,
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 4),
@@ -111,10 +78,7 @@ class _PlanDetailsSectionState extends State<PlanDetailsSection> {
           // Owner
           Text(
             'by ${widget.plan.planOwnerName}',
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 12),
 
@@ -160,9 +124,7 @@ class _PlanDetailsSectionState extends State<PlanDetailsSection> {
             decoration: BoxDecoration(
               color: Colors.grey.shade50,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.grey.shade200,
-              ),
+              border: Border.all(color: Colors.grey.shade200),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,18 +217,11 @@ class _PlanDetailsSectionState extends State<PlanDetailsSection> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          icon,
-          size: 16,
-          color: Colors.grey.shade600,
-        ),
+        Icon(icon, size: 16, color: Colors.grey.shade600),
         const SizedBox(width: 4),
         Text(
           '$label: ',
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
         ),
         Text(
           value,

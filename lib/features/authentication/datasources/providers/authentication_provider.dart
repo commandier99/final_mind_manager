@@ -5,13 +5,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/authentication_service.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../shared/features/users/datasources/services/user_services.dart';
-import '../../../../../../features/boards/datasources/services/board_services.dart';
 
 class AuthenticationProvider extends ChangeNotifier {
   final AuthenticationService _authService = AuthenticationService();
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final UserService _userService = UserService();
-  final BoardService _boardService = BoardService();
 
   User? _user;
   bool _isLoading = false;
@@ -186,18 +184,6 @@ class AuthenticationProvider extends ChangeNotifier {
             await _userService.saveUser(newUser);
             print('✅ [AuthenticationProvider] New user document and userStats created');
             
-            // Create a default "Personal" board for new users
-            try {
-              await _boardService.addBoard(
-                boardTitle: 'Personal',
-                boardGoal: 'Personal tasks and projects',
-                boardGoalDescription: 'A space to manage your personal tasks and projects',
-              );
-              print('✅ [AuthenticationProvider] Personal board created for NEW Google user ${_user!.uid}');
-            } catch (e) {
-              print('⚠️ [AuthenticationProvider] Error creating Personal board: $e');
-              // Don't throw - user account was created successfully
-            }
           } else {
             // Update only specific fields for EXISTING users to preserve their data
             print('🔵 [AuthenticationProvider] Updating existing user...');
@@ -319,3 +305,4 @@ class AuthenticationProvider extends ChangeNotifier {
     return error.toString();
   }
 }
+
