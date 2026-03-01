@@ -6,7 +6,7 @@ class BoardMember {
   final String userId;
   final String userName;
   final String? userProfilePicture;
-  final String memberRole; // 'manager', 'member', 'inspector'
+  final String memberRole; // 'manager', 'member', 'supervisor'
   final int memberTaskLimit; // Max tasks they can be assigned
   final int memberCurrentTaskCount; // Current tasks assigned
   final DateTime memberJoinedAt;
@@ -35,8 +35,11 @@ class BoardMember {
       memberRole: data['memberRole'] ?? 'member',
       memberTaskLimit: data['memberTaskLimit'] ?? 0,
       memberCurrentTaskCount: data['memberCurrentTaskCount'] ?? 0,
-      memberJoinedAt: (data['memberJoinedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      memberLastActiveAt: (data['memberLastActiveAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      memberJoinedAt:
+          (data['memberJoinedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      memberLastActiveAt:
+          (data['memberLastActiveAt'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
     );
   }
 
@@ -75,7 +78,8 @@ class BoardMember {
       userProfilePicture: userProfilePicture ?? this.userProfilePicture,
       memberRole: memberRole ?? this.memberRole,
       memberTaskLimit: memberTaskLimit ?? this.memberTaskLimit,
-      memberCurrentTaskCount: memberCurrentTaskCount ?? this.memberCurrentTaskCount,
+      memberCurrentTaskCount:
+          memberCurrentTaskCount ?? this.memberCurrentTaskCount,
       memberJoinedAt: memberJoinedAt ?? this.memberJoinedAt,
       memberLastActiveAt: memberLastActiveAt ?? this.memberLastActiveAt,
     );

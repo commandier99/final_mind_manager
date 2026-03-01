@@ -261,6 +261,11 @@ class _FileSubmissionsDialogState extends State<FileSubmissionsDialog> {
     IconData statusIcon;
 
     switch (submission.status) {
+      case 'pending':
+      case 'submitted':
+        statusColor = Colors.blue;
+        statusIcon = Icons.pending;
+        break;
       case 'approved':
         statusColor = Colors.green;
         statusIcon = Icons.check_circle;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../datasources/models/board_model.dart';
+import '../../datasources/models/board_roles.dart';
 import '../../datasources/providers/board_request_provider.dart';
 import '../../../../shared/features/search/providers/search_provider.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
@@ -8,10 +9,7 @@ import '../../../../shared/features/users/datasources/models/user_model.dart';
 class AddMemberToBoardPage extends StatefulWidget {
   final Board board;
 
-  const AddMemberToBoardPage({
-    super.key,
-    required this.board,
-  });
+  const AddMemberToBoardPage({super.key, required this.board});
 
   @override
   State<AddMemberToBoardPage> createState() => _AddMemberToBoardPageState();
@@ -20,6 +18,7 @@ class AddMemberToBoardPage extends StatefulWidget {
 class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
   final TextEditingController _searchController = TextEditingController();
   SearchProvider? _searchProvider;
+  String _selectedInviteRole = BoardRoles.member;
 
   bool get _canAddMembersToThisBoard {
     return widget.board.boardType == 'team';
@@ -66,30 +65,58 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
           Container(
             color: const Color(0xFFFAFCFD),
             padding: const EdgeInsets.all(16.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Search by name, handle, or skills...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon:
-                    _searchController.text.isNotEmpty
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'Search by name, handle, or skills...',
+                    prefixIcon: const Icon(Icons.search),
+                    suffixIcon: _searchController.text.isNotEmpty
                         ? IconButton(
-                          icon: const Icon(Icons.clear),
-                          onPressed: () {
-                            _searchController.clear();
-                            _performSearch();
-                            setState(() {});
-                          },
-                        )
+                            icon: const Icon(Icons.clear),
+                            onPressed: () {
+                              _searchController.clear();
+                              _performSearch();
+                              setState(() {});
+                            },
+                          )
                         : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onChanged: (_) {
+                    setState(() {});
+                    _performSearch();
+                  },
                 ),
-              ),
-              onChanged: (_) {
-                setState(() {});
-                _performSearch();
-              },
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedInviteRole,
+                  decoration: const InputDecoration(
+                    labelText: 'Invite as',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.badge_outlined),
+                  ),
+                  items: const [
+                    DropdownMenuItem<String>(
+                      value: BoardRoles.member,
+                      child: Text('Member'),
+                    ),
+                    DropdownMenuItem<String>(
+                      value: BoardRoles.supervisor,
+                      child: Text('Supervisor'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setState(() {
+                      _selectedInviteRole = BoardRoles.normalize(value);
+                    });
+                  },
+                ),
+              ],
             ),
           ),
           // Results
@@ -166,6 +193,9 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
 
   Widget _buildUserCard(UserModel user) {
     final isAlreadyMember = widget.board.memberIds.contains(user.userId);
+    final existingRole = BoardRoles.normalize(
+      widget.board.memberRoles[user.userId],
+    );
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -176,17 +206,15 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
             // Profile Picture
             CircleAvatar(
               radius: 28,
-              backgroundImage:
-                  user.userProfilePicture != null
-                      ? NetworkImage(user.userProfilePicture!)
-                      : null,
-              child:
-                  user.userProfilePicture == null
-                      ? Text(
-                        user.userName[0].toUpperCase(),
-                        style: const TextStyle(fontSize: 20),
-                      )
-                      : null,
+              backgroundImage: user.userProfilePicture != null
+                  ? NetworkImage(user.userProfilePicture!)
+                  : null,
+              child: user.userProfilePicture == null
+                  ? Text(
+                      user.userName[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 20),
+                    )
+                  : null,
             ),
             const SizedBox(width: 12),
             // User Info
@@ -219,28 +247,27 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
-                      children:
-                          user.userSkills.take(3).map((skill) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                skill,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                      ),
+                      children: user.userSkills.take(3).map((skill) {
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            skill,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.blue,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
                   ],
                 ],
               ),
@@ -248,13 +275,21 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
             // Add/Member Button
             if (isAlreadyMember)
               Chip(
-                label: const Text('Member'),
+                label: Text(
+                  existingRole == BoardRoles.supervisor
+                      ? 'Supervisor'
+                      : 'Member',
+                ),
                 backgroundColor: Colors.grey.shade300,
               )
             else
               ElevatedButton.icon(
                 icon: const Icon(Icons.person_add),
-                label: const Text('Add'),
+                label: Text(
+                  _selectedInviteRole == BoardRoles.supervisor
+                      ? 'Invite Supervisor'
+                      : 'Invite Member',
+                ),
                 onPressed: () => _handleAddMember(user),
               ),
           ],
@@ -267,11 +302,7 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
     if (!_canAddMembersToThisBoard) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Only Team boards can add members.',
-            ),
-          ),
+          const SnackBar(content: Text('Only Team boards can add members.')),
         );
       }
       return;
@@ -281,7 +312,9 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
     if (widget.board.memberIds.contains(user.userId)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('User is already a member of this board')),
+          const SnackBar(
+            content: Text('User is already a member of this board'),
+          ),
         );
       }
       return;
@@ -298,7 +331,9 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${user.userName} already has a pending invite to ${widget.board.boardTitle}'),
+            content: Text(
+              '${user.userName} already has a pending invite to ${widget.board.boardTitle}',
+            ),
           ),
         );
       }
@@ -311,6 +346,7 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
         boardId: widget.board.boardId,
         boardTitle: widget.board.boardTitle,
         userId: user.userId,
+        role: _selectedInviteRole,
         message: 'You have been invited to join this board',
       );
 

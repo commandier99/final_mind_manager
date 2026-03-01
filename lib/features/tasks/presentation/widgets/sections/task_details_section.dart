@@ -1,22 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../datasources/providers/task_provider.dart';
 import '../../../datasources/models/task_model.dart';
-import '../../../datasources/services/task_submission_service.dart';
-import '../../../../boards/datasources/providers/board_provider.dart';
-import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../datasources/providers/task_provider.dart';
 
 class TaskDetailsSection extends StatefulWidget {
   final String taskId;
-  final VoidCallback? onFileUploadPressed;
-  final bool showFileSubmissions;
 
-  const TaskDetailsSection({
-    super.key,
-    required this.taskId,
-    this.onFileUploadPressed,
-    this.showFileSubmissions = false,
-  });
+  const TaskDetailsSection({super.key, required this.taskId});
 
   @override
   State<TaskDetailsSection> createState() => _TaskDetailsSectionState();
@@ -24,312 +14,377 @@ class TaskDetailsSection extends StatefulWidget {
 
 class _TaskDetailsSectionState extends State<TaskDetailsSection> {
   bool _isDescriptionExpanded = false;
-  final TaskSubmissionService _submissionService = TaskSubmissionService();
 
   @override
   Widget build(BuildContext context) {
-    final userProvider = context.watch<UserProvider>();
-    final currentUserId = userProvider.userId ?? '';
-
     return Consumer<TaskProvider>(
       builder: (context, taskProvider, _) {
-        // Find the task from the provider's task list
-        final task = taskProvider.tasks.firstWhere(
-          (t) => t.taskId == widget.taskId,
-          orElse: () => taskProvider.tasks.first, // Fallback
-        );
+        Task? task;
+        try {
+          task = taskProvider.tasks.firstWhere(
+            (t) => t.taskId == widget.taskId,
+          );
+        } catch (_) {
+          task = null;
+        }
 
-        print(
-          '[DEBUG] TaskDetailsSection: build called for taskId = ${task.taskId}',
+        if (task == null) {
+          return const SizedBox.shrink();
+        }
+
+        final currentTask = task;
+        final priorityColor = _getPriorityColor(currentTask.taskPriorityLevel);
+        final priorityBg = _getPriorityBackgroundColor(
+          currentTask.taskPriorityLevel,
         );
+        final statusColor = _getStatusColor(currentTask.taskStatus);
+
         return Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Title section
               Row(
                 children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: priorityBg,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        GestureDetector(
-                          onTap: () {
-                            if (task.taskTitle.isNotEmpty) {
-                              showDialog(
-                                context: context,
-                                builder: (context) => AlertDialog(
-                                  title: const Text('Task Title'),
-                                  content: SingleChildScrollView(
-                                    child: Text(task.taskTitle),
-                                  ),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () => Navigator.pop(context),
-                                      child: const Text('Close'),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }
-                          },
-                          child: Text(
-                            task.taskTitle,
-                            style: Theme.of(context).textTheme.headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.bold),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                        Icon(
+                          Icons.flag_outlined,
+                          size: 13,
+                          color: priorityColor,
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(width: 5),
                         Text(
-                          'by ${task.taskOwnerName ?? "Unknown"}',
+                          currentTask.taskPriorityLevel,
                           style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.onSurfaceVariant,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: priorityColor,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Column(
-                    children: [
-                      // Only show upload icon for board tasks
-                      if (task.taskBoardId.isNotEmpty && _canToggleTask(task, currentUserId))
-                        IconButton(
-                          icon: Icon(
-                            widget.showFileSubmissions ? Icons.checklist : Icons.upload_file,
-                          ),
-                          tooltip: widget.showFileSubmissions ? 'View subtasks' : 'View/Upload files',
-                          onPressed: widget.onFileUploadPressed,
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _getStatusIcon(currentTask.taskStatus),
+                          size: 13,
+                          color: statusColor,
                         ),
-                    ],
+                        const SizedBox(width: 5),
+                        Text(
+                          currentTask.taskStatus,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: statusColor,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-
-              // Description label and content
-              Text(
-                'Description:',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+              GestureDetector(
+                onTap: () {
+                  if (currentTask.taskTitle.isNotEmpty) {
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        title: const Text('Task Title'),
+                        content: SingleChildScrollView(
+                          child: Text(currentTask.taskTitle),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Close'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+                child: Text(
+                  currentTask.taskTitle,
+                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.1,
+                  ),
                 ),
               ),
-              const SizedBox(height: 6),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.taskDescription.isEmpty
-                        ? 'No description'
-                        : task.taskDescription,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurface,
-                    ),
-                    maxLines: _isDescriptionExpanded ? null : 3,
-                    overflow: _isDescriptionExpanded
-                        ? TextOverflow.visible
-                        : TextOverflow.ellipsis,
-                  ),
-                  if (task.taskDescription.isNotEmpty &&
-                      task.taskDescription.length > 120)
-                    GestureDetector(
-                      onTap: () {
-                        setState(() {
-                          _isDescriptionExpanded = !_isDescriptionExpanded;
-                        });
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(
-                          _isDescriptionExpanded ? 'See less' : 'See more...',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Theme.of(context).colorScheme.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
+              const SizedBox(height: 4),
+              Text(
+                'Created by ${currentTask.taskOwnerName}',
+                style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700),
               ),
-              const SizedBox(height: 12),
-
-              // Details row - Due, Priority, Status
+              const SizedBox(height: 10),
               Wrap(
-                spacing: 16,
+                spacing: 8,
                 runSpacing: 8,
                 children: [
-                  Text(
-                    'Due: ${_formatDate(task.taskDeadline)}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  Text(
-                    'Priority: ${task.taskPriorityLevel}',
-                    style: const TextStyle(fontSize: 13),
-                  ),
-                  Text(
-                    'Status: ${task.taskStatus}',
-                    style: const TextStyle(fontSize: 13),
+                  _buildInfoChip(
+                    icon: Icons.event_outlined,
+                    label: 'Due ${_formatDate(currentTask.taskDeadline)}',
                   ),
                 ],
               ),
+              const SizedBox(height: 14),
+              Divider(color: Colors.grey.shade300, height: 1),
               const SizedBox(height: 12),
-
-              // Assignment info
-              if (task.taskAssignedTo.isNotEmpty &&
-                  task.taskAssignedTo != 'None')
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Assignment Info',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 8,
-                      children: [
-                        Text(
-                          'Assigned to: ${task.taskAssignedToName}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        if (task.taskAcceptanceStatus != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: _getAcceptanceStatusColor(
-                                task.taskAcceptanceStatus,
-                              ).withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Acceptance: ${_getAcceptanceStatusLabel(task.taskAcceptanceStatus)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: _getAcceptanceStatusColor(
-                                  task.taskAcceptanceStatus,
-                                ),
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        if (task.taskRequiresApproval)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.amber.shade100,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              'Requires Approval',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.amber.shade700,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+              _buildSectionLabel('Description'),
+              const SizedBox(height: 6),
+              Text(
+                currentTask.taskDescription.isEmpty
+                    ? 'No description'
+                    : currentTask.taskDescription,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  height: 1.35,
                 ),
-
-              // Repeating info
-              if (task.taskIsRepeating)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Repeating',
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 6,
-                      children: [
-                        if (task.taskRepeatInterval != null &&
-                            task.taskRepeatInterval!.isNotEmpty)
-                          Text(
-                            'Days: ${_formatRepeatDays(task.taskRepeatInterval)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        if (task.taskRepeatTime != null)
-                          Text(
-                            'Time: ${task.taskRepeatTime}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        if (task.taskRepeatEndDate != null)
-                          Text(
-                            'Until: ${_formatDate(task.taskRepeatEndDate)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        if (task.taskNextRepeatDate != null)
-                          Text(
-                            'Next: ${_formatDate(task.taskNextRepeatDate)}',
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                ),
-
-              // Progress bar - only show if there are subtasks
-              if ((task.taskStats.taskSubtasksCount ?? 0) > 0) ...
-                [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: _getProgress(task),
-                      minHeight: 20,
-                      backgroundColor: Colors.grey.shade300,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _getProgress(task) == 1.0 ? Colors.green : Colors.blue,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _getProgressText(task),
-                    style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-
-              // Divider
-              Divider(
-                color: Theme.of(context).colorScheme.outlineVariant,
-                thickness: 2,
+                maxLines: _isDescriptionExpanded ? null : 4,
+                overflow: _isDescriptionExpanded
+                    ? TextOverflow.visible
+                    : TextOverflow.ellipsis,
               ),
+              if (currentTask.taskDescription.isNotEmpty &&
+                  currentTask.taskDescription.length > 140)
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _isDescriptionExpanded = !_isDescriptionExpanded;
+                    });
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      _isDescriptionExpanded ? 'See less' : 'See more',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              if (currentTask.taskAssignedTo.isNotEmpty &&
+                  currentTask.taskAssignedTo != 'None') ...[
+                const SizedBox(height: 14),
+                Divider(color: Colors.grey.shade300, height: 1),
+                const SizedBox(height: 12),
+                _buildSectionLabel('Assignment'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _buildInfoChip(
+                      icon: Icons.person_outline,
+                      label: currentTask.taskAssignedToName,
+                    ),
+                    if (currentTask.taskAcceptanceStatus != null)
+                      _buildInfoChip(
+                        icon: Icons.how_to_reg_outlined,
+                        label:
+                            'Acceptance ${_getAcceptanceStatusLabel(currentTask.taskAcceptanceStatus)}',
+                        textColor: _getAcceptanceStatusColor(
+                          currentTask.taskAcceptanceStatus,
+                        ),
+                      ),
+                    if (currentTask.taskRequiresApproval)
+                      _buildInfoChip(
+                        icon: Icons.verified_outlined,
+                        label: 'Requires approval',
+                        textColor: Colors.amber.shade800,
+                      ),
+                  ],
+                ),
+              ],
+              if (currentTask.taskIsRepeating) ...[
+                const SizedBox(height: 14),
+                Divider(color: Colors.grey.shade300, height: 1),
+                const SizedBox(height: 12),
+                _buildSectionLabel('Repeating'),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    if (currentTask.taskRepeatInterval != null &&
+                        currentTask.taskRepeatInterval!.isNotEmpty)
+                      _buildInfoChip(
+                        icon: Icons.today_outlined,
+                        label:
+                            'Days ${_formatRepeatDays(currentTask.taskRepeatInterval)}',
+                      ),
+                    if (currentTask.taskRepeatTime != null)
+                      _buildInfoChip(
+                        icon: Icons.schedule_outlined,
+                        label: 'Time ${currentTask.taskRepeatTime}',
+                      ),
+                    if (currentTask.taskRepeatEndDate != null)
+                      _buildInfoChip(
+                        icon: Icons.event_busy_outlined,
+                        label:
+                            'Until ${_formatDate(currentTask.taskRepeatEndDate)}',
+                      ),
+                    if (currentTask.taskNextRepeatDate != null)
+                      _buildInfoChip(
+                        icon: Icons.update_outlined,
+                        label:
+                            'Next ${_formatDate(currentTask.taskNextRepeatDate)}',
+                      ),
+                  ],
+                ),
+              ],
+              if ((currentTask.taskStats.taskSubtasksCount ?? 0) > 0) ...[
+                const SizedBox(height: 14),
+                Divider(color: Colors.grey.shade300, height: 1),
+                const SizedBox(height: 12),
+                _buildSectionLabel('Progress'),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: _getProgress(currentTask),
+                    minHeight: 12,
+                    backgroundColor: Colors.grey.shade200,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      _getProgress(currentTask) == 1.0
+                          ? Colors.green
+                          : Colors.blue.shade600,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _getProgressText(currentTask),
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+              ],
+              const SizedBox(height: 12),
             ],
           ),
         );
       },
     );
+  }
+
+  Widget _buildSectionLabel(String label) {
+    return Text(
+      label,
+      style: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: Colors.blueGrey.shade700,
+      ),
+    );
+  }
+
+  Widget _buildInfoChip({
+    required IconData icon,
+    required String label,
+    Color? textColor,
+  }) {
+    final effectiveText = textColor ?? Colors.blueGrey.shade700;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: Colors.grey.shade100,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: effectiveText),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: effectiveText,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getPriorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red.shade700;
+      case 'medium':
+        return Colors.orange.shade700;
+      case 'low':
+      default:
+        return Colors.green.shade700;
+    }
+  }
+
+  Color _getPriorityBackgroundColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red.shade100;
+      case 'medium':
+        return Colors.orange.shade100;
+      case 'low':
+      default:
+        return Colors.green.shade100;
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return Colors.green.shade700;
+      case 'in progress':
+        return Colors.blue.shade700;
+      case 'paused':
+        return Colors.orange.shade700;
+      case 'to do':
+      default:
+        return Colors.blueGrey.shade700;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return Icons.check_circle_outline;
+      case 'in progress':
+        return Icons.play_circle_outline;
+      case 'paused':
+        return Icons.pause_circle_outline;
+      case 'to do':
+      default:
+        return Icons.radio_button_unchecked;
+    }
   }
 
   String _formatDate(DateTime? date) {
@@ -367,13 +422,9 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     final done = task.taskStats.taskSubtasksDoneCount ?? 0;
     final total = task.taskStats.taskSubtasksCount ?? 0;
 
-    // If task is marked as done, return 100%
     if (task.taskIsDone) return 1.0;
-
-    // If there are no subtasks, return 0%
     if (total == 0) return 0.0;
 
-    // Calculate based on subtasks completion
     return done / total;
   }
 
@@ -393,47 +444,9 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     return '$done of $total subtasks completed ($percent%)';
   }
 
-  bool _canEditTask(Task task, String currentUserId) {
-    // Task owner can edit
-    if (task.taskOwnerId == currentUserId) return true;
-
-    // Board manager can edit
-    if (task.taskBoardId.isNotEmpty) {
-      final boardProvider = context.read<BoardProvider>();
-      final board = boardProvider.boards.firstWhere(
-        (b) => b.boardId == task.taskBoardId,
-        orElse: () => boardProvider.boards.first,
-      );
-      if (board.boardManagerId == currentUserId) return true;
-    }
-
-    // Members cannot edit
-    return false;
-  }
-
-  bool _canToggleTask(Task task, String currentUserId) {
-    // Task owner can toggle
-    if (task.taskOwnerId == currentUserId) return true;
-
-    // Board manager can toggle
-    if (task.taskBoardId.isNotEmpty) {
-      final boardProvider = context.read<BoardProvider>();
-      final board = boardProvider.boards.firstWhere(
-        (b) => b.boardId == task.taskBoardId,
-        orElse: () => boardProvider.boards.first,
-      );
-      if (board.boardManagerId == currentUserId) return true;
-    }
-
-    // Members cannot toggle
-    return false;
-  }
-
   String _formatRepeatDays(String? repeatInterval) {
     if (repeatInterval == null || repeatInterval.isEmpty) return 'Unknown';
     final days = repeatInterval.split(',');
     return days.map((day) => day.substring(0, 3)).join(', ');
   }
-
-  
 }

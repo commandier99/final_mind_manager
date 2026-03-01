@@ -23,11 +23,14 @@ class TaskFileSubmissionsSection extends StatefulWidget {
 class _TaskFileSubmissionsSectionState
     extends State<TaskFileSubmissionsSection> {
   final TaskSubmissionService _submissionService = TaskSubmissionService();
+  final Set<String> _reviewingSubmissionIds = <String>{};
 
   @override
   void dispose() {
     // Upload continues in background even after dispose
-    print('🗑️ [FileSubmissions] Widget disposed, upload continues in background');
+    print(
+      '🗑️ [FileSubmissions] Widget disposed, upload continues in background',
+    );
     super.dispose();
   }
 
@@ -35,13 +38,17 @@ class _TaskFileSubmissionsSectionState
     try {
       // Check current storage usage before opening file picker
       const int maxBytes = 100 * 1024 * 1024; // 100 MB
-      final int existingBytes = await _submissionService.getTotalBytesForTask(widget.task.taskId);
-      
+      final int existingBytes = await _submissionService.getTotalBytesForTask(
+        widget.task.taskId,
+      );
+
       if (existingBytes >= maxBytes) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Task storage limit reached. Cannot upload more files.'),
+              content: Text(
+                'Task storage limit reached. Cannot upload more files.',
+              ),
               backgroundColor: Color(0xFF9C88D4),
               duration: Duration(seconds: 3),
             ),
@@ -75,8 +82,13 @@ class _TaskFileSubmissionsSectionState
 
         // Enforce max 100MB per task capacity (existing + new)
         const int maxBytes = 100 * 1024 * 1024; // 100 MB
-        final int existingBytes = await _submissionService.getTotalBytesForTask(widget.task.taskId);
-        final int newBytes = result.files.fold<int>(0, (sum, f) => sum + (f.size));
+        final int existingBytes = await _submissionService.getTotalBytesForTask(
+          widget.task.taskId,
+        );
+        final int newBytes = result.files.fold<int>(
+          0,
+          (sum, f) => sum + (f.size),
+        );
         final int totalAfterUpload = existingBytes + newBytes;
 
         if (totalAfterUpload > maxBytes) {
@@ -84,11 +96,15 @@ class _TaskFileSubmissionsSectionState
           final newMb = (newBytes / (1024 * 1024)).toStringAsFixed(1);
           final limitMb = (maxBytes / (1024 * 1024)).toStringAsFixed(0);
           final remainingBytes = maxBytes - existingBytes;
-          final remainingMb = (remainingBytes / (1024 * 1024)).clamp(0, 100).toStringAsFixed(1);
+          final remainingMb = (remainingBytes / (1024 * 1024))
+              .clamp(0, 100)
+              .toStringAsFixed(1);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Task storage limit ${limitMb}MB exceeded. Used: ${usedMb}MB, New: ${newMb}MB, Remaining: ${remainingMb}MB.'),
+                content: Text(
+                  'Task storage limit ${limitMb}MB exceeded. Used: ${usedMb}MB, New: ${newMb}MB, Remaining: ${remainingMb}MB.',
+                ),
                 backgroundColor: const Color(0xFF9C88D4),
               ),
             );
@@ -98,52 +114,62 @@ class _TaskFileSubmissionsSectionState
 
         // Start background upload - doesn't await, continues in background
         final uploadProgressProvider = context.read<UploadProgressProvider>();
-        
-        _submissionService.createSubmission(
-          taskId: widget.task.taskId,
-          files: result.files,
-          onProgress: (submissionId, currentFile, totalFiles, fileName, progress) {
-            uploadProgressProvider.updateProgress(
-              submissionId: submissionId,
-              fileName: fileName,
-              currentFile: currentFile,
-              totalFiles: totalFiles,
-              progress: progress,
-            );
-          },
-        ).then((submissionId) {
-          print('✅ [Upload] Background upload completed for task ${widget.task.taskId}');
-          uploadProgressProvider.clearProgress(submissionId);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Files uploaded successfully!'),
-                backgroundColor: Color(0xFF66BB6A),
-              ),
-            );
-          } else {
-            // Widget disposed during upload, but upload completed in background
-            print('🗑️ [Upload] Widget disposed, upload completed in background');
-          }
-        }).catchError((e) {
-          print('❌ [Upload] Background upload failed: $e');
-          final uploadProgressProvider = context.read<UploadProgressProvider>();
-          // Clear all active uploads on error
-          for (final submissionId in uploadProgressProvider.uploads.keys.toList()) {
-            uploadProgressProvider.clearProgress(submissionId);
-          }
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Error uploading files: $e'),
-                backgroundColor: const Color(0xFF9C88D4),
-              ),
-            );
-          } else {
-            // Widget disposed during error handling
-            print('🗑️ [Upload] Widget disposed during error handling');
-          }
-        });
+
+        _submissionService
+            .createSubmission(
+              taskId: widget.task.taskId,
+              files: result.files,
+              onProgress:
+                  (submissionId, currentFile, totalFiles, fileName, progress) {
+                    uploadProgressProvider.updateProgress(
+                      submissionId: submissionId,
+                      fileName: fileName,
+                      currentFile: currentFile,
+                      totalFiles: totalFiles,
+                      progress: progress,
+                    );
+                  },
+            )
+            .then((submissionId) {
+              print(
+                '✅ [Upload] Background upload completed for task ${widget.task.taskId}',
+              );
+              uploadProgressProvider.clearProgress(submissionId);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Files uploaded successfully!'),
+                    backgroundColor: Color(0xFF66BB6A),
+                  ),
+                );
+              } else {
+                // Widget disposed during upload, but upload completed in background
+                print(
+                  '🗑️ [Upload] Widget disposed, upload completed in background',
+                );
+              }
+            })
+            .catchError((e) {
+              print('❌ [Upload] Background upload failed: $e');
+              final uploadProgressProvider = context
+                  .read<UploadProgressProvider>();
+              // Clear all active uploads on error
+              for (final submissionId
+                  in uploadProgressProvider.uploads.keys.toList()) {
+                uploadProgressProvider.clearProgress(submissionId);
+              }
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error uploading files: $e'),
+                    backgroundColor: const Color(0xFF9C88D4),
+                  ),
+                );
+              } else {
+                // Widget disposed during error handling
+                print('🗑️ [Upload] Widget disposed during error handling');
+              }
+            });
       } else {
         // User cancelled picker without selecting files
         print('📁 [FilePicker] No files selected or result is null');
@@ -172,6 +198,143 @@ class _TaskFileSubmissionsSectionState
     if (widget.task.taskAssignedTo == currentUserId) return true;
 
     return false;
+  }
+
+  Board? _findBoard() {
+    if (widget.task.taskBoardId.isEmpty) return null;
+    final boardProvider = context.read<BoardProvider>();
+    for (final board in boardProvider.boards) {
+      if (board.boardId == widget.task.taskBoardId) return board;
+    }
+    return null;
+  }
+
+  bool _canProvideSubmissionFeedback(String currentUserId) {
+    if (currentUserId.isEmpty) return false;
+    if (currentUserId == widget.task.taskOwnerId) return true;
+    final board = _findBoard();
+    if (board == null) return false;
+    return board.canReviewSubmissions(currentUserId);
+  }
+
+  Future<void> _reviewSubmissionWithFeedback({
+    required TaskSubmission submission,
+    required bool isManager,
+  }) async {
+    final feedbackController = TextEditingController();
+    String action = 'revision_requested';
+
+    final selectedAction = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Review Submission'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isManager) ...[
+                    DropdownButtonFormField<String>(
+                      initialValue: action,
+                      decoration: const InputDecoration(
+                        labelText: 'Action',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'approved',
+                          child: Text('Approve'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'rejected',
+                          child: Text('Reject'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'revision_requested',
+                          child: Text('Request Revision'),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setDialogState(() => action = value);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ] else ...[
+                    const Text(
+                      'You can send feedback and request revision.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  TextField(
+                    controller: feedbackController,
+                    minLines: 3,
+                    maxLines: 6,
+                    decoration: InputDecoration(
+                      hintText: 'Enter feedback...',
+                      labelText: 'Feedback',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () => Navigator.pop(dialogContext, action),
+                  child: const Text('Submit'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (selectedAction == null || !mounted) return;
+
+    final feedback = feedbackController.text.trim();
+    final effectiveStatus = isManager ? selectedAction : 'revision_requested';
+
+    setState(() {
+      _reviewingSubmissionIds.add(submission.submissionId);
+    });
+    try {
+      await _submissionService.reviewSubmission(
+        submissionId: submission.submissionId,
+        status: effectiveStatus,
+        feedback: feedback.isEmpty ? null : feedback,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Submission feedback saved.'),
+          backgroundColor: Color(0xFF66BB6A),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to review submission: $e'),
+          backgroundColor: const Color(0xFF9C88D4),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _reviewingSubmissionIds.remove(submission.submissionId);
+        });
+      }
+    }
   }
 
   @override
@@ -213,7 +376,9 @@ class _TaskFileSubmissionsSectionState
                               height: 16,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.blue,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -223,15 +388,20 @@ class _TaskFileSubmissionsSectionState
                                 children: [
                                   Text(
                                     'Uploading...',
-                                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: Colors.blue.shade700,
-                                      fontWeight: FontWeight.w600,
-                                    ),
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: Colors.blue.shade700,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     upload.fileName,
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -240,31 +410,34 @@ class _TaskFileSubmissionsSectionState
                             ),
                             Text(
                               '${(upload.fileProgress * 100).toStringAsFixed(0)}%',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.bold,
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: LinearProgressIndicator(
+                            value: upload.fileProgress,
+                            minHeight: 4,
+                            backgroundColor: Colors.blue.shade200,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.blue.shade600,
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: upload.fileProgress,
-                        minHeight: 4,
-                        backgroundColor: Colors.blue.shade200,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-                      ),
-                    ),
-                  ],
                     ),
                   );
                 }).toList(),
               );
             },
           ),
-          
+
           // Section header
           Text(
             'File Submissions',
@@ -283,10 +456,7 @@ class _TaskFileSubmissionsSectionState
                 icon: const Icon(Icons.attach_file, size: 24),
                 label: const Text(
                   'Attach Files',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
@@ -377,15 +547,22 @@ class _TaskFileSubmissionsSectionState
               int usedBytes = 0;
               for (final s in submissions) {
                 for (final f in s.files) {
-                  print('📊 [Storage] File: ${f.fileName}, Size: ${f.fileSize} bytes');
+                  print(
+                    '📊 [Storage] File: ${f.fileName}, Size: ${f.fileSize} bytes',
+                  );
                   usedBytes += f.fileSize;
                 }
               }
               print('📊 [Storage] Total used bytes: $usedBytes');
               print('📊 [Storage] Max bytes: $maxBytes');
               final double progress = (usedBytes / maxBytes).clamp(0.0, 1.0);
-              final String usedMb = (usedBytes / (1024 * 1024)).toStringAsFixed(1);
-              final String remainingMb = ((maxBytes - usedBytes) / (1024 * 1024)).clamp(0, 100).toStringAsFixed(1);
+              final String usedMb = (usedBytes / (1024 * 1024)).toStringAsFixed(
+                1,
+              );
+              final String remainingMb =
+                  ((maxBytes - usedBytes) / (1024 * 1024))
+                      .clamp(0, 100)
+                      .toStringAsFixed(1);
               print('📊 [Storage] Progress: $progress');
               print('📊 [Storage] Used MB: $usedMb');
               print('📊 [Storage] Remaining MB: $remainingMb');
@@ -435,8 +612,8 @@ class _TaskFileSubmissionsSectionState
                               progress < 0.7
                                   ? const Color(0xFF66BB6A) // green
                                   : (progress < 0.9
-                                      ? const Color(0xFFFFA726) // orange
-                                      : const Color(0xFFEF5350)), // red
+                                        ? const Color(0xFFFFA726) // orange
+                                        : const Color(0xFFEF5350)), // red
                             ),
                           ),
                         ),
@@ -502,6 +679,11 @@ class _TaskFileSubmissionsSectionState
     IconData statusIcon;
 
     switch (submission.status) {
+      case 'pending':
+      case 'submitted':
+        statusColor = Colors.blue;
+        statusIcon = Icons.pending;
+        break;
       case 'approved':
         statusColor = Colors.green;
         statusIcon = Icons.check_circle;
@@ -521,6 +703,15 @@ class _TaskFileSubmissionsSectionState
 
     final userProvider = context.read<UserProvider>();
     final currentUserId = userProvider.userId ?? '';
+    final board = _findBoard();
+    final isManager =
+        board?.isManager(currentUserId) == true ||
+        currentUserId == widget.task.taskOwnerId;
+    final canProvideFeedback = _canProvideSubmissionFeedback(currentUserId);
+    final canReviewThisSubmission =
+        canProvideFeedback &&
+        submission.status != TaskSubmission.statusApproved &&
+        !_reviewingSubmissionIds.contains(submission.submissionId);
     final canDelete = _canDeleteSubmission(submission, currentUserId);
 
     return Card(
@@ -565,12 +756,41 @@ class _TaskFileSubmissionsSectionState
                   const SizedBox(width: 8),
                   IconButton(
                     tooltip: 'Delete submission',
-                    icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
+                    ),
                     onPressed: () => _confirmDeleteSubmission(submission),
                   ),
                 ],
               ],
             ),
+            if (canProvideFeedback) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  ElevatedButton.icon(
+                    onPressed: canReviewThisSubmission
+                        ? () => _reviewSubmissionWithFeedback(
+                            submission: submission,
+                            isManager: isManager,
+                          )
+                        : null,
+                    icon: const Icon(Icons.rate_review_outlined, size: 16),
+                    label: Text(
+                      _reviewingSubmissionIds.contains(submission.submissionId)
+                          ? 'Saving...'
+                          : 'Feedback',
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade600,
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (submission.feedback != null && submission.feedback!.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -700,7 +920,9 @@ class _TaskFileSubmissionsSectionState
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Submission'),
-        content: const Text('Are you sure you want to delete this submission? This action cannot be undone.'),
+        content: const Text(
+          'Are you sure you want to delete this submission? This action cannot be undone.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

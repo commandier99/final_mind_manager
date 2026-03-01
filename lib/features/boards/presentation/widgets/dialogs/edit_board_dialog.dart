@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/models/board_model.dart';
+import '../../../datasources/models/board_roles.dart';
 import '../../../datasources/providers/board_provider.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 
@@ -17,6 +18,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
   late TextEditingController _titleController;
   late TextEditingController _goalController;
   late TextEditingController _descriptionController;
+  late TextEditingController _taskCapacityController;
   Map<String, String> _memberRoles = {};
   Map<String, String> _memberNames = {};
   bool _loadingMembers = true;
@@ -32,6 +34,9 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
     _goalController = TextEditingController(text: widget.board.boardGoal);
     _descriptionController = TextEditingController(
       text: widget.board.boardGoalDescription,
+    );
+    _taskCapacityController = TextEditingController(
+      text: widget.board.boardTaskCapacity.toString(),
     );
     _memberRoles = Map<String, String>.from(widget.board.memberRoles);
     _loadMemberNames();
@@ -66,6 +71,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
     _titleController.dispose();
     _goalController.dispose();
     _descriptionController.dispose();
+    _taskCapacityController.dispose();
     super.dispose();
   }
 
@@ -77,6 +83,16 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
       return;
     }
 
+    final parsedCapacity = int.tryParse(_taskCapacityController.text.trim());
+    if (parsedCapacity == null || parsedCapacity < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Member task capacity must be a whole number >= 0'),
+        ),
+      );
+      return;
+    }
+
     try {
       await context.read<BoardProvider>().updateBoard(
         board: widget.board,
@@ -84,6 +100,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
         newGoal: _goalController.text.trim(),
         newGoalDescription: _descriptionController.text.trim(),
         memberRoles: _memberRoles,
+        boardTaskCapacity: parsedCapacity,
       );
 
       if (mounted) {
@@ -156,8 +173,25 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                 },
               ),
               const SizedBox(height: 24),
+              const Divider(),
+              const SizedBox(height: 12),
+              const Text(
+                'Board Settings',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _taskCapacityController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Member Task Capacity',
+                  border: OutlineInputBorder(),
+                  helperText: 'Same cap for all members. Use 0 for unlimited.',
+                ),
+              ),
+              const SizedBox(height: 24),
 
-              // Inspector Selection
+              // Supervisor Selection
               if (_memberNames.isNotEmpty) ...[
                 const Divider(),
                 const SizedBox(height: 16),
@@ -166,7 +200,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                     Icon(Icons.visibility, color: Colors.blue, size: 20),
                     const SizedBox(width: 8),
                     const Text(
-                      'Board Inspector',
+                      'Board Supervisor',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
@@ -176,7 +210,7 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Inspectors can view progress but cannot be assigned to tasks.',
+                  'Supervisors can view progress but cannot be assigned to tasks.',
                   style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 12),
@@ -185,21 +219,27 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                 else
                   DropdownButtonFormField<String>(
                     decoration: const InputDecoration(
-                      labelText: 'Select Inspector',
+                      labelText: 'Select Supervisor',
                       border: OutlineInputBorder(),
                       prefixIcon: Icon(Icons.person_search),
                     ),
                     initialValue:
                         _memberRoles.entries
                             .firstWhere(
-                              (entry) => entry.value == 'inspector',
+                              (entry) =>
+                                  BoardRoles.normalize(entry.value) ==
+                                  BoardRoles.supervisor,
                               orElse: () => const MapEntry('', ''),
                             )
                             .key
                             .isEmpty
                         ? null
                         : _memberRoles.entries
-                              .firstWhere((entry) => entry.value == 'inspector')
+                              .firstWhere(
+                                (entry) =>
+                                    BoardRoles.normalize(entry.value) ==
+                                    BoardRoles.supervisor,
+                              )
                               .key,
                     items: [
                       const DropdownMenuItem<String>(
@@ -213,17 +253,22 @@ class _EditBoardDialogState extends State<EditBoardDialog> {
                         );
                       }),
                     ],
-                    onChanged: (String? newInspectorId) {
+                    onChanged: (String? newSupervisorId) {
                       setState(() {
                         // Reset all members to 'member' role
                         for (var memberId in _memberNames.keys) {
-                          _memberRoles[memberId] = 'member';
+                          _memberRoles[memberId] = BoardRoles.member;
                         }
 
-                        // Set the selected member as inspector
-                        if (newInspectorId != null &&
-                            newInspectorId.isNotEmpty) {
-                          _memberRoles[newInspectorId] = 'inspector';
+                        // Set the selected member as supervisor
+                        if (newSupervisorId != null &&
+                            newSupervisorId.isNotEmpty) {
+                          _memberRoles[newSupervisorId] = BoardRoles.supervisor;
+                        } else {
+                          // Keep map values normalized to known roles.
+                          _memberRoles.updateAll(
+                            (_, role) => BoardRoles.normalize(role),
+                          );
                         }
                       });
                     },

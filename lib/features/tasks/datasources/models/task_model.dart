@@ -2,6 +2,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'task_stats_model.dart';
 
 class Task {
+  static const String statusToDo = 'To Do';
+  static const String statusInProgress = 'In Progress';
+  static const String statusPaused = 'Paused';
+  static const String statusCompleted = 'Completed';
+  static const String outcomeNone = 'none';
+  static const String outcomeSuccessful = 'successful';
+  static const String outcomeFailed = 'failed';
+  static const String laneDrafts = 'drafts';
+  static const String lanePublished = 'published';
+
   // Priority field
   final String taskId;
   final String taskBoardId;
@@ -30,6 +40,7 @@ class Task {
   final DateTime? taskIsDoneAt;
 
   final bool taskFailed; // Whether task was marked as failed by manager
+  final String? taskOutcome; // none | successful | failed
 
   final TaskStats taskStats; // TaskStats model for task stats
 
@@ -37,6 +48,9 @@ class Task {
   final String taskStatus; // e.g. 'To Do', 'In Progress', 'Paused', 'Completed'
 
   // Approval fields - optional, only used if task requires approval
+  final bool
+  taskAllowsSubmissions; // Whether users can submit files for this task
+  final bool taskRequiresSubmission; // Whether a submission is mandatory
   final bool taskRequiresApproval; // Whether this task needs approval
   final String? taskSubmissionId; // Reference to task submission if exists
 
@@ -53,9 +67,12 @@ class Task {
   taskAcceptanceStatus; // 'pending', 'accepted', 'declined', null for self-assigned
 
   // Board task lane:
-  // - 'workshop': manager draft/prep space
-  // - 'billboard': member-facing published task
+  // - 'drafts': manager/supervisor draft/prep space
+  // - 'published': member-facing published task
   final String taskBoardLane;
+
+  // Task dependency IDs that must be completed before this task can start/done
+  final List<String> taskDependencyIds;
 
   Task({
     required this.taskId,
@@ -79,8 +96,11 @@ class Task {
     this.taskIsDone = false,
     this.taskIsDoneAt,
     this.taskFailed = false,
+    this.taskOutcome = outcomeNone,
     required this.taskStats, // TaskStats passed as a parameter
-    this.taskStatus = 'To Do',
+    this.taskStatus = statusToDo,
+    this.taskAllowsSubmissions = false,
+    this.taskRequiresSubmission = false,
     this.taskRequiresApproval = false,
     this.taskSubmissionId,
     this.taskIsRepeating = false,
@@ -89,33 +109,60 @@ class Task {
     this.taskNextRepeatDate,
     this.taskRepeatTime,
     this.taskAcceptanceStatus,
-    this.taskBoardLane = 'billboard',
+    this.taskBoardLane = lanePublished,
+    this.taskDependencyIds = const [],
   });
 
   // Helper to map legacy Firestore statuses to core statuses
-  static String _mapStatusFromFirestore(String status) {
+  static String normalizeTaskStatus(String status) {
     switch (status.toUpperCase()) {
       case 'TODO':
       case 'TO DO':
-        return 'To Do';
+        return statusToDo;
       case 'IN_PROGRESS':
       case 'IN PROGRESS':
-        return 'In Progress';
+        return statusInProgress;
       case 'ON_PAUSE':
       case 'PAUSED':
-        return 'Paused';
+        return statusPaused;
+      case 'DONE':
       case 'COMPLETED':
-        return 'COMPLETED';
+        return statusCompleted;
       // Legacy states map to In Progress
       case 'IN_REVIEW':
       case 'UNDER_REVISION':
-        return 'In Progress';
+        return statusInProgress;
       default:
-        return 'To Do';
+        return statusToDo;
+    }
+  }
+
+  static String normalizeTaskBoardLane(String lane) {
+    switch (lane.trim().toLowerCase()) {
+      case laneDrafts:
+        return laneDrafts;
+      case lanePublished:
+      default:
+        return lanePublished;
     }
   }
 
   // Computed deadline state getters
+  static String normalizeTaskOutcome(String outcome) {
+    switch (outcome.trim().toLowerCase()) {
+      case outcomeSuccessful:
+        return outcomeSuccessful;
+      case outcomeFailed:
+        return outcomeFailed;
+      case outcomeNone:
+      default:
+        return outcomeNone;
+    }
+  }
+
+  String get effectiveTaskOutcome =>
+      normalizeTaskOutcome(taskOutcome ?? outcomeNone);
+
   bool get isOverdue {
     if (taskIsDone || taskDeadline == null) return false;
     return DateTime.now().isAfter(taskDeadline!);
@@ -142,9 +189,20 @@ class Task {
 
   // Factory to create Task from Firestore document
   factory Task.fromMap(Map<String, dynamic> data, String documentId) {
+    final taskBoardId = data['taskBoardId'] as String? ?? '';
+    final allowsSubmissions = data['taskAllowsSubmissions'] as bool?;
+    final requiresApproval = data['taskRequiresApproval'] as bool? ?? false;
+    final hasSubmissionId = (data['taskSubmissionId'] as String?) != null;
+    final taskIsDone = data['taskIsDone'] as bool? ?? false;
+    final taskFailed = data['taskFailed'] as bool? ?? false;
+    final hasLegacySubmissionSignals =
+        requiresApproval ||
+        (data['taskRequiresSubmission'] as bool? ?? false) ||
+        hasSubmissionId;
+
     return Task(
       taskId: documentId,
-      taskBoardId: data['taskBoardId'] as String? ?? '',
+      taskBoardId: taskBoardId,
       taskBoardTitle: data['taskBoardTitle'] as String?,
       taskOwnerId: data['taskOwnerId'] as String? ?? '',
       taskOwnerName: data['taskOwnerName'] as String? ?? 'Unknown',
@@ -162,16 +220,28 @@ class Task {
       taskDeadlineMissed: data['taskDeadlineMissed'] as bool? ?? false,
       taskExtensionCount: data['taskExtensionCount'] as int? ?? 0,
       taskReminderSentAt: (data['taskReminderSentAt'] as Timestamp?)?.toDate(),
-      taskIsDone: data['taskIsDone'] as bool? ?? false,
+      taskIsDone: taskIsDone,
       taskIsDoneAt: (data['taskIsDoneAt'] as Timestamp?)?.toDate(),
-      taskFailed: data['taskFailed'] as bool? ?? false,
+      taskFailed: taskFailed,
+      taskOutcome: normalizeTaskOutcome(
+        data['taskOutcome'] as String? ??
+            (taskFailed
+                ? outcomeFailed
+                : (taskIsDone && !(requiresApproval && hasSubmissionId)
+                      ? outcomeSuccessful
+                      : outcomeNone)),
+      ),
       taskStats: data['taskStats'] != null
           ? TaskStats.fromMap(Map<String, dynamic>.from(data['taskStats']))
           : TaskStats(), // Fallback to empty TaskStats if null
-      taskStatus: _mapStatusFromFirestore(
-        data['taskStatus'] as String? ?? 'To Do',
+      taskStatus: normalizeTaskStatus(
+        data['taskStatus'] as String? ?? statusToDo,
       ),
-      taskRequiresApproval: data['taskRequiresApproval'] as bool? ?? false,
+      taskAllowsSubmissions:
+          allowsSubmissions ??
+          (taskBoardId.isNotEmpty || hasLegacySubmissionSignals),
+      taskRequiresSubmission: data['taskRequiresSubmission'] as bool? ?? false,
+      taskRequiresApproval: requiresApproval,
       taskSubmissionId: data['taskSubmissionId'] as String?,
       taskIsRepeating: data['taskIsRepeating'] as bool? ?? false,
       taskRepeatInterval: data['taskRepeatInterval'] as String?,
@@ -179,7 +249,12 @@ class Task {
       taskNextRepeatDate: (data['taskNextRepeatDate'] as Timestamp?)?.toDate(),
       taskRepeatTime: data['taskRepeatTime'] as String?,
       taskAcceptanceStatus: data['taskAcceptanceStatus'] as String?,
-      taskBoardLane: data['taskBoardLane'] as String? ?? 'billboard',
+      taskBoardLane: normalizeTaskBoardLane(
+        data['taskBoardLane'] as String? ?? lanePublished,
+      ),
+      taskDependencyIds: List<String>.from(
+        data['taskDependencyIds'] ?? const [],
+      ),
     );
   }
 
@@ -209,9 +284,13 @@ class Task {
       'taskIsDone': taskIsDone,
       if (taskIsDoneAt != null)
         'taskIsDoneAt': Timestamp.fromDate(taskIsDoneAt!),
-      'taskFailed': taskFailed,
+      'taskFailed':
+          normalizeTaskOutcome(taskOutcome ?? outcomeNone) == outcomeFailed,
+      'taskOutcome': normalizeTaskOutcome(taskOutcome ?? outcomeNone),
       'taskStats': taskStats.toMap(),
-      'taskStatus': taskStatus,
+      'taskStatus': normalizeTaskStatus(taskStatus),
+      'taskAllowsSubmissions': taskAllowsSubmissions,
+      'taskRequiresSubmission': taskRequiresSubmission,
       'taskRequiresApproval': taskRequiresApproval,
       if (taskSubmissionId != null) 'taskSubmissionId': taskSubmissionId,
       'taskIsRepeating': taskIsRepeating,
@@ -223,7 +302,8 @@ class Task {
       if (taskRepeatTime != null) 'taskRepeatTime': taskRepeatTime,
       if (taskAcceptanceStatus != null)
         'taskAcceptanceStatus': taskAcceptanceStatus,
-      'taskBoardLane': taskBoardLane,
+      'taskBoardLane': normalizeTaskBoardLane(taskBoardLane),
+      'taskDependencyIds': taskDependencyIds,
     };
   }
 
@@ -249,8 +329,11 @@ class Task {
     bool? taskIsDone,
     DateTime? taskIsDoneAt,
     bool? taskFailed,
+    String? taskOutcome,
     TaskStats? taskStats,
     String? taskStatus,
+    bool? taskAllowsSubmissions,
+    bool? taskRequiresSubmission,
     bool? taskRequiresApproval,
     String? taskSubmissionId,
     bool? taskIsRepeating,
@@ -260,6 +343,7 @@ class Task {
     String? taskRepeatTime,
     String? taskAcceptanceStatus,
     String? taskBoardLane,
+    List<String>? taskDependencyIds,
   }) {
     return Task(
       taskId: taskId ?? this.taskId,
@@ -282,8 +366,15 @@ class Task {
       taskIsDone: taskIsDone ?? this.taskIsDone,
       taskIsDoneAt: taskIsDoneAt ?? this.taskIsDoneAt,
       taskFailed: taskFailed ?? this.taskFailed,
+      taskOutcome: normalizeTaskOutcome(
+        taskOutcome ?? this.taskOutcome ?? outcomeNone,
+      ),
       taskStats: taskStats ?? this.taskStats,
-      taskStatus: taskStatus ?? this.taskStatus,
+      taskStatus: normalizeTaskStatus(taskStatus ?? this.taskStatus),
+      taskAllowsSubmissions:
+          taskAllowsSubmissions ?? this.taskAllowsSubmissions,
+      taskRequiresSubmission:
+          taskRequiresSubmission ?? this.taskRequiresSubmission,
       taskRequiresApproval: taskRequiresApproval ?? this.taskRequiresApproval,
       taskSubmissionId: taskSubmissionId ?? this.taskSubmissionId,
       taskIsRepeating: taskIsRepeating ?? this.taskIsRepeating,
@@ -292,7 +383,10 @@ class Task {
       taskNextRepeatDate: taskNextRepeatDate ?? this.taskNextRepeatDate,
       taskRepeatTime: taskRepeatTime ?? this.taskRepeatTime,
       taskAcceptanceStatus: taskAcceptanceStatus ?? this.taskAcceptanceStatus,
-      taskBoardLane: taskBoardLane ?? this.taskBoardLane,
+      taskBoardLane: normalizeTaskBoardLane(
+        taskBoardLane ?? this.taskBoardLane,
+      ),
+      taskDependencyIds: taskDependencyIds ?? this.taskDependencyIds,
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../boards/datasources/models/board_request_model.dart';
+import '../../../../boards/datasources/models/board_roles.dart';
 import '../../../../boards/datasources/providers/board_request_provider.dart';
 
 Widget buildBoardRequestDetailsSection(
@@ -31,7 +32,9 @@ Widget buildBoardRequestDetailsSection(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isRecruitment ? 'Recruitment Request' : 'Application Request',
+                      isRecruitment
+                          ? 'Recruitment Request'
+                          : 'Application Request',
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.grey,
@@ -61,6 +64,14 @@ Widget buildBoardRequestDetailsSection(
                 : currentRequest.boardTitle,
             icon: Icons.person,
           ),
+          if (isRecruitment) ...[
+            const SizedBox(height: 16),
+            _buildInfoSection(
+              label: 'Role on Join',
+              value: _roleLabel(currentRequest.boardReqRequestedRole),
+              icon: Icons.badge_outlined,
+            ),
+          ],
           const SizedBox(height: 16),
 
           // Message section
@@ -68,10 +79,7 @@ Widget buildBoardRequestDetailsSection(
               currentRequest.boardReqMessage!.isNotEmpty) ...[
             const Text(
               'Message',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Container(
@@ -100,7 +108,11 @@ Widget buildBoardRequestDetailsSection(
                   child: ElevatedButton(
                     onPressed: isProcessing
                         ? null
-                        : () => _handleAccept(context, currentRequest, boardProvider),
+                        : () => _handleAccept(
+                            context,
+                            currentRequest,
+                            boardProvider,
+                          ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -114,7 +126,11 @@ Widget buildBoardRequestDetailsSection(
                   child: OutlinedButton(
                     onPressed: isProcessing
                         ? null
-                        : () => _handleDecline(context, currentRequest, boardProvider),
+                        : () => _handleDecline(
+                            context,
+                            currentRequest,
+                            boardProvider,
+                          ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -162,10 +178,7 @@ Widget buildBoardRequestDetailsSection(
             const SizedBox(height: 24),
             const Text(
               'Response Message',
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Container(
@@ -241,10 +254,7 @@ Widget _buildInfoSection({
             ),
             Text(
               value,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w500,
-              ),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -259,10 +269,7 @@ Widget _buildTimeline(BoardRequest request, bool isRecruitment) {
     children: [
       const Text(
         'Timeline',
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-        ),
+        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
       ),
       const SizedBox(height: 12),
       _buildTimelineItem(
@@ -276,7 +283,9 @@ Widget _buildTimeline(BoardRequest request, bool isRecruitment) {
           label: request.boardReqStatus == 'approved' ? 'Accepted' : 'Declined',
           date: request.boardReqRespondedAt!,
           isCompleted: true,
-          color: request.boardReqStatus == 'approved' ? Colors.green : Colors.red,
+          color: request.boardReqStatus == 'approved'
+              ? Colors.green
+              : Colors.red,
         ),
       ] else ...[
         _buildTimelineConnector(),
@@ -333,11 +342,7 @@ Widget _buildTimelineItem({
 Widget _buildTimelineConnector() {
   return Padding(
     padding: const EdgeInsets.only(left: 5, top: 4, bottom: 4),
-    child: Container(
-      width: 2,
-      height: 20,
-      color: Colors.grey[300],
-    ),
+    child: Container(width: 2, height: 20, color: Colors.grey[300]),
   );
 }
 
@@ -362,19 +367,23 @@ Widget _buildStatusChip(String status) {
   return Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
     decoration: BoxDecoration(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: color.withOpacity(0.3)),
+      border: Border.all(color: color.withValues(alpha: 0.3)),
     ),
     child: Text(
       label,
-      style: TextStyle(
-        color: color,
-        fontSize: 12,
-        fontWeight: FontWeight.bold,
-      ),
+      style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
     ),
   );
+}
+
+String _roleLabel(String role) {
+  final normalizedRole = BoardRoles.normalize(role);
+  if (normalizedRole == BoardRoles.supervisor) {
+    return 'Supervisor';
+  }
+  return 'Member';
 }
 
 Future<void> _handleAccept(
@@ -391,7 +400,9 @@ Future<void> _handleAccept(
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Joined ${request.boardTitle}!'),
+          content: Text(
+            'Joined ${request.boardTitle} as ${_roleLabel(request.boardReqRequestedRole)}!',
+          ),
           backgroundColor: Colors.green,
         ),
       );

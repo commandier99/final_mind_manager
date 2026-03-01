@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/board_request_model.dart';
+import '../models/board_roles.dart';
 import '../services/board_request_services.dart';
 import 'package:flutter/foundation.dart';
 
@@ -138,6 +139,7 @@ class BoardRequestProvider extends ChangeNotifier {
     required String boardId,
     required String boardTitle,
     required String userId,
+    String role = BoardRoles.member,
     String? message,
   }) async {
     _isLoading = true;
@@ -148,6 +150,7 @@ class BoardRequestProvider extends ChangeNotifier {
         boardId: boardId,
         boardTitle: boardTitle,
         userId: userId,
+        role: role,
         message: message,
       );
     } finally {

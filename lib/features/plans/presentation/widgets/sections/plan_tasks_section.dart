@@ -139,7 +139,22 @@ class PlanTasksSection extends StatelessWidget {
                           ? task.taskAssignedTo
                           : null,
                       onToggleDone: (isDone) async {
-                        await taskProvider.toggleTaskDone(task);
+                        try {
+                          await taskProvider.toggleTaskDone(
+                            task.copyWith(
+                              taskIsDone: isDone ?? false,
+                              taskStatus:
+                                  (isDone ?? false) ? 'Completed' : 'To Do',
+                            ),
+                          );
+                        } on StateError catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(e.message.toString()),
+                            ),
+                          );
+                        }
                       },
                     ),
                   );

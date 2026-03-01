@@ -50,6 +50,7 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
       subtaskTaskId: widget.parentTaskId,
       subtaskBoardId: widget.subtaskBoardId ?? '',
       subtaskTitle: _titleController.text.trim(),
+      subtaskDescription: _descriptionController.text.trim(),
     );
 
     setState(() => _isLoading = false);

@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../datasources/models/board_stats_model.dart';
 import '../../../datasources/providers/board_stats_provider.dart';
+import '../../../../tasks/datasources/models/task_model.dart';
+import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import 'board_activity_section.dart';
 
 class BoardStatsSection extends StatefulWidget {
@@ -22,10 +25,28 @@ class BoardStatsSection extends StatefulWidget {
 class _BoardStatsSectionState extends State<BoardStatsSection> {
   @override
   Widget build(BuildContext context) {
-    return Consumer<BoardStatsProvider>(
-      builder: (context, statsProvider, _) {
+    return Consumer2<BoardStatsProvider, TaskProvider>(
+      builder: (context, statsProvider, taskProvider, _) {
+        final currentUserId = context.watch<UserProvider>().userId;
+        final canSeeTeamPanel =
+            widget.board.isManager(currentUserId) ||
+            widget.board.isSupervisor(currentUserId);
         final stats =
             statsProvider.getStatsForBoard(widget.boardId) ?? BoardStats();
+        final boardTasks = taskProvider.tasks
+            .where(
+              (task) =>
+                  task.taskBoardId == widget.boardId && !task.taskIsDeleted,
+            )
+            .toList();
+        final successfulTasks = boardTasks
+            .where(
+              (task) => task.effectiveTaskOutcome == Task.outcomeSuccessful,
+            )
+            .length;
+        final failedTasks = boardTasks
+            .where((task) => task.effectiveTaskOutcome == Task.outcomeFailed)
+            .length;
 
         final totalTasks = stats.boardTasksCount;
         final doneTasks = stats.boardTasksDoneCount;
@@ -38,6 +59,25 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
 
         final completionRate = totalTasks > 0 ? doneTasks / totalTasks : 0.0;
         final completionLabel = '${(completionRate * 100).toStringAsFixed(0)}%';
+        final memberPerf = _computeMemberPerformance(boardTasks);
+        final myPerf = memberPerf[currentUserId];
+        final ranking = memberPerf.values.toList()
+          ..sort((a, b) {
+            final scoreCompare = b.productivityScore.compareTo(
+              a.productivityScore,
+            );
+            if (scoreCompare != 0) return scoreCompare;
+            return b.completionRate.compareTo(a.completionRate);
+          });
+        final myRank = myPerf == null
+            ? null
+            : ranking.indexWhere((p) => p.memberId == myPerf.memberId) + 1;
+        final overloadedCount = memberPerf.values
+            .where(
+              (perf) =>
+                  perf.taskLimit > 0 && perf.activeTasks >= perf.taskLimit,
+            )
+            .length;
 
         return SingleChildScrollView(
           child: Column(
@@ -69,6 +109,15 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                       activeTasks: activeTasks,
                     ),
                     const SizedBox(height: 12),
+                    if (myPerf != null) ...[
+                      _buildMyPerformancePanel(
+                        context: context,
+                        perf: myPerf,
+                        rank: myRank,
+                        teamSize: ranking.length,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     Wrap(
                       spacing: 10,
                       runSpacing: 10,
@@ -84,6 +133,18 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                           value: '$doneTasks',
                           icon: Icons.task_alt,
                           color: Colors.green,
+                        ),
+                        _buildMetricTile(
+                          label: 'Successful',
+                          value: '$successfulTasks',
+                          icon: Icons.workspace_premium_outlined,
+                          color: Colors.teal,
+                        ),
+                        _buildMetricTile(
+                          label: 'Failed',
+                          value: '$failedTasks',
+                          icon: Icons.cancel_outlined,
+                          color: Colors.redAccent,
                         ),
                         _buildMetricTile(
                           label: 'Deleted',
@@ -115,8 +176,27 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                           icon: Icons.forum_outlined,
                           color: Colors.purple,
                         ),
+                        _buildMetricTile(
+                          label: 'Overloaded',
+                          value: '$overloadedCount',
+                          icon: Icons.balance_outlined,
+                          color: Colors.deepOrange,
+                        ),
                       ],
                     ),
+                    const SizedBox(height: 14),
+                    if (canSeeTeamPanel) ...[
+                      _buildTeamRankingPanel(
+                        context: context,
+                        ranking: ranking,
+                      ),
+                    ] else if (myPerf != null) ...[
+                      _buildMemberRankHint(
+                        context: context,
+                        rank: myRank ?? 0,
+                        teamSize: ranking.length,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -131,6 +211,256 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
           ),
         );
       },
+    );
+  }
+
+  Map<String, _MemberPerformance> _computeMemberPerformance(List<Task> tasks) {
+    final memberIds = <String>{
+      ...widget.board.memberIds,
+      widget.board.boardManagerId,
+    };
+    final byMember = <String, _MemberPerformance>{};
+
+    for (final memberId in memberIds) {
+      final assigned = tasks
+          .where(
+            (task) => task.taskAssignedTo == memberId && !task.taskIsDeleted,
+          )
+          .toList();
+      final completed = assigned.where((task) => task.taskIsDone).length;
+      final active = assigned.where((task) => !task.taskIsDone).length;
+      final successful = assigned
+          .where((task) => task.effectiveTaskOutcome == Task.outcomeSuccessful)
+          .length;
+      final failed = assigned
+          .where((task) => task.effectiveTaskOutcome == Task.outcomeFailed)
+          .length;
+      final onTimeDone = assigned.where((task) {
+        if (!task.taskIsDone) return false;
+        if (task.taskDeadline == null || task.taskIsDoneAt == null) return true;
+        return !task.taskIsDoneAt!.isAfter(task.taskDeadline!);
+      }).length;
+      final completionRate = assigned.isEmpty
+          ? 0.0
+          : completed / assigned.length;
+      final onTimeRate = completed == 0 ? 0.0 : onTimeDone / completed;
+      final score =
+          (successful * 3) +
+          (completed * 2) +
+          onTimeDone -
+          (failed * 2) -
+          active;
+      final displayName = _resolveMemberDisplayName(memberId, tasks);
+
+      byMember[memberId] = _MemberPerformance(
+        memberId: memberId,
+        displayName: displayName,
+        assignedTasks: assigned.length,
+        activeTasks: active,
+        completedTasks: completed,
+        successfulTasks: successful,
+        failedTasks: failed,
+        onTimeDoneTasks: onTimeDone,
+        completionRate: completionRate,
+        onTimeRate: onTimeRate,
+        productivityScore: score,
+        taskLimit: widget.board.taskLimitForUser(memberId),
+      );
+    }
+
+    return byMember;
+  }
+
+  String _resolveMemberDisplayName(String memberId, List<Task> tasks) {
+    if (memberId == widget.board.boardManagerId) {
+      return '${widget.board.boardManagerName} (Manager)';
+    }
+    for (final task in tasks) {
+      if (task.taskAssignedTo == memberId &&
+          task.taskAssignedToName.trim().isNotEmpty) {
+        return task.taskAssignedToName;
+      }
+    }
+    final shortId = memberId.length >= 6 ? memberId.substring(0, 6) : memberId;
+    return 'Member $shortId';
+  }
+
+  Widget _buildMyPerformancePanel({
+    required BuildContext context,
+    required _MemberPerformance perf,
+    required int? rank,
+    required int teamSize,
+  }) {
+    final overload = perf.taskLimit > 0 && perf.activeTasks >= perf.taskLimit;
+    final loadLabel = perf.taskLimit > 0
+        ? '${perf.activeTasks}/${perf.taskLimit} active'
+        : '${perf.activeTasks} active';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.green.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.green.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.insights_outlined, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'My Performance',
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const Spacer(),
+              if (rank != null)
+                Text(
+                  'Rank #$rank/$teamSize',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildMiniChip('Assigned', '${perf.assignedTasks}'),
+              _buildMiniChip('Completed', '${perf.completedTasks}'),
+              _buildMiniChip(
+                'On-time',
+                '${(perf.onTimeRate * 100).toStringAsFixed(0)}%',
+              ),
+              _buildMiniChip('Successful', '${perf.successfulTasks}'),
+              _buildMiniChip(
+                overload ? 'Load (High)' : 'Load',
+                loadLabel,
+                color: overload ? Colors.orange : Colors.green,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniChip(String label, String value, {Color? color}) {
+    final chipColor = color ?? Colors.blueGrey;
+    final textColor = chipColor is MaterialColor
+        ? chipColor.shade700
+        : chipColor;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: chipColor.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$label: $value',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: textColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTeamRankingPanel({
+    required BuildContext context,
+    required List<_MemberPerformance> ranking,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Member Productivity',
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 8),
+        ...ranking.take(8).toList().asMap().entries.map((entry) {
+          final rank = entry.key + 1;
+          final perf = entry.value;
+          final overload =
+              perf.taskLimit > 0 && perf.activeTasks >= perf.taskLimit;
+          final load = perf.taskLimit > 0
+              ? '${perf.activeTasks}/${perf.taskLimit}'
+              : '${perf.activeTasks}';
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 24,
+                  child: Text(
+                    '#$rank',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    perf.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  'Score ${perf.productivityScore}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[700]),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Load $load',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: overload ? Colors.orange.shade700 : Colors.grey[700],
+                    fontWeight: overload ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildMemberRankHint({
+    required BuildContext context,
+    required int rank,
+    required int teamSize,
+  }) {
+    if (rank <= 0 || teamSize <= 0) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.blueGrey.shade50,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        'Current team rank: #$rank of $teamSize',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.blueGrey.shade700,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
@@ -262,4 +592,34 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
       ),
     );
   }
+}
+
+class _MemberPerformance {
+  final String memberId;
+  final String displayName;
+  final int assignedTasks;
+  final int activeTasks;
+  final int completedTasks;
+  final int successfulTasks;
+  final int failedTasks;
+  final int onTimeDoneTasks;
+  final double completionRate;
+  final double onTimeRate;
+  final int productivityScore;
+  final int taskLimit;
+
+  const _MemberPerformance({
+    required this.memberId,
+    required this.displayName,
+    required this.assignedTasks,
+    required this.activeTasks,
+    required this.completedTasks,
+    required this.successfulTasks,
+    required this.failedTasks,
+    required this.onTimeDoneTasks,
+    required this.completionRate,
+    required this.onTimeRate,
+    required this.productivityScore,
+    required this.taskLimit,
+  });
 }

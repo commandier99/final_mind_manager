@@ -7,6 +7,8 @@ class UserDailyActivityProvider extends ChangeNotifier {
 
   UserDailyActivityModel? _today;
   UserDailyActivityModel? get today => _today;
+  List<UserDailyActivityModel> _recentDays = [];
+  List<UserDailyActivityModel> get recentDays => _recentDays;
 
   Future<void> loadToday(String userId) async {
     await _service.ensureToday(userId);
@@ -19,8 +21,14 @@ class UserDailyActivityProvider extends ChangeNotifier {
     await loadToday(userId);
   }
 
+  Future<void> loadRecentDays(String userId, {int days = 14}) async {
+    _recentDays = await _service.getRecentDays(userId, days: days);
+    notifyListeners();
+  }
+
   void clear() {
     _today = null;
+    _recentDays = [];
     notifyListeners();
   }
 }

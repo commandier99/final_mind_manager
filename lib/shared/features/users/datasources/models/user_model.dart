@@ -119,7 +119,7 @@ class UserModel {
 
       userIsVerified: map['userIsVerified'] ?? false,
       userIsPublic: map['userIsPublic'] ?? false,
-      userAllowSearch: map['userAllowSearch'] ?? true,
+      userAllowSearch: map['userAllowSearch'] ?? false,
       userIsActive: map['userIsActive'] ?? true,
       userIsBanned: map['userIsBanned'] ?? false,
 

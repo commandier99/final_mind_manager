@@ -60,12 +60,19 @@ class TasksCompletedSection extends StatelessWidget {
                   onToggleDone: (isDone) {
                     final taskProvider =
                         Provider.of<TaskProvider>(context, listen: false);
-                    taskProvider.toggleTaskDone(
-                      task.copyWith(
-                        taskIsDone: isDone ?? false,
-                        taskStatus: (isDone ?? false) ? 'COMPLETED' : 'To Do',
-                      ),
-                    );
+                    taskProvider
+                        .toggleTaskDone(
+                          task.copyWith(
+                            taskIsDone: isDone ?? false,
+                            taskStatus:
+                                (isDone ?? false) ? 'Completed' : 'To Do',
+                          ),
+                        )
+                        .catchError((error) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('$error')),
+                          );
+                        });
                   },
                 );
               }),

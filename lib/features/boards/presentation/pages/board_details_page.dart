@@ -9,6 +9,7 @@ import 'package:provider/provider.dart';
 import '../widgets/sections/board_details_section.dart';
 import '../widgets/sections/board_tasks_section.dart';
 import '../widgets/sections/board_stats_section.dart';
+import '../widgets/sections/board_submissions_section.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../datasources/providers/board_stats_provider.dart';
 import '../widgets/dialogs/edit_board_dialog.dart';
@@ -24,13 +25,14 @@ class BoardDetailsPage extends StatefulWidget {
 }
 
 class _BoardDetailsPageState extends State<BoardDetailsPage> {
-  static const String _tabWorkshop = 'workshop';
-  static const String _tabBillboard = 'billboard';
+  static const String _tabDrafts = 'drafts';
+  static const String _tabPublished = 'published';
   static const String _tabStats = 'stats';
+  static const String _tabReview = 'review';
 
   bool _isSearchExpanded = false;
   bool _isDetailsPanelExpanded = true;
-  String _selectedTab = _tabBillboard;
+  String _selectedTab = _tabPublished;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -69,11 +71,22 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
     final currentUserId = context.watch<UserProvider>().userId;
-    final isManager = currentUserId == widget.board.boardManagerId;
-    final showWorkshopTab = isManager && widget.board.boardType == 'team';
+    final isManager = widget.board.isManager(currentUserId);
+    final canDraftTasks = widget.board.canDraftTasks(currentUserId);
+    final canReviewSubmissions = widget.board.canReviewSubmissions(
+      currentUserId,
+    );
+    final showDraftsTab = canDraftTasks && widget.board.boardType == 'team';
+    final showReviewTab =
+        canReviewSubmissions &&
+        widget.board.boardType == 'team' &&
+        widget.board.boardPurpose != 'category';
 
-    if (!showWorkshopTab && _selectedTab == _tabWorkshop) {
-      _selectedTab = _tabBillboard;
+    if (!showDraftsTab && _selectedTab == _tabDrafts) {
+      _selectedTab = _tabPublished;
+    }
+    if (!showReviewTab && _selectedTab == _tabReview) {
+      _selectedTab = _tabPublished;
     }
 
     return Scaffold(
@@ -136,7 +149,7 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
       ),
       drawer: AppSideMenu(
         onSelect: (sideMenuIndex) {
-          navigation.selectFromSideMenu(sideMenuIndex + 4);
+          navigation.selectFromSideMenu(sideMenuIndex);
         },
       ),
       body: RefreshIndicator(
@@ -212,24 +225,35 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                 child: Row(
                   children: [
-                    if (showWorkshopTab)
+                    if (showDraftsTab)
                       Expanded(
                         child: _buildViewTab(
                           label: 'Drafts',
-                          selected: _selectedTab == _tabWorkshop,
+                          selected: _selectedTab == _tabDrafts,
                           onTap: () =>
-                              setState(() => _selectedTab = _tabWorkshop),
+                              setState(() => _selectedTab = _tabDrafts),
                         ),
                       ),
-                    if (showWorkshopTab) const SizedBox(width: 8),
+                    if (showDraftsTab) const SizedBox(width: 8),
                     Expanded(
                       child: _buildViewTab(
-                        label: showWorkshopTab ? 'Published' : 'Tasks',
-                        selected: _selectedTab == _tabBillboard,
+                        label: showDraftsTab ? 'Published' : 'Tasks',
+                        selected: _selectedTab == _tabPublished,
                         onTap: () =>
-                            setState(() => _selectedTab = _tabBillboard),
+                            setState(() => _selectedTab = _tabPublished),
                       ),
                     ),
+                    if (showReviewTab) ...[
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _buildViewTab(
+                          label: 'Review',
+                          selected: _selectedTab == _tabReview,
+                          onTap: () =>
+                              setState(() => _selectedTab = _tabReview),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildViewTab(
@@ -241,16 +265,18 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                   ],
                 ),
               ),
-              if (_selectedTab != _tabStats)
+              if (_selectedTab == _tabStats)
+                BoardStatsSection(
+                  boardId: widget.board.boardId,
+                  board: widget.board,
+                )
+              else if (_selectedTab == _tabReview)
+                BoardSubmissionsSection(boardId: widget.board.boardId)
+              else
                 BoardTasksSection(
                   boardId: widget.board.boardId,
                   board: widget.board,
                   selectedLane: _selectedTab,
-                )
-              else
-                BoardStatsSection(
-                  boardId: widget.board.boardId,
-                  board: widget.board,
                 ),
             ],
           ),

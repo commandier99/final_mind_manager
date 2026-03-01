@@ -24,6 +24,10 @@ class AddTaskToSessionDialog extends StatefulWidget {
 }
 
 class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
+  static const TimeOfDay _defaultDeadlineTime = TimeOfDay(
+    hour: 23,
+    minute: 59,
+  );
   String _priorityLevel = 'Low';
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
@@ -90,6 +94,69 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
     return 'Task ${(maxNumber + 1).toString().padLeft(2, '0')}';
   }
 
+  Color _priorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red.shade700;
+      case 'medium':
+        return Colors.orange.shade700;
+      default:
+        return Colors.green.shade700;
+    }
+  }
+
+  Color _priorityBackgroundColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red.shade50;
+      case 'medium':
+        return Colors.orange.shade50;
+      default:
+        return Colors.green.shade50;
+    }
+  }
+
+  Widget _buildPrioritySelector() {
+    const levels = <String>['Low', 'Medium', 'High'];
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          const Text(
+            'Priority Level:',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          ...levels.map((level) {
+            final isSelected = _priorityLevel == level;
+            final color = _priorityColor(level);
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(
+                  level,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                selected: isSelected,
+                onSelected: (selected) {
+                  if (!selected) return;
+                  setState(() => _priorityLevel = level);
+                },
+                selectedColor: color,
+                backgroundColor: _priorityBackgroundColor(level),
+                side: BorderSide(color: color.withValues(alpha: 0.35)),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Future<void> _submit() async {
     setState(() => _isLoading = true);
 
@@ -128,13 +195,14 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
       }
 
       DateTime? finalDeadline = _deadline;
-      if (finalDeadline != null && _deadlineTime != null) {
+      if (finalDeadline != null) {
+        final effectiveTime = _deadlineTime ?? _defaultDeadlineTime;
         finalDeadline = DateTime(
           finalDeadline.year,
           finalDeadline.month,
           finalDeadline.day,
-          _deadlineTime!.hour,
-          _deadlineTime!.minute,
+          effectiveTime.hour,
+          effectiveTime.minute,
         );
       }
 
@@ -233,23 +301,7 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
                 onChanged: (value) => setState(() {}),
               ),
               const SizedBox(height: 12),
-              Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: DropdownButtonFormField<String>(
-                  initialValue: _priorityLevel,
-                  decoration: const InputDecoration(
-                    labelText: 'Priority Level',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Low', child: Text('Low')),
-                    DropdownMenuItem(value: 'Medium', child: Text('Medium')),
-                    DropdownMenuItem(value: 'High', child: Text('High')),
-                  ],
-                  onChanged: (val) =>
-                      setState(() => _priorityLevel = val ?? 'Low'),
-                ),
-              ),
+              _buildPrioritySelector(),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -262,7 +314,12 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
                           firstDate: DateTime.now(),
                           lastDate: DateTime(2100),
                         );
-                        if (picked != null) setState(() => _deadline = picked);
+                        if (picked != null) {
+                          setState(() {
+                            _deadline = picked;
+                            _deadlineTime ??= _defaultDeadlineTime;
+                          });
+                        }
                       },
                       icon: const Icon(Icons.calendar_today),
                       label: Text(

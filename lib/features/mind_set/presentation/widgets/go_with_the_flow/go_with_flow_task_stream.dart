@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/task_card.dart';
+import '../../../../subtasks/datasources/providers/subtask_provider.dart';
 import '../../../../../shared/modes/mind_set_modes.dart';
 import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
@@ -33,6 +34,8 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   final MindSetSessionRuntimeService _runtimeService =
       MindSetSessionRuntimeService();
   final TaskQueryController _taskQueryController = TaskQueryController();
+  final SubtaskProvider _subtaskProvider = SubtaskProvider();
+  final Map<String, DateTime> _focusStartedAtByTaskId = <String, DateTime>{};
 
   Task? _currentFlowTask;
   Task? _completionPreviewTask;
@@ -104,6 +107,25 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     if (task.taskIsDone) return;
 
     final taskProvider = context.read<TaskProvider>();
+    final dependencyBlocker = await taskProvider.getFirstIncompleteDependency(
+      task,
+    );
+    if (dependencyBlocker != null) {
+      if (!mounted) return;
+      final assigned = dependencyBlocker.taskAssignedToName.trim();
+      final suffix = assigned.isEmpty || assigned == 'Unassigned'
+          ? ''
+          : ' by $assigned';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Blocked by "${dependencyBlocker.taskTitle}"$suffix. Complete it first.',
+          ),
+        ),
+      );
+      return;
+    }
+
     Task? previousFocused;
 
     // Pause any currently focused task
@@ -111,10 +133,16 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
       if (_isInProgressStatus(t.taskStatus)) {
         previousFocused = t;
         await taskProvider.updateTask(t.copyWith(taskStatus: 'Paused'));
+        await _maybeCreateSessionCheckpointSubtask(
+          t,
+          reason: 'Worked in session and switched tasks.',
+          elapsedDuration: _consumeElapsedForTask(t.taskId),
+        );
       }
     }
 
     await taskProvider.updateTask(task.copyWith(taskStatus: 'In Progress'));
+    _focusStartedAtByTaskId[task.taskId] = DateTime.now();
     await _startPomodoroIfNeeded();
 
     if (previousFocused != null) {
@@ -137,7 +165,36 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   Future<void> _pauseTask(Task task) async {
     final taskProvider = context.read<TaskProvider>();
     await taskProvider.updateTask(task.copyWith(taskStatus: 'Paused'));
+    await _maybeCreateSessionCheckpointSubtask(
+      task,
+      reason: 'Worked in session but paused before completion.',
+      elapsedDuration: _consumeElapsedForTask(task.taskId),
+    );
     await _logSessionAction(type: 'pause', task: task);
+  }
+
+  Future<void> _maybeCreateSessionCheckpointSubtask(
+    Task task, {
+    required String reason,
+    required Duration elapsedDuration,
+  }) async {
+    if (task.taskIsDone) return;
+
+    final latestActiveSubtask = await _subtaskProvider
+        .getLatestActiveSubtaskForTask(task.taskId);
+    if (latestActiveSubtask != null) {
+      await _subtaskProvider.toggleSubtaskDoneStatus(latestActiveSubtask);
+      return;
+    }
+
+    final elapsedLabel = _formatElapsedDuration(elapsedDuration);
+    await _subtaskProvider.addSubtask(
+      subtaskTaskId: task.taskId,
+      subtaskBoardId: task.taskBoardId,
+      subtaskTitle: 'Session checkpoint ($elapsedLabel)',
+      subtaskDescription: '$reason Elapsed focus time: $elapsedLabel.',
+      initialDone: true,
+    );
   }
 
   Future<void> _toggleDoneForTask(Task task, bool? isDone) async {
@@ -149,31 +206,65 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
       setState(() {
         _completionPreviewTask = task.copyWith(
           taskIsDone: true,
-          taskStatus: 'COMPLETED',
+          taskStatus: 'Completed',
         );
       });
     }
     final persistToggle = taskProvider.toggleTaskDone(
       task.copyWith(
         taskIsDone: markDone,
-        taskStatus: markDone ? 'COMPLETED' : 'To Do',
+        taskStatus: markDone ? 'Completed' : 'To Do',
       ),
     );
-    if (markDone) {
-      await persistToggle;
-      if (shouldShowShufflePreview) {
-        await Future.delayed(_shuffleCompletionPreviewDuration);
-        if (!mounted) return;
-        setState(() {
-          _completionPreviewTask = null;
-          _currentFlowTask = null;
-        });
+    try {
+      if (markDone) {
+        _focusStartedAtByTaskId.remove(task.taskId);
+        await persistToggle;
+        if (shouldShowShufflePreview) {
+          await Future.delayed(_shuffleCompletionPreviewDuration);
+          if (!mounted) return;
+          setState(() {
+            _completionPreviewTask = null;
+            _currentFlowTask = null;
+          });
+        }
+        await _handlePostCompletion(task);
+        await _logSessionAction(type: 'complete', task: task);
+        return;
       }
-      await _handlePostCompletion(task);
-      await _logSessionAction(type: 'complete', task: task);
-      return;
+      await persistToggle;
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _completionPreviewTask = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message.toString())),
+      );
     }
-    await persistToggle;
+  }
+
+  Duration _consumeElapsedForTask(String taskId) {
+    final startedAt = _focusStartedAtByTaskId.remove(taskId);
+    final fallbackStart =
+        widget.session?.sessionStartedAt ?? widget.session?.sessionCreatedAt;
+    final base = startedAt ?? fallbackStart;
+    if (base == null) return Duration.zero;
+    final elapsed = DateTime.now().difference(base);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  String _formatElapsedDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours}h ${minutes}m';
+    }
+    if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}m ${seconds}s';
+    }
+    return '${seconds}s';
   }
 
   Future<void> _handlePostCompletion(Task completedTask) async {
@@ -789,26 +880,30 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                     frogTask != null &&
                                     frogTask.taskId == task.taskId;
 
-                                return TaskCard(
-                                  task: task,
-                                  showFocusAction:
-                                      !isPomodoroBreak &&
-                                      (canFocus || canPause),
-                                  showFocusInMainRow: true,
-                                  showCheckboxWhenFocusedOnly: true,
-                                  useStatusColor: true,
-                                  isPomodoroMode: modePolicy.isPomodoro,
-                                  showFrogBadge: isFrogTask,
-                                  onFocus: canFocus
-                                      ? () => _focusTask(task)
-                                      : null,
-                                  onPause: canPause
-                                      ? () => _pauseTask(task)
-                                      : null,
-                                  onToggleDone: canToggleDone
-                                      ? (isDone) =>
-                                            _toggleDoneForTask(task, isDone)
-                                      : null,
+                                return Column(
+                                  children: [
+                                    TaskCard(
+                                      task: task,
+                                      showFocusAction:
+                                          !isPomodoroBreak &&
+                                          (canFocus || canPause),
+                                      showFocusInMainRow: true,
+                                      showCheckboxWhenFocusedOnly: true,
+                                      useStatusColor: true,
+                                      isPomodoroMode: modePolicy.isPomodoro,
+                                      showFrogBadge: isFrogTask,
+                                      onFocus: canFocus
+                                          ? () => _focusTask(task)
+                                          : null,
+                                      onPause: canPause
+                                          ? () => _pauseTask(task)
+                                          : null,
+                                      onToggleDone: canToggleDone
+                                          ? (isDone) =>
+                                                _toggleDoneForTask(task, isDone)
+                                          : null,
+                                    ),
+                                  ],
                                 );
                               },
                             ),

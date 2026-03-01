@@ -8,7 +8,6 @@ class AddBoardButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('[DEBUG] AddBoardButton: build called');
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -22,7 +21,7 @@ class AddBoardButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF1565C0).withOpacity(0.4),
+            color: const Color(0xFF1565C0).withValues(alpha: 0.4),
             blurRadius: 12,
             offset: const Offset(0, 6),
           ),

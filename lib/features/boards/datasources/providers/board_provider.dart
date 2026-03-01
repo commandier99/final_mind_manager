@@ -86,6 +86,7 @@ class BoardProvider extends ChangeNotifier {
     String? newGoalDescription,
     BoardStats? newStats,
     Map<String, String>? memberRoles,
+    int? boardTaskCapacity,
   }) async {
     _setLoading(true);
     try {
@@ -96,6 +97,7 @@ class BoardProvider extends ChangeNotifier {
         newGoalDescription: newGoalDescription,
         newStats: newStats,
         memberRoles: memberRoles,
+        boardTaskCapacity: boardTaskCapacity,
       );
       await refreshBoards();
     } finally {

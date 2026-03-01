@@ -11,12 +11,16 @@ class TaskSubtasksList extends StatefulWidget {
   final String parentTaskId;
   final String? boardId;
   final Task? task;
+  final EdgeInsetsGeometry contentPadding;
+  final bool allowCompletionToggle;
 
   const TaskSubtasksList({
     super.key,
     required this.parentTaskId,
     this.boardId,
     this.task,
+    this.contentPadding = const EdgeInsets.all(16.0),
+    this.allowCompletionToggle = false,
   });
 
   @override
@@ -42,22 +46,13 @@ class _TaskSubtasksListState extends State<TaskSubtasksList> {
     final canAddSubtask = _canAddSubtask();
 
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: widget.contentPadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header with title and add icon
           Row(
             children: [
-              Text(
-                'Subtasks',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: Divider(
                   color: Theme.of(context).colorScheme.outlineVariant,
@@ -65,27 +60,32 @@ class _TaskSubtasksListState extends State<TaskSubtasksList> {
               ),
               const SizedBox(width: 8),
               if (canAddSubtask)
-                IconButton(
-                  icon: const Icon(Icons.add),
-                  onPressed: () {
+                InkWell(
+                  borderRadius: BorderRadius.circular(6),
+                  onTap: () {
                     print(
                       '[DEBUG] TaskSubtasksList: Add subtask button pressed',
                     );
                     showDialog(
                       context: context,
-                      builder:
-                          (dialogContext) => AddSubtaskDialog(
-                            parentTaskId: widget.parentTaskId,
-                            subtaskBoardId: widget.boardId,
-                            subtaskProvider: subtaskProvider,
-                          ),
+                      builder: (dialogContext) => AddSubtaskDialog(
+                        parentTaskId: widget.parentTaskId,
+                        subtaskBoardId: widget.boardId,
+                        subtaskProvider: subtaskProvider,
+                      ),
                     );
                   },
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey[300]!),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(Icons.add, size: 16, color: Colors.grey[700]),
                   ),
-                  padding: EdgeInsets.zero,
                 ),
             ],
           ),
@@ -122,20 +122,47 @@ class _TaskSubtasksListState extends State<TaskSubtasksList> {
                 itemCount: subtasks.length,
                 itemBuilder: (context, index) {
                   final subtask = subtasks[index];
-                  return SubtaskCard(
-                    subtask: subtask,
-                    onToggleDone: (value) {
-                      print(
-                        '[DEBUG] TaskSubtasksList: Toggling subtask ${subtask.subtaskId}',
-                      );
-                      subtaskProvider.toggleSubtaskDoneStatus(subtask);
-                    },
-                    onDelete: () {
-                      print(
-                        '[DEBUG] TaskSubtasksList: Deleting subtask ${subtask.subtaskId}',
-                      );
-                      subtaskProvider.softDeleteSubtask(subtask);
-                    },
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          child: Text(
+                            '${index + 1}.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: SubtaskCard(
+                            subtask: subtask,
+                            onToggleDone: widget.allowCompletionToggle
+                                ? (value) {
+                                    print(
+                                      '[DEBUG] TaskSubtasksList: Toggling subtask ${subtask.subtaskId}',
+                                    );
+                                    subtaskProvider.toggleSubtaskDoneStatus(
+                                      subtask,
+                                    );
+                                  }
+                                : null,
+                            onDelete: () {
+                              print(
+                                '[DEBUG] TaskSubtasksList: Deleting subtask ${subtask.subtaskId}',
+                              );
+                              subtaskProvider.softDeleteSubtask(subtask);
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
                   );
                 },
               );
@@ -153,8 +180,8 @@ class _TaskSubtasksListState extends State<TaskSubtasksList> {
     final userProvider = context.read<UserProvider>();
     final currentUserId = userProvider.userId ?? '';
 
-    // Task owner can add subtasks
-    if (widget.task!.taskOwnerId == currentUserId) return true;
+    // Task assignee can add subtasks.
+    if (widget.task!.taskAssignedTo == currentUserId) return true;
 
     // If it's a board task, check if user is board manager
     if (widget.task!.taskBoardId.isNotEmpty) {
@@ -169,7 +196,7 @@ class _TaskSubtasksListState extends State<TaskSubtasksList> {
       return false;
     }
 
-    // For personal tasks, owner can add
-    return widget.task!.taskOwnerId == currentUserId;
+    // For personal tasks, fall back to assignee.
+    return widget.task!.taskAssignedTo == currentUserId;
   }
 }

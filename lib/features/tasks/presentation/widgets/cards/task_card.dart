@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/services/task_appeal_service.dart';
 import '../../pages/task_details_page.dart';
-import '../../pages/task_applications_page.dart';
 import '../dialogs/edit_task_dialog.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 
@@ -452,36 +451,12 @@ class _TaskCardState extends State<TaskCard> {
               : null,
           child: GestureDetector(
             onTap: () {
-              if (widget.task.taskAssignedTo.isEmpty) {
-                final boardProvider = context.read<BoardProvider>();
-                final board = boardProvider.getBoardById(
-                  widget.task.taskBoardId,
-                );
-
-                if (board?.boardManagerId == _currentUserId) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          TaskApplicationsPage(task: widget.task),
-                    ),
-                  );
-                } else {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TaskDetailsPage(task: widget.task),
-                    ),
-                  );
-                }
-              } else {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => TaskDetailsPage(task: widget.task),
-                  ),
-                );
-              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => TaskDetailsPage(task: widget.task),
+                ),
+              );
             },
             child: Card(
               elevation: isFocused ? 3 : 2,
@@ -684,12 +659,56 @@ class _TaskCardState extends State<TaskCard> {
                                   const SizedBox(height: 3),
                                   // Compact badges row
                                   if (widget.task.taskRequiresApproval ||
-                                      widget.task.taskAcceptanceStatus != null)
+                                      widget.task.taskAcceptanceStatus != null ||
+                                      widget.task.taskDependencyIds.isNotEmpty)
                                     SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
+                                          if (widget
+                                              .task
+                                              .taskDependencyIds
+                                              .isNotEmpty)
+                                            Tooltip(
+                                              message:
+                                                  '${widget.task.taskDependencyIds.length} prerequisite(s)',
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 5,
+                                                      vertical: 1,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.blueGrey[100],
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.link,
+                                                      size: 10,
+                                                      color:
+                                                          Colors.blueGrey[800],
+                                                    ),
+                                                    const SizedBox(width: 2),
+                                                    Text(
+                                                      '${widget.task.taskDependencyIds.length}',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: Colors
+                                                            .blueGrey[800],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
                                           if (widget.task.taskRequiresApproval)
                                             Tooltip(
                                               message: 'Requires approval',

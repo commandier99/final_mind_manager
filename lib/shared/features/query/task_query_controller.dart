@@ -6,10 +6,10 @@ class TaskQueryController {
 
   static const String allFilter = 'All';
   static const List<String> taskStatuses = [
-    'To Do',
-    'In Progress',
-    'Paused',
-    'COMPLETED',
+    Task.statusToDo,
+    Task.statusInProgress,
+    Task.statusPaused,
+    Task.statusCompleted,
   ];
   static const List<String> deadlineFilters = [
     'Overdue',
@@ -24,10 +24,10 @@ class TaskQueryController {
   ];
 
   static const Map<String, String> statusLabels = {
-    'To Do': 'To Do',
-    'In Progress': 'In Progress',
-    'Paused': 'Paused',
-    'COMPLETED': 'Completed',
+    Task.statusToDo: Task.statusToDo,
+    Task.statusInProgress: Task.statusInProgress,
+    Task.statusPaused: Task.statusPaused,
+    Task.statusCompleted: Task.statusCompleted,
   };
 
   static const Map<String, String> deadlineLabels = {

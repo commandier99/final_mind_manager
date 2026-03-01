@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/task_card.dart';
+import '../../../../subtasks/datasources/providers/subtask_provider.dart';
 import '../../../../../shared/modes/mind_set_modes.dart';
 import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
@@ -31,6 +32,8 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
   final MindSetSessionRuntimeService _runtimeService =
       MindSetSessionRuntimeService();
   final TaskQueryController _taskQueryController = TaskQueryController();
+  final SubtaskProvider _subtaskProvider = SubtaskProvider();
+  final Map<String, DateTime> _focusStartedAtByTaskId = <String, DateTime>{};
   String _sortBy = 'created_desc'; // format: 'field_direction'
   late Set<String> _selectedFilters;
 
@@ -79,6 +82,14 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     final isPomodoro = MindSetModePolicy.fromMode(widget.mode).isPomodoro;
 
     final taskProvider = context.read<TaskProvider>();
+    final dependencyBlocker = await taskProvider.getFirstIncompleteDependency(
+      task,
+    );
+    if (dependencyBlocker != null) {
+      _showBlockedByDependencyMessage(dependencyBlocker);
+      return;
+    }
+
     final orderedPlanTasks = _sortTasksByPlanOrder(
       taskProvider.tasks,
       widget.taskIds,
@@ -129,10 +140,16 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
       }
 
       await taskProvider.updateTask(activeTask.copyWith(taskStatus: 'Paused'));
+      await _maybeCreateSessionCheckpointSubtask(
+        activeTask,
+        reason: 'Worked in session and switched tasks.',
+        elapsedDuration: _consumeElapsedForTask(activeTask.taskId),
+      );
       await _logSessionAction(type: 'switch', task: task, fromTask: activeTask);
     }
 
     await taskProvider.updateTask(task.copyWith(taskStatus: 'In Progress'));
+    _focusStartedAtByTaskId[task.taskId] = DateTime.now();
     await _startPomodoroIfNeeded();
     if (focusedTask == null) {
       await _logSessionAction(type: 'focus', task: task);
@@ -149,7 +166,36 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     if (!_isInProgressStatus(task.taskStatus)) return;
     final taskProvider = context.read<TaskProvider>();
     await taskProvider.updateTask(task.copyWith(taskStatus: 'Paused'));
+    await _maybeCreateSessionCheckpointSubtask(
+      task,
+      reason: 'Worked in session but paused before completion.',
+      elapsedDuration: _consumeElapsedForTask(task.taskId),
+    );
     await _logSessionAction(type: 'pause', task: task);
+  }
+
+  Future<void> _maybeCreateSessionCheckpointSubtask(
+    Task task, {
+    required String reason,
+    required Duration elapsedDuration,
+  }) async {
+    if (task.taskIsDone) return;
+
+    final latestActiveSubtask = await _subtaskProvider
+        .getLatestActiveSubtaskForTask(task.taskId);
+    if (latestActiveSubtask != null) {
+      await _subtaskProvider.toggleSubtaskDoneStatus(latestActiveSubtask);
+      return;
+    }
+
+    final elapsedLabel = _formatElapsedDuration(elapsedDuration);
+    await _subtaskProvider.addSubtask(
+      subtaskTaskId: task.taskId,
+      subtaskBoardId: task.taskBoardId,
+      subtaskTitle: 'Session checkpoint ($elapsedLabel)',
+      subtaskDescription: '$reason Elapsed focus time: $elapsedLabel.',
+      initialDone: true,
+    );
   }
 
   Future<void> _toggleDoneForTask(Task task, bool? isDone) async {
@@ -158,14 +204,46 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     final persistToggle = taskProvider.toggleTaskDone(
       task.copyWith(
         taskIsDone: markDone,
-        taskStatus: markDone ? 'COMPLETED' : 'To Do',
+        taskStatus: markDone ? 'Completed' : 'To Do',
       ),
     );
-    if (markDone) {
-      await _handlePostCompletion(task);
-      await _logSessionAction(type: 'complete', task: task);
+
+    try {
+      if (markDone) {
+        _focusStartedAtByTaskId.remove(task.taskId);
+        await _handlePostCompletion(task);
+        await _logSessionAction(type: 'complete', task: task);
+      }
+      await persistToggle;
+    } on StateError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message.toString())),
+      );
     }
-    await persistToggle;
+  }
+
+  Duration _consumeElapsedForTask(String taskId) {
+    final startedAt = _focusStartedAtByTaskId.remove(taskId);
+    final fallbackStart =
+        widget.session?.sessionStartedAt ?? widget.session?.sessionCreatedAt;
+    final base = startedAt ?? fallbackStart;
+    if (base == null) return Duration.zero;
+    final elapsed = DateTime.now().difference(base);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  String _formatElapsedDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours}h ${minutes}m';
+    }
+    if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}m ${seconds}s';
+    }
+    return '${seconds}s';
   }
 
   Future<void> _handlePostCompletion(Task completedTask) async {
@@ -291,6 +369,21 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
       SnackBar(
         content: Text(
           'Complete "${blocker.taskTitle}" first to unlock this task.',
+        ),
+      ),
+    );
+  }
+
+  void _showBlockedByDependencyMessage(Task blocker) {
+    if (!mounted) return;
+    final assigned = blocker.taskAssignedToName.trim();
+    final suffix = assigned.isEmpty || assigned == 'Unassigned'
+        ? ''
+        : ' by $assigned';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Blocked by "${blocker.taskTitle}"$suffix. Complete it first.',
         ),
       ),
     );
@@ -581,28 +674,32 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                         final isFrogTask =
                             frogTask != null && frogTask.taskId == task.taskId;
 
-                        return TaskCard(
-                          task: task,
-                          showFocusAction:
-                              !isPomodoroBreak &&
-                              (canFocusByMode ||
-                                  canPause ||
-                                  isBlockedBySequence),
-                          showFocusInMainRow: true,
-                          showCheckboxWhenFocusedOnly: true,
-                          useStatusColor: true,
-                          isPomodoroMode: modePolicy.isPomodoro,
-                          showFrogBadge: isFrogTask,
-                          isDimmed: isBlockedBySequence,
-                          onFocus: isBlockedBySequence
-                              ? () => _showBlockedBySequenceMessage(blocker)
-                              : canFocus
-                              ? () => _focusTask(task)
-                              : null,
-                          onPause: canPause ? () => _pauseTask(task) : null,
-                          onToggleDone: canToggleDone
-                              ? (isDone) => _toggleDoneForTask(task, isDone)
-                              : null,
+                        return Column(
+                          children: [
+                            TaskCard(
+                              task: task,
+                              showFocusAction:
+                                  !isPomodoroBreak &&
+                                  (canFocusByMode ||
+                                      canPause ||
+                                      isBlockedBySequence),
+                              showFocusInMainRow: true,
+                              showCheckboxWhenFocusedOnly: true,
+                              useStatusColor: true,
+                              isPomodoroMode: modePolicy.isPomodoro,
+                              showFrogBadge: isFrogTask,
+                              isDimmed: isBlockedBySequence,
+                              onFocus: isBlockedBySequence
+                                  ? () => _showBlockedBySequenceMessage(blocker)
+                                  : canFocus
+                                  ? () => _focusTask(task)
+                                  : null,
+                              onPause: canPause ? () => _pauseTask(task) : null,
+                              onToggleDone: canToggleDone
+                                  ? (isDone) => _toggleDoneForTask(task, isDone)
+                                  : null,
+                            ),
+                          ],
                         );
                       },
                     ),

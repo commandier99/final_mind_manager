@@ -52,7 +52,9 @@ class AppSideMenu extends StatelessWidget {
                 Text(
                   user?.userEmail ?? 'user@example.com',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onPrimary.withValues(alpha: 0.8),
                     fontSize: 14,
                   ),
                 ),
@@ -75,6 +77,24 @@ class AppSideMenu extends StatelessWidget {
               Navigator.pop(context);
               onSelect?.call(6);
               context.read<NavigationProvider>().selectFromSideMenu(6);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.psychology_outlined),
+            title: const Text('Mind:Set'),
+            onTap: () {
+              Navigator.pop(context);
+              onSelect?.call(10);
+              context.read<NavigationProvider>().selectFromSideMenu(10);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.ads_click),
+            title: const Text('Poke'),
+            onTap: () {
+              Navigator.pop(context);
+              onSelect?.call(11);
+              context.read<NavigationProvider>().selectFromSideMenu(11);
             },
           ),
           const Divider(),

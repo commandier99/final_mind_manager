@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'board_roles.dart';
 
 class BoardRequest {
   final String boardRequestId;
@@ -12,6 +13,8 @@ class BoardRequest {
   final String boardReqStatus; // 'pending', 'approved', 'rejected'
   final String boardReqType; // 'recruitment' or 'application'
   final String? boardReqMessage; // User's message with the request
+  final String
+  boardReqRequestedRole; // 'member' or 'supervisor' for invitations
   final DateTime boardReqCreatedAt;
   final DateTime? boardReqRespondedAt;
   final String? boardReqRespondedBy; // Manager who approved/rejected
@@ -27,18 +30,17 @@ class BoardRequest {
     required this.userName,
     this.userProfilePicture,
     required this.boardReqStatus,
-    this.boardReqType = 'recruitment', // Default to recruitment for backward compatibility
+    this.boardReqType =
+        'recruitment', // Default to recruitment for backward compatibility
     this.boardReqMessage,
+    this.boardReqRequestedRole = BoardRoles.member,
     required this.boardReqCreatedAt,
     this.boardReqRespondedAt,
     this.boardReqRespondedBy,
     this.boardReqResponseMessage,
   });
 
-  factory BoardRequest.fromMap(
-    Map<String, dynamic> data,
-    String documentId,
-  ) {
+  factory BoardRequest.fromMap(Map<String, dynamic> data, String documentId) {
     return BoardRequest(
       boardRequestId: documentId,
       boardId: data['boardId'] ?? '',
@@ -48,14 +50,29 @@ class BoardRequest {
       userId: data['userId'] ?? '',
       userName: data['userName'] ?? 'Unknown',
       userProfilePicture: data['userProfilePicture'] as String?,
-      boardReqStatus: data['boardReqStatus'] ?? data['requestStatus'] ?? 'pending',
-      boardReqType: data['boardReqType'] ?? data['requestType'] ?? 'recruitment', // Handle migration from old field names
-      boardReqMessage: data['boardReqMessage'] ?? data['requestMessage'] as String?,
+      boardReqStatus:
+          data['boardReqStatus'] ?? data['requestStatus'] ?? 'pending',
+      boardReqType:
+          data['boardReqType'] ??
+          data['requestType'] ??
+          'recruitment', // Handle migration from old field names
+      boardReqMessage:
+          data['boardReqMessage'] ?? data['requestMessage'] as String?,
+      boardReqRequestedRole: BoardRoles.normalize(
+        data['boardReqRequestedRole'] as String?,
+      ),
       boardReqCreatedAt:
-          (data['boardReqCreatedAt'] as Timestamp?)?.toDate() ?? (data['requestCreatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      boardReqRespondedAt: (data['boardReqRespondedAt'] as Timestamp?)?.toDate() ?? (data['requestRespondedAt'] as Timestamp?)?.toDate(),
-      boardReqRespondedBy: data['boardReqRespondedBy'] ?? data['requestRespondedBy'] as String?,
-      boardReqResponseMessage: data['boardReqResponseMessage'] ?? data['requestResponseMessage'] as String?,
+          (data['boardReqCreatedAt'] as Timestamp?)?.toDate() ??
+          (data['requestCreatedAt'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
+      boardReqRespondedAt:
+          (data['boardReqRespondedAt'] as Timestamp?)?.toDate() ??
+          (data['requestRespondedAt'] as Timestamp?)?.toDate(),
+      boardReqRespondedBy:
+          data['boardReqRespondedBy'] ?? data['requestRespondedBy'] as String?,
+      boardReqResponseMessage:
+          data['boardReqResponseMessage'] ??
+          data['requestResponseMessage'] as String?,
     );
   }
 
@@ -72,10 +89,12 @@ class BoardRequest {
       'boardReqStatus': boardReqStatus,
       'boardReqType': boardReqType,
       if (boardReqMessage != null) 'boardReqMessage': boardReqMessage,
+      'boardReqRequestedRole': boardReqRequestedRole,
       'boardReqCreatedAt': Timestamp.fromDate(boardReqCreatedAt),
       if (boardReqRespondedAt != null)
         'boardReqRespondedAt': Timestamp.fromDate(boardReqRespondedAt!),
-      if (boardReqRespondedBy != null) 'boardReqRespondedBy': boardReqRespondedBy,
+      if (boardReqRespondedBy != null)
+        'boardReqRespondedBy': boardReqRespondedBy,
       if (boardReqResponseMessage != null)
         'boardReqResponseMessage': boardReqResponseMessage,
     };
@@ -93,6 +112,7 @@ class BoardRequest {
     String? boardReqStatus,
     String? boardReqType,
     String? boardReqMessage,
+    String? boardReqRequestedRole,
     DateTime? boardReqCreatedAt,
     DateTime? boardReqRespondedAt,
     String? boardReqRespondedBy,
@@ -110,6 +130,9 @@ class BoardRequest {
       boardReqStatus: boardReqStatus ?? this.boardReqStatus,
       boardReqType: boardReqType ?? this.boardReqType,
       boardReqMessage: boardReqMessage ?? this.boardReqMessage,
+      boardReqRequestedRole: BoardRoles.normalize(
+        boardReqRequestedRole ?? this.boardReqRequestedRole,
+      ),
       boardReqCreatedAt: boardReqCreatedAt ?? this.boardReqCreatedAt,
       boardReqRespondedAt: boardReqRespondedAt ?? this.boardReqRespondedAt,
       boardReqRespondedBy: boardReqRespondedBy ?? this.boardReqRespondedBy,

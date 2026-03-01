@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../datasources/providers/task_provider.dart'; // Import TaskProvider
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/models/task_stats_model.dart';
+import '../../../datasources/helpers/task_dependency_helper.dart';
 import '../../../../boards/datasources/models/board_model.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
@@ -18,6 +19,7 @@ class AddTaskDialog extends StatefulWidget {
 }
 
 class _AddTaskDialogState extends State<AddTaskDialog> {
+  static const TimeOfDay _defaultDeadlineTime = TimeOfDay(hour: 23, minute: 59);
   // Priority field
   String _priorityLevel = 'Low';
   final _titleController = TextEditingController();
@@ -32,6 +34,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   final List<String> _repeatDays = []; // Track selected days
   DateTime? _repeatEndDate;
   TimeOfDay? _repeatTime;
+  bool _taskAllowsSubmissions = true;
+  bool _taskRequiresSubmission = false;
+  bool _taskRequiresApproval = false;
   String _currentUserName = 'Unknown'; // Store current user's name
   bool _isLoading = false; // Loading state for task creation
   // Assignment fields
@@ -39,8 +44,51 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   String? _assignedToUserName;
   Map<String, String> _boardMembers = {};
   bool _loadingMembers = false;
-  
-  static const List<String> _daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  static const String _lanePublished = Task.lanePublished;
+  static const String _laneDrafts = Task.laneDrafts;
+  final Set<String> _selectedDependencyIds = <String>{};
+
+  static const List<String> _daysOfWeek = [
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
+  ];
+
+  int _activeTasksForMember({
+    required List<Task> boardTasks,
+    required String memberId,
+  }) {
+    return boardTasks
+        .where(
+          (task) =>
+              task.taskAssignedTo == memberId &&
+              !task.taskIsDeleted &&
+              !task.taskIsDone,
+        )
+        .length;
+  }
+
+  int _taskLimitForMember(Board board, String memberId) {
+    return board.taskLimitForUser(memberId);
+  }
+
+  bool _isAtCapacity({
+    required Board board,
+    required String memberId,
+    required List<Task> boardTasks,
+  }) {
+    final limit = _taskLimitForMember(board, memberId);
+    if (limit <= 0) return false;
+    final active = _activeTasksForMember(
+      boardTasks: boardTasks,
+      memberId: memberId,
+    );
+    return active >= limit;
+  }
 
   @override
   void initState() {
@@ -53,22 +101,55 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       // Get boards from BoardProvider
       final boardProvider = context.read<BoardProvider>();
       _boards.clear();
-      _boards.addAll(boardProvider.boards.where((board) => 
-        board.boardManagerId == widget.userId || 
-        board.memberIds.contains(widget.userId)
-      ));
-      
+      _boards.addAll(
+        boardProvider.boards.where(
+          (board) =>
+              board.boardManagerId == widget.userId ||
+              board.memberIds.contains(widget.userId),
+        ),
+      );
+
+      final defaultBoard = _resolveDefaultBoard(_boards);
+      _selectedBoard = defaultBoard;
+      if (_selectedBoard?.boardType == 'team') {
+        await _loadBoardMembers();
+      } else {
+        _boardMembers = {};
+        _assignedToUserId = null;
+        _assignedToUserName = null;
+        _taskAllowsSubmissions = false;
+        _taskRequiresSubmission = false;
+        _taskRequiresApproval = false;
+      }
+
       // Load current user's name
       final userService = UserService();
       final userData = await userService.getUserById(widget.userId);
       if (userData != null && userData.userName.isNotEmpty) {
         _currentUserName = userData.userName;
       }
-      
+
+      if (!mounted) return;
       setState(() {});
     } catch (e) {
-      print('Error loading boards: $e');
+      debugPrint('Error loading boards: $e');
     }
+  }
+
+  Board? _resolveDefaultBoard(List<Board> boards) {
+    if (boards.isEmpty) return null;
+    for (final board in boards) {
+      if (board.boardType.toLowerCase() == 'personal') {
+        return board;
+      }
+    }
+    for (final board in boards) {
+      final title = board.boardTitle.trim().toLowerCase();
+      if (title == 'personal' || title == 'personal hq') {
+        return board;
+      }
+    }
+    return boards.first;
   }
 
   Future<void> _loadBoardMembers() async {
@@ -86,15 +167,21 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
     try {
       final members = <String, String>{};
 
-      // Add the task owner (manager)
-      members[widget.userId] = 'Manager';
+      // Add the task owner (manager) using the real profile name when available.
+      final currentUserData = await UserService().getUserById(widget.userId);
+      if (currentUserData != null && currentUserData.userName.isNotEmpty) {
+        _currentUserName = currentUserData.userName;
+        members[widget.userId] = currentUserData.userName;
+      } else {
+        members[widget.userId] = 'Manager';
+      }
 
       // Add all board members
       for (String memberId in _selectedBoard!.memberIds) {
         if (memberId != widget.userId) {
-          // Skip inspectors - they cannot be assigned tasks
+          // Skip supervisors - they cannot be assigned tasks
           final role = _selectedBoard!.memberRoles[memberId] ?? 'member';
-          if (role == 'inspector') continue;
+          if (role == 'supervisor') continue;
 
           try {
             final userData = await UserService().getUserById(memberId);
@@ -132,7 +219,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   String _getNextUntitledTaskNumber(List<Task> existingTasks) {
     int maxNumber = 0;
     final regex = RegExp(r'^Task (\d+)$');
-    
+
     for (final task in existingTasks) {
       final match = regex.firstMatch(task.taskTitle);
       if (match != null) {
@@ -142,13 +229,22 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         }
       }
     }
-    
+
     return 'Task ${(maxNumber + 1).toString().padLeft(2, '0')}';
   }
 
   Future<void> _submit() async {
+    if (_selectedBoard == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No board found. Your Personal HQ board is required.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
-    
+
     // Show loading modal
     if (mounted) {
       showDialog(
@@ -179,34 +275,68 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
     try {
       final taskProvider = context.read<TaskProvider>();
       final isRepeating = _deadline != null ? _isRepeating : false;
-      
+      final selectedBoard = _selectedBoard!;
+      final boardTasks = taskProvider.tasks
+          .where(
+            (task) =>
+                task.taskBoardId == selectedBoard.boardId &&
+                !task.taskIsDeleted,
+          )
+          .toList();
+
       String taskTitle = _titleController.text.trim();
-      
+
       // If title is empty, generate default "Task XX" title
       if (taskTitle.isEmpty) {
         taskTitle = _getNextUntitledTaskNumber(taskProvider.tasks);
       }
 
       // Determine the assigned to name and ID
-      String assignedToId = _assignedToUserId ?? widget.userId;
-      String assignedToName = _assignedToUserName ?? _currentUserName;
-      
+      final isTeamBoard = selectedBoard.boardType == 'team';
+      String assignedToId = isTeamBoard
+          ? (_assignedToUserId ?? 'None')
+          : widget.userId;
+      String assignedToName = isTeamBoard
+          ? (_assignedToUserName ?? 'Unassigned')
+          : _currentUserName;
+
+      if (isTeamBoard &&
+          assignedToId != widget.userId &&
+          assignedToId != 'None' &&
+          _isAtCapacity(
+            board: selectedBoard,
+            memberId: assignedToId,
+            boardTasks: boardTasks,
+          )) {
+        if (mounted) {
+          Navigator.pop(context); // Close loading modal
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('This member is already at task capacity.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+
       // If assigned to manager, add "(Manager)" suffix
       if (assignedToId == widget.userId) {
-        if (_selectedBoard != null && _selectedBoard!.boardManagerId == widget.userId) {
+        if (selectedBoard.boardManagerId == widget.userId) {
           assignedToName = '$_currentUserName (Manager)';
         }
       }
 
       // Merge deadline date with time
       DateTime? finalDeadline = _deadline;
-      if (finalDeadline != null && _deadlineTime != null) {
+      if (finalDeadline != null) {
+        final effectiveTime = _deadlineTime ?? _defaultDeadlineTime;
         finalDeadline = DateTime(
           finalDeadline.year,
           finalDeadline.month,
           finalDeadline.day,
-          _deadlineTime!.hour,
-          _deadlineTime!.minute,
+          effectiveTime.hour,
+          effectiveTime.minute,
         );
       }
 
@@ -219,8 +349,8 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
       final newTask = Task(
         taskId: const Uuid().v4(),
-        taskBoardId: _selectedBoard?.boardId ?? '',
-        taskBoardTitle: _selectedBoard?.boardTitle,
+        taskBoardId: selectedBoard.boardId,
+        taskBoardTitle: selectedBoard.boardTitle,
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
@@ -239,37 +369,444 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskDeletedAt: null,
         taskStats: TaskStats(), // Always initialize as empty
         taskPriorityLevel: _priorityLevel,
-        taskStatus: 'TODO',
-        taskRequiresApproval: false,
+        taskStatus: Task.statusToDo,
+        taskAllowsSubmissions: _taskAllowsSubmissions,
+        taskRequiresSubmission: _taskAllowsSubmissions
+            ? _taskRequiresSubmission
+            : false,
+        taskRequiresApproval: _taskAllowsSubmissions
+            ? _taskRequiresApproval
+            : false,
         taskIsRepeating: isRepeating,
-        taskRepeatInterval: isRepeating && _repeatDays.isNotEmpty ? _repeatDays.join(',') : null,
+        taskRepeatInterval: isRepeating && _repeatDays.isNotEmpty
+            ? _repeatDays.join(',')
+            : null,
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: isRepeating ? repeatTimeStr : null,
         // Set acceptance status to 'pending' if assigning to someone else
-        taskAcceptanceStatus: (assignedToId.isNotEmpty && 
-                               assignedToId != 'None' && 
-                               assignedToId != widget.userId) 
-            ? 'pending' 
+        taskAcceptanceStatus: isTeamBoard &&
+            (assignedToId.isNotEmpty &&
+                assignedToId != 'None' &&
+                assignedToId != widget.userId)
+            ? 'pending'
             : null,
+        taskBoardLane: selectedBoard.boardType == 'personal'
+            ? _lanePublished
+            : _laneDrafts,
+        taskDependencyIds: TaskDependencyHelper.sanitizeDependencyIds(
+          _selectedDependencyIds,
+        ),
       );
 
-      await taskProvider.addTask(newTask);
+      await taskProvider.addTask(
+        newTask,
+        selectedAssigneeId: _assignedToUserId,
+        selectedAssigneeName: _assignedToUserName,
+      );
 
       if (mounted) {
         Navigator.pop(context); // Close loading modal
         Navigator.pop(context); // Close dialog
       }
     } catch (e) {
-      print('Error creating task: $e');
+      debugPrint('Error creating task: $e');
       if (mounted) {
         Navigator.pop(context); // Close loading modal
         setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error creating task: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error creating task: $e')));
       }
     }
+  }
+
+  List<Task> _dependencyCandidates(TaskProvider taskProvider) {
+    final selectedBoard = _selectedBoard;
+    if (selectedBoard == null) return const <Task>[];
+    final tasks = taskProvider.tasks
+        .where(
+          (task) =>
+              task.taskBoardId == selectedBoard.boardId && !task.taskIsDeleted,
+        )
+        .toList();
+    tasks.sort(
+      (a, b) => a.taskTitle.toLowerCase().compareTo(b.taskTitle.toLowerCase()),
+    );
+    return tasks;
+  }
+
+  Future<void> _showDependenciesPicker() async {
+    final taskProvider = context.read<TaskProvider>();
+    final candidates = _dependencyCandidates(taskProvider);
+
+    await showDialog<void>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Choose tasks that must be done first'),
+            content: SizedBox(
+              width: 520,
+              child: candidates.isEmpty
+                  ? const Text(
+                      'No existing tasks yet. Create one first, then come back.',
+                    )
+                  : ListView.builder(
+                      shrinkWrap: true,
+                      itemCount: candidates.length,
+                      itemBuilder: (context, index) {
+                        final candidate = candidates[index];
+                        final isSelected = _selectedDependencyIds.contains(
+                          candidate.taskId,
+                        );
+                        return CheckboxListTile(
+                          value: isSelected,
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(
+                            candidate.taskTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle:
+                              candidate.taskAssignedToName.isEmpty ||
+                                  candidate.taskAssignedToName == 'Unassigned'
+                              ? null
+                              : Text(
+                                  'Assigned: ${candidate.taskAssignedToName}',
+                                ),
+                          onChanged: (checked) {
+                            setDialogState(() {
+                              if (checked ?? false) {
+                                _selectedDependencyIds.add(candidate.taskId);
+                              } else {
+                                _selectedDependencyIds.remove(candidate.taskId);
+                              }
+                            });
+                            setState(() {});
+                          },
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  setState(() => _selectedDependencyIds.clear());
+                  Navigator.pop(context);
+                },
+                child: const Text('Clear'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Done'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Task? _findDependencyTask(String dependencyId, TaskProvider taskProvider) {
+    return taskProvider.tasks.cast<Task?>().firstWhere(
+      (task) => task?.taskId == dependencyId,
+      orElse: () => null,
+    );
+  }
+
+  String _formatTaskDeadline(DateTime? deadline) {
+    if (deadline == null) return 'No deadline';
+    final month = deadline.month.toString().padLeft(2, '0');
+    final day = deadline.day.toString().padLeft(2, '0');
+    return '$month/$day';
+  }
+
+  Widget _buildRequiredTaskCard(
+    BuildContext context, {
+    required String dependencyId,
+  }) {
+    final taskProvider = context.read<TaskProvider>();
+    final task = _findDependencyTask(dependencyId, taskProvider);
+    final taskTitle = task?.taskTitle ?? 'Task unavailable';
+    final assignedTo = (task?.taskAssignedToName ?? '').trim();
+    final assignedLabel = assignedTo.isEmpty || assignedTo == 'Unassigned'
+        ? 'Unassigned'
+        : assignedTo;
+    final description = (task?.taskDescription ?? '').trim();
+    final descriptionLabel = description.isEmpty ? 'No description' : description;
+    final deadlineLabel = _formatTaskDeadline(task?.taskDeadline);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade300),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  taskTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                iconSize: 18,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'Remove required task',
+                onPressed: () {
+                  setState(() {
+                    _selectedDependencyIds.remove(dependencyId);
+                  });
+                },
+                icon: const Icon(Icons.close),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            descriptionLabel,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade700,
+              height: 1.25,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _buildMetaPill(Icons.person_outline, assignedLabel),
+              _buildMetaPill(Icons.event_outlined, deadlineLabel),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetaPill(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.grey.shade700),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade800,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _priorityColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red.shade700;
+      case 'medium':
+        return Colors.orange.shade700;
+      default:
+        return Colors.green.shade700;
+    }
+  }
+
+  Color _priorityBackgroundColor(String priority) {
+    switch (priority.toLowerCase()) {
+      case 'high':
+        return Colors.red.shade50;
+      case 'medium':
+        return Colors.orange.shade50;
+      default:
+        return Colors.green.shade50;
+    }
+  }
+
+  Widget _buildPrioritySelector() {
+    const levels = <String>['Low', 'Medium', 'High'];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          const Text(
+            'Priority Level:',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 12),
+          ...levels.map((level) {
+            final isSelected = _priorityLevel == level;
+            final color = _priorityColor(level);
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(
+                  level,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : color,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                selected: isSelected,
+                onSelected: (selected) {
+                  if (!selected) return;
+                  setState(() => _priorityLevel = level);
+                },
+                selectedColor: color,
+                backgroundColor: _priorityBackgroundColor(level),
+                side: BorderSide(color: color.withValues(alpha: 0.35)),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDependenciesSection(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+        color: Colors.grey.shade50,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.link, size: 16, color: Colors.grey[700]),
+              const SizedBox(width: 6),
+              Text(
+                'Dependencies (Optional)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Set tasks that must be completed before this one can start.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _showDependenciesPicker,
+            icon: const Icon(Icons.account_tree_outlined),
+            label: Text(
+              _selectedDependencyIds.isEmpty
+                  ? 'Select Required Tasks'
+                  : 'Required Tasks: ${_selectedDependencyIds.length}',
+            ),
+          ),
+          if (_selectedDependencyIds.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ..._selectedDependencyIds.map(
+              (dependencyId) =>
+                  _buildRequiredTaskCard(context, dependencyId: dependencyId),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSubmissionOptionsSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(10),
+        color: Colors.grey.shade50,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.assignment_turned_in, size: 16, color: Colors.grey[700]),
+              const SizedBox(width: 6),
+              Text(
+                'Submission Settings',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey[800],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Control whether members can submit outputs and whether manager/supervisor review is required.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Allow Submissions'),
+            value: _taskAllowsSubmissions,
+            onChanged: (value) {
+              setState(() {
+                _taskAllowsSubmissions = value;
+                if (!value) {
+                  _taskRequiresSubmission = false;
+                  _taskRequiresApproval = false;
+                }
+              });
+            },
+          ),
+          if (_taskAllowsSubmissions) ...[
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Submission Required'),
+              value: _taskRequiresSubmission,
+              onChanged: (value) {
+                setState(() => _taskRequiresSubmission = value);
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Reviewer Approval Required'),
+              value: _taskRequiresApproval,
+              onChanged: (value) {
+                setState(() => _taskRequiresApproval = value);
+              },
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -277,26 +814,35 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
     // Repeating is only allowed when a deadline is set
     final canRepeat = _deadline != null;
     final effectiveRepeat = canRepeat ? _isRepeating : false;
+    final taskProvider = context.watch<TaskProvider>();
+    final selectedBoard = _selectedBoard;
+    final boardTasks = selectedBoard == null
+        ? const <Task>[]
+        : taskProvider.tasks
+              .where(
+                (task) =>
+                    task.taskBoardId == selectedBoard.boardId &&
+                    !task.taskIsDeleted,
+              )
+              .toList();
 
-    return AlertDialog(
-      title: const Text('Add New Task'),
-      content: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 650),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+    final formContent = SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+              const SizedBox(height: 6),
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
-                  labelText: 'Title',
+                  labelText: 'Task Title',
                   border: const OutlineInputBorder(),
                   counterText: '${_titleController.text.length}/50',
                 ),
                 maxLength: 50,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               TextField(
                 controller: _descriptionController,
                 decoration: InputDecoration(
@@ -304,12 +850,15 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   border: const OutlineInputBorder(),
                   counterText: '${_descriptionController.text.length}/500',
                 ),
+                maxLines: 3,
+                maxLength: 500,
+                onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
-                    child: ElevatedButton(
+                    child: OutlinedButton.icon(
                       onPressed: () async {
                         final picked = await showDatePicker(
                           context: context,
@@ -318,18 +867,22 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                           lastDate: DateTime(2100),
                         );
                         if (picked != null) {
-                          setState(() => _deadline = picked);
+                          setState(() {
+                            _deadline = picked;
+                            _deadlineTime ??= _defaultDeadlineTime;
+                          });
                         }
                       },
-                      child: Text(
+                      icon: const Icon(Icons.calendar_today),
+                      label: Text(
                         _deadline == null
-                            ? 'Deadline: None'
+                            ? 'Set Deadline'
                             : 'Deadline: ${_deadline!.toLocal().toString().split(' ')[0]}',
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  ElevatedButton(
+                  OutlinedButton.icon(
                     onPressed: _deadline == null
                         ? null
                         : () async {
@@ -341,7 +894,8 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                               setState(() => _deadlineTime = picked);
                             }
                           },
-                    child: Text(
+                    icon: const Icon(Icons.access_time),
+                    label: Text(
                       _deadlineTime == null
                           ? 'Time'
                           : _deadlineTime!.format(context),
@@ -349,69 +903,62 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                initialValue: _priorityLevel,
-                items: const [
-                  DropdownMenuItem(value: 'Low', child: Text('Low')),
-                  DropdownMenuItem(value: 'Medium', child: Text('Medium')),
-                  DropdownMenuItem(value: 'High', child: Text('High')),
-                ],
-                onChanged:
-                    (val) => setState(() => _priorityLevel = val ?? 'Low'),
-                decoration: const InputDecoration(labelText: 'Priority Level'),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+              _buildPrioritySelector(),
+              const SizedBox(height: 12),
               DropdownButtonFormField<Board>(
                 initialValue: _selectedBoard,
-                items:
-                    _boards.isEmpty
-                        ? [
-                          const DropdownMenuItem<Board>(
-                            value: null,
-                            child: Text("No boards available"),
-                          ),
-                        ]
-                        : [
-                          const DropdownMenuItem<Board>(
-                            value: null,
-                            child: Text("No board (Personal)"),
-                          ),
-                          ..._boards
-                              .map(
-                                (board) => DropdownMenuItem<Board>(
-                                  value: board,
-                                  child: Text(
-                                    board.boardTitle,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              )
-                              ,
-                        ],
-                onChanged:
-                    _boards.isEmpty
-                        ? null
-                        : (board) {
-                          setState(() => _selectedBoard = board);
-                          if (board != null) {
-                            _loadBoardMembers();
-                          } else {
-                            setState(() {
-                              _boardMembers = {};
-                              _assignedToUserId = null;
-                              _assignedToUserName = null;
-                            });
-                          }
-                        },
+                items: _boards
+                    .map(
+                      (board) => DropdownMenuItem<Board>(
+                        value: board,
+                        child: Text(
+                          board.boardTitle,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: _boards.isEmpty
+                    ? null
+                    : (board) async {
+                        if (board == null) return;
+                        setState(() {
+                          _selectedBoard = board;
+                          _selectedDependencyIds.clear();
+                        });
+                        if (board.boardType == 'team') {
+                          setState(() {
+                            _taskAllowsSubmissions = true;
+                          });
+                          await _loadBoardMembers();
+                          return;
+                        }
+                        setState(() {
+                          _boardMembers = {};
+                          _assignedToUserId = null;
+                          _assignedToUserName = null;
+                          _taskAllowsSubmissions = false;
+                          _taskRequiresSubmission = false;
+                          _taskRequiresApproval = false;
+                        });
+                      },
                 decoration: const InputDecoration(
                   labelText: 'Select Board',
-                  hintText: 'Optional',
+                  hintText: 'Required',
                 ),
               ),
-              const SizedBox(height: 8),
-              // Assignment dropdown
-              if (_selectedBoard != null) ...[
+              if (_boards.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Text(
+                    'No available boards found.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              // Assignment dropdown (Team boards only)
+              if (_selectedBoard?.boardType == 'team') ...[
                 if (_loadingMembers)
                   const Center(child: CircularProgressIndicator())
                 else if (_boardMembers.isNotEmpty)
@@ -430,63 +977,91 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                       ),
                       // All board members
                       ..._boardMembers.entries.map((entry) {
+                        final selectedBoard = _selectedBoard;
+                        final active = _activeTasksForMember(
+                          boardTasks: boardTasks,
+                          memberId: entry.key,
+                        );
+                        final limit = selectedBoard == null
+                            ? 0
+                            : _taskLimitForMember(selectedBoard, entry.key);
+                        final atCapacity =
+                            selectedBoard != null &&
+                            entry.key != widget.userId &&
+                            _isAtCapacity(
+                              board: selectedBoard,
+                              memberId: entry.key,
+                              boardTasks: boardTasks,
+                            );
+                        final loadSuffix = limit > 0
+                            ? ' ($active/$limit active)'
+                            : ' ($active active)';
                         return DropdownMenuItem<String?>(
                           value: entry.key,
-                          child: Text(entry.value),
+                          enabled: !atCapacity,
+                          child: Text(
+                            '${entry.value}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
+                          ),
                         );
-                      }).toList(),
+                      }),
                     ],
                     onChanged: (val) {
                       setState(() {
                         _assignedToUserId = val;
-                        _assignedToUserName = val != null ? _boardMembers[val] : null;
+                        _assignedToUserName = val != null
+                            ? _boardMembers[val]
+                            : null;
                       });
                     },
                   ),
                 const SizedBox(height: 8),
               ],
+              const SizedBox(height: 12),
+              _buildSubmissionOptionsSection(),
+              const SizedBox(height: 12),
+              _buildDependenciesSection(context),
               if (canRepeat) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Text('Repeating Task'),
-                    const Spacer(),
-                    Switch(
-                      value: effectiveRepeat,
-                      onChanged: (val) => setState(() => _isRepeating = val),
-                    ),
-                  ],
+                SwitchListTile(
+                  title: const Text('Repeating Task'),
+                  value: effectiveRepeat,
+                  onChanged: (val) => setState(() => _isRepeating = val),
+                  contentPadding: EdgeInsets.zero,
                 ),
                 if (effectiveRepeat) ...[
-                  const SizedBox(height: 8),
-                  const Text('Repeat on days:',
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Repeat on days:',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 8),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: _daysOfWeek
-                          .map((day) => Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: FilterChip(
-                                  label: Text(day.substring(0, 3)),
-                                  selected: _repeatDays.contains(day),
-                                  onSelected: (selected) {
-                                    setState(() {
-                                      if (selected) {
-                                        _repeatDays.add(day);
-                                        // Sort days by week order
-                                        _repeatDays.sort((a, b) =>
+                          .map(
+                            (day) => Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: FilterChip(
+                                label: Text(day.substring(0, 3)),
+                                selected: _repeatDays.contains(day),
+                                onSelected: (selected) {
+                                  setState(() {
+                                    if (selected) {
+                                      _repeatDays.add(day);
+                                      // Sort days by week order
+                                      _repeatDays.sort(
+                                        (a, b) =>
                                             _daysOfWeek.indexOf(a) -
-                                            _daysOfWeek.indexOf(b));
-                                      } else {
-                                        _repeatDays.remove(day);
-                                      }
-                                    });
-                                  },
-                                ),
-                              ))
+                                            _daysOfWeek.indexOf(b),
+                                      );
+                                    } else {
+                                      _repeatDays.remove(day);
+                                    }
+                                  });
+                                },
+                              ),
+                            ),
+                          )
                           .toList(),
                     ),
                   ),
@@ -494,7 +1069,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   Row(
                     children: [
                       Expanded(
-                        child: ElevatedButton(
+                        child: OutlinedButton.icon(
                           onPressed: () async {
                             final picked = await showDatePicker(
                               context: context,
@@ -506,15 +1081,16 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                               setState(() => _repeatEndDate = picked);
                             }
                           },
-                          child: Text(
+                          icon: const Icon(Icons.event),
+                          label: Text(
                             _repeatEndDate == null
-                                ? 'Pick Repeat End Date'
-                                : 'Repeat End: ${_repeatEndDate!.toLocal().toString().split(' ')[0]}',
+                                ? 'Set Repeat End Date'
+                                : 'Ends: ${_repeatEndDate!.toLocal().toString().split(' ')[0]}',
                           ),
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton(
+                      OutlinedButton.icon(
                         onPressed: () async {
                           final picked = await showTimePicker(
                             context: context,
@@ -524,7 +1100,8 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                             setState(() => _repeatTime = picked);
                           }
                         },
-                        child: Text(
+                        icon: const Icon(Icons.schedule),
+                        label: Text(
                           _repeatTime == null
                               ? 'Time'
                               : _repeatTime!.format(context),
@@ -534,17 +1111,76 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   ),
                 ],
               ],
+        ],
+      ),
+    );
+
+    return SafeArea(
+      child: Material(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        child: SizedBox(
+          height: MediaQuery.of(context).size.height * 0.92,
+          child: Column(
+            children: [
+              const SizedBox(height: 8),
+              Container(
+                width: 44,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey[400],
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+                child: Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Add Task',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: formContent,
+                ),
+              ),
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: _isLoading ? null : _submit,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Add Task'),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(onPressed: _submit, child: const Text('Add')),
-      ],
     );
   }
 }

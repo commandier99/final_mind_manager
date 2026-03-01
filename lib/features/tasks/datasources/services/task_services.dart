@@ -17,14 +17,95 @@ class TaskService {
   final ActivityEventService _activityEventService = ActivityEventService();
   CollectionReference get _tasks => _firestore.collection('tasks');
 
+  bool _isPersonalBoardData(Map<String, dynamic> boardData) {
+    final type = (boardData['boardType'] as String? ?? '')
+        .trim()
+        .toLowerCase();
+    if (type == 'personal') return true;
+    final title = (boardData['boardTitle'] as String? ?? '')
+        .trim()
+        .toLowerCase();
+    return title == 'personal' || title == 'personal hq';
+  }
+
+  Future<Task> _normalizeTaskForBoardRules(Task task) async {
+    final boardId = task.taskBoardId.trim();
+    if (boardId.isEmpty) return task;
+
+    final boardDoc = await _firestore.collection('boards').doc(boardId).get();
+    if (!boardDoc.exists) return task;
+    final boardData = boardDoc.data() as Map<String, dynamic>;
+    if (!_isPersonalBoardData(boardData)) return task;
+
+    final managerId = (boardData['boardManagerId'] as String? ?? '').trim();
+    if (managerId.isEmpty) return task;
+    final managerName = (boardData['boardManagerName'] as String? ?? 'Manager')
+        .trim();
+
+    return task.copyWith(
+      taskAssignedTo: managerId,
+      taskAssignedToName: managerName,
+      taskBoardLane: Task.lanePublished,
+      taskAcceptanceStatus: null,
+    );
+  }
+
+  Future<void> _assertAssigneeWithinBoardTaskLimit(
+    Task task, {
+    String? excludingTaskId,
+  }) async {
+    final boardId = task.taskBoardId.trim();
+    final assigneeId = task.taskAssignedTo.trim();
+    final isUnassigned = assigneeId.isEmpty || assigneeId == 'None';
+    if (boardId.isEmpty || isUnassigned || task.taskIsDone) return;
+
+    final boardDoc = await _firestore.collection('boards').doc(boardId).get();
+    if (!boardDoc.exists) return;
+    final boardData = boardDoc.data() as Map<String, dynamic>;
+    if (_isPersonalBoardData(boardData)) return;
+    final managerId = boardData['boardManagerId'] as String? ?? '';
+    if (assigneeId == managerId) return; // manager is unlimited
+
+    final configuredLimit = (boardData['boardTaskCapacity'] as num?)?.toInt();
+    final limit = configuredLimit != null && configuredLimit >= 0
+        ? configuredLimit
+        : 5;
+    if (limit <= 0) return;
+
+    final activeAssignedSnapshot = await _tasks
+        .where('taskBoardId', isEqualTo: boardId)
+        .where('taskAssignedTo', isEqualTo: assigneeId)
+        .where('taskIsDeleted', isEqualTo: false)
+        .where('taskIsDone', isEqualTo: false)
+        .get();
+
+    int activeCount = activeAssignedSnapshot.docs.length;
+    if (excludingTaskId != null &&
+        excludingTaskId.isNotEmpty &&
+        activeAssignedSnapshot.docs.any((doc) => doc.id == excludingTaskId)) {
+      activeCount -= 1;
+    }
+
+    if (activeCount >= limit) {
+      throw StateError(
+        'Assignee is already at capacity ($activeCount/$limit active tasks).',
+      );
+    }
+  }
+
   /// Add a new task
   Future<void> addTask(Task task) async {
     try {
+      final normalizedTask = await _normalizeTaskForBoardRules(task);
+      await _assertAssigneeWithinBoardTaskLimit(normalizedTask);
       // Add task to the 'tasks' collection
-      await _tasks.doc(task.taskId).set(task.toMap());
+      await _tasks.doc(normalizedTask.taskId).set(normalizedTask.toMap());
 
       // Add task stats to the 'task_stats' collection using TaskStatsService
-      await _taskStatsService.addTaskStats(task.taskId, task.taskStats);
+      await _taskStatsService.addTaskStats(
+        normalizedTask.taskId,
+        normalizedTask.taskStats,
+      );
 
       // Log activity event
       final user = _auth.currentUser;
@@ -34,39 +115,56 @@ class TaskService {
           userName: user.displayName ?? 'Unknown User',
           activityType: 'task_created',
           userProfilePicture: user.photoURL,
-          boardId: task.taskBoardId.isNotEmpty ? task.taskBoardId : null,
-          taskId: task.taskId,
+          boardId: normalizedTask.taskBoardId.isNotEmpty
+              ? normalizedTask.taskBoardId
+              : null,
+          taskId: normalizedTask.taskId,
           description: 'created a task',
-          metadata: {'taskTitle': task.taskTitle},
+          metadata: {'taskTitle': normalizedTask.taskTitle},
         );
       }
 
       // Send deadline notification if task has a deadline
-      if (task.taskDeadline != null && task.taskBoardId.isNotEmpty) {
-        print('[Notification] Task has deadline: ${task.taskDeadline}, sending notifications...');
-        await _sendDeadlineNotification(task);
+      if (normalizedTask.taskDeadline != null &&
+          normalizedTask.taskBoardId.isNotEmpty) {
+        print(
+          '[Notification] Task has deadline: ${normalizedTask.taskDeadline}, sending notifications...',
+        );
+        await _sendDeadlineNotification(normalizedTask);
       } else {
-        print('[Notification] Task has no deadline or empty boardId. Deadline: ${task.taskDeadline}, BoardId: ${task.taskBoardId}');
+        print(
+          '[Notification] Task has no deadline or empty boardId. Deadline: ${normalizedTask.taskDeadline}, BoardId: ${normalizedTask.taskBoardId}',
+        );
       }
 
-      print('✅ Task ${task.taskId} added successfully');
+      print('✅ Task ${normalizedTask.taskId} added successfully');
     } catch (e) {
       print('⚠️ Error adding task: $e');
+      rethrow;
     }
   }
 
   /// Update existing task
   Future<void> updateTask(Task task) async {
     try {
+      final normalizedTask = await _normalizeTaskForBoardRules(task);
+      await _assertAssigneeWithinBoardTaskLimit(
+        normalizedTask,
+        excludingTaskId: normalizedTask.taskId,
+      );
       // Update task in the 'tasks' collection
-      await _tasks.doc(task.taskId).update(task.toMap());
+      await _tasks.doc(normalizedTask.taskId).update(normalizedTask.toMap());
 
       // Update task stats in the 'task_stats' collection using TaskStatsService
-      await _taskStatsService.updateTaskStats(task.taskId, task.taskStats);
+      await _taskStatsService.updateTaskStats(
+        normalizedTask.taskId,
+        normalizedTask.taskStats,
+      );
 
-      print('✅ Task ${task.taskId} updated successfully');
+      print('✅ Task ${normalizedTask.taskId} updated successfully');
     } catch (e) {
       print('⚠️ Error updating task: $e');
+      rethrow;
     }
   }
 
@@ -122,7 +220,9 @@ class TaskService {
             userName: user.displayName ?? 'Unknown User',
             activityType: 'task_deleted',
             userProfilePicture: user.photoURL,
-            boardId: taskData.taskBoardId.isNotEmpty ? taskData.taskBoardId : null,
+            boardId: taskData.taskBoardId.isNotEmpty
+                ? taskData.taskBoardId
+                : null,
             taskId: taskData.taskId,
             description: 'deleted a task',
             metadata: {'taskTitle': taskData.taskTitle},
@@ -141,10 +241,26 @@ class TaskService {
   Future<void> toggleTaskDone(Task task) async {
     try {
       final newIsDone = task.taskIsDone;
+      final taskOutcome = newIsDone
+          ? Task.outcomeSuccessful
+          : (task.effectiveTaskOutcome == Task.outcomeSuccessful
+                ? Task.outcomeNone
+                : task.effectiveTaskOutcome);
+      var completedSubtasksCount = 0;
+      if (newIsDone) {
+        completedSubtasksCount = await _completeRemainingSubtasksForTask(
+          task.taskId,
+        );
+      }
       await _tasks.doc(task.taskId).update({
         'taskIsDone': newIsDone,
         'taskIsDoneAt': newIsDone ? Timestamp.now() : null,
         'taskStatus': task.taskStatus,
+        'taskOutcome': taskOutcome,
+        if (newIsDone && completedSubtasksCount > 0)
+          'taskStats.taskSubtasksDoneCount': FieldValue.increment(
+            completedSubtasksCount,
+          ),
       });
 
       // Update task stats if needed (e.g., task edits count, etc.)
@@ -171,6 +287,38 @@ class TaskService {
     }
   }
 
+  Future<int> _completeRemainingSubtasksForTask(String taskId) async {
+    final snapshot = await _firestore
+        .collection('subtasks')
+        .where('parentTaskId', isEqualTo: taskId)
+        .where('subtaskIsDeleted', isEqualTo: false)
+        .where('subtaskIsDone', isEqualTo: false)
+        .get();
+
+    if (snapshot.docs.isEmpty) return 0;
+
+    const chunkSize = 400;
+    final docs = snapshot.docs;
+    var updatedCount = 0;
+
+    for (var start = 0; start < docs.length; start += chunkSize) {
+      final end = (start + chunkSize < docs.length)
+          ? start + chunkSize
+          : docs.length;
+      final batch = _firestore.batch();
+      for (var i = start; i < end; i++) {
+        batch.update(docs[i].reference, {
+          'subtaskIsDone': true,
+          'subtaskIsDoneAt': Timestamp.now(),
+        });
+      }
+      await batch.commit();
+      updatedCount += (end - start);
+    }
+
+    return updatedCount;
+  }
+
   /// Stream tasks safely for a specific board or user
   Stream<List<Task>> streamTasks({String? boardId, String? ownerId}) {
     Query query = _tasks.where('taskIsDeleted', isEqualTo: false);
@@ -190,9 +338,14 @@ class TaskService {
       final tasks = snapshot.docs
           .map((doc) {
             try {
-              final task = Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+              final task = Task.fromMap(
+                doc.data() as Map<String, dynamic>,
+                doc.id,
+              );
               if (boardId != null) {
-                print('[DEBUG] TaskService: Loaded task ${task.taskId} for board $boardId with taskBoardId = ${task.taskBoardId}');
+                print(
+                  '[DEBUG] TaskService: Loaded task ${task.taskId} for board $boardId with taskBoardId = ${task.taskBoardId}',
+                );
               }
               return task;
             } catch (e) {
@@ -202,9 +355,11 @@ class TaskService {
           })
           .whereType<Task>()
           .toList(); // filter out nulls
-      
+
       if (boardId != null) {
-        print('[DEBUG] TaskService: Returning ${tasks.length} tasks for boardId = $boardId');
+        print(
+          '[DEBUG] TaskService: Returning ${tasks.length} tasks for boardId = $boardId',
+        );
       }
       return tasks;
     });
@@ -224,9 +379,11 @@ class TaskService {
     // Firestore has a limit of 10 items for "in" queries, so we need to batch them
     const batchSize = 10;
     final batches = <List<String>>[];
-    
+
     for (var i = 0; i < taskIds.length; i += batchSize) {
-      final end = (i + batchSize < taskIds.length) ? i + batchSize : taskIds.length;
+      final end = (i + batchSize < taskIds.length)
+          ? i + batchSize
+          : taskIds.length;
       batches.add(taskIds.sublist(i, end));
     }
 
@@ -237,18 +394,21 @@ class TaskService {
           .where('taskIsDeleted', isEqualTo: false)
           .snapshots()
           .map((snapshot) {
-        return snapshot.docs
-            .map((doc) {
-              try {
-                return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-              } catch (e) {
-                print('⚠️ Error parsing task ${doc.id}: $e');
-                return null;
-              }
-            })
-            .whereType<Task>()
-            .toList();
-      });
+            return snapshot.docs
+                .map((doc) {
+                  try {
+                    return Task.fromMap(
+                      doc.data() as Map<String, dynamic>,
+                      doc.id,
+                    );
+                  } catch (e) {
+                    print('⚠️ Error parsing task ${doc.id}: $e');
+                    return null;
+                  }
+                })
+                .whereType<Task>()
+                .toList();
+          });
     }
 
     // For multiple batches, keep all batch subscriptions live and merge updates.
@@ -258,18 +418,21 @@ class TaskService {
           .where('taskIsDeleted', isEqualTo: false)
           .snapshots()
           .map((snapshot) {
-        return snapshot.docs
-            .map((doc) {
-              try {
-                return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-              } catch (e) {
-                print('⚠️ Error parsing task ${doc.id}: $e');
-                return null;
-              }
-            })
-            .whereType<Task>()
-            .toList();
-      });
+            return snapshot.docs
+                .map((doc) {
+                  try {
+                    return Task.fromMap(
+                      doc.data() as Map<String, dynamic>,
+                      doc.id,
+                    );
+                  } catch (e) {
+                    print('⚠️ Error parsing task ${doc.id}: $e');
+                    return null;
+                  }
+                })
+                .whereType<Task>()
+                .toList();
+          });
     }).toList();
 
     final idOrder = <String, int>{};
@@ -302,13 +465,10 @@ class TaskService {
       for (var i = 0; i < streams.length; i++) {
         final index = i;
         subscriptions.add(
-          streams[index].listen(
-            (tasks) {
-              latestByBatch[index] = tasks;
-              emitMerged();
-            },
-            onError: multi.addError,
-          ),
+          streams[index].listen((tasks) {
+            latestByBatch[index] = tasks;
+            emitMerged();
+          }, onError: multi.addError),
         );
       }
 
@@ -330,7 +490,10 @@ class TaskService {
           return snapshot.docs
               .map((doc) {
                 try {
-                  return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+                  return Task.fromMap(
+                    doc.data() as Map<String, dynamic>,
+                    doc.id,
+                  );
                 } catch (e) {
                   print('⚠️ Error parsing task ${doc.id}: $e');
                   return null;
@@ -340,7 +503,6 @@ class TaskService {
               .toList();
         });
   }
-
 
   /// Get a single task by ID
   Future<Task?> getTaskById(String taskId) async {
@@ -397,13 +559,12 @@ class TaskService {
       if (task == null) return;
 
       // Check if user already has a pending request
-      final existingRequest =
-          await _firestore
-              .collection('task_volunteer_requests')
-              .where('taskId', isEqualTo: taskId)
-              .where('userId', isEqualTo: userId)
-              .where('status', isEqualTo: 'pending')
-              .get();
+      final existingRequest = await _firestore
+          .collection('task_volunteer_requests')
+          .where('taskId', isEqualTo: taskId)
+          .where('userId', isEqualTo: userId)
+          .where('status', isEqualTo: 'pending')
+          .get();
 
       if (existingRequest.docs.isNotEmpty) {
         print('⚠️ User already has a pending volunteer request for this task');
@@ -411,8 +572,10 @@ class TaskService {
       }
 
       // Create volunteer request
-      final requestId =
-          _firestore.collection('task_volunteer_requests').doc().id;
+      final requestId = _firestore
+          .collection('task_volunteer_requests')
+          .doc()
+          .id;
       await _firestore
           .collection('task_volunteer_requests')
           .doc(requestId)
@@ -437,12 +600,16 @@ class TaskService {
   /// Send deadline notification to the assigned user
   Future<void> _sendDeadlineNotification(Task task) async {
     try {
-      print('[Notification] Task has deadline: ${task.taskDeadline}, sending notifications...');
-      
+      print(
+        '[Notification] Task has deadline: ${task.taskDeadline}, sending notifications...',
+      );
+
       // Send notification to the person assigned to the task
       final assignedUserId = task.taskAssignedTo;
       if (assignedUserId.isEmpty || assignedUserId == 'None') {
-        print('[Notification] ⚠️ Task has no assignee, skipping deadline notification');
+        print(
+          '[Notification] ⚠️ Task has no assignee, skipping deadline notification',
+        );
         return;
       }
 
@@ -472,7 +639,7 @@ class TaskService {
   String _formatDeadline(DateTime deadline) {
     final now = DateTime.now();
     final difference = deadline.difference(now);
-    
+
     if (difference.inHours < 1) {
       return '${difference.inMinutes} minutes';
     } else if (difference.inHours < 24) {
@@ -482,3 +649,7 @@ class TaskService {
     }
   }
 }
+
+
+
+

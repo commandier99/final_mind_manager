@@ -13,6 +13,8 @@ import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/presentation/widgets/cards/focused_task_card.dart';
+import '../../../../tasks/presentation/widgets/sections/task_subtasks_list.dart';
+import '../../../../subtasks/datasources/providers/subtask_provider.dart';
 
 class MindSetActiveSessionView extends StatefulWidget {
   final MindSetSession session;
@@ -45,6 +47,8 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   int _modeDropdownEpoch = 0;
   bool _followThroughAutoSummaryPrompted = false;
   String? _followThroughAutoSummarySessionId;
+  final SubtaskProvider _focusedTaskSubtaskProvider = SubtaskProvider();
+  final Map<String, DateTime> _focusedTaskStartedAtById = <String, DateTime>{};
 
   @override
   void initState() {
@@ -63,6 +67,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   void dispose() {
     _sheetController.dispose();
     _elapsedTimeNotifier.dispose();
+    _focusedTaskSubtaskProvider.dispose();
     super.dispose();
   }
 
@@ -173,8 +178,16 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
 
             if (focusedTask != null) {
               final activeTask = focusedTask;
+              _focusedTaskStartedAtById.putIfAbsent(
+                activeTask.taskId,
+                DateTime.now,
+              );
+              _focusedTaskStartedAtById.removeWhere(
+                (taskId, _) => taskId != activeTask.taskId,
+              );
               return FocusedTaskCard(
                 task: activeTask,
+                focusedStartedAt: _focusedTaskStartedAtById[activeTask.taskId]!,
                 onPause: modePolicy.allowsPauseWhileFocused()
                     ? () => _pauseTask(taskProvider, activeTask)
                     : null,
@@ -186,8 +199,19 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                         isDone ?? false,
                       )
                     : null,
+                subtasksContent: ChangeNotifierProvider<SubtaskProvider>.value(
+                  value: _focusedTaskSubtaskProvider,
+                  child: TaskSubtasksList(
+                    parentTaskId: activeTask.taskId,
+                    boardId: activeTask.taskBoardId,
+                    task: activeTask,
+                    contentPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    allowCompletionToggle: true,
+                  ),
+                ),
               );
             }
+            _focusedTaskStartedAtById.clear();
             return const SizedBox.shrink();
           },
         ),
@@ -469,14 +493,23 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     );
 
     if (finishedTask == true) {
-      await taskProvider.updateTask(
-        focusedTask.copyWith(
-          taskIsDone: true,
-          taskStatus: 'COMPLETED',
-          taskIsDoneAt: DateTime.now(),
-        ),
-      );
-      await _logSessionAction(type: 'complete', task: focusedTask);
+      try {
+        await taskProvider.toggleTaskDone(
+          focusedTask.copyWith(
+            taskIsDone: true,
+            taskStatus: 'Completed',
+            taskIsDoneAt: DateTime.now(),
+          ),
+        );
+        await _logSessionAction(type: 'complete', task: focusedTask);
+      } on StateError catch (e) {
+        if (!mounted) return PomodoroTransition.startBreak;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.message.toString()),
+          ),
+        );
+      }
     } else {
       await taskProvider.updateTask(focusedTask.copyWith(taskStatus: 'Paused'));
       await _logSessionAction(type: 'pause', task: focusedTask);
@@ -508,6 +541,11 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   Future<void> _pauseTask(TaskProvider taskProvider, Task focusedTask) async {
     final updatedTask = focusedTask.copyWith(taskStatus: 'Paused');
     await taskProvider.updateTask(updatedTask);
+    await _maybeCreateSessionCheckpointSubtask(
+      focusedTask,
+      reason: 'Worked in session but paused before completion.',
+      elapsedDuration: _consumeElapsedForTask(focusedTask.taskId),
+    );
     await _logSessionAction(type: 'pause', task: focusedTask);
   }
 
@@ -516,17 +554,36 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     Task focusedTask,
     bool isDone,
   ) async {
-    final updatedTask = focusedTask.copyWith(
-      taskIsDone: isDone,
-      taskIsDoneAt: isDone ? DateTime.now() : null,
-      taskStatus: isDone ? 'COMPLETED' : focusedTask.taskStatus,
-    );
-    final persistUpdate = taskProvider.updateTask(updatedTask);
-    if (isDone) {
+    if (!isDone) {
+      await taskProvider.updateTask(
+        focusedTask.copyWith(
+          taskIsDone: false,
+          taskIsDoneAt: null,
+          taskStatus: focusedTask.taskStatus,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await taskProvider.toggleTaskDone(
+        focusedTask.copyWith(
+          taskIsDone: true,
+          taskIsDoneAt: DateTime.now(),
+          taskStatus: 'Completed',
+        ),
+      );
+      _focusedTaskStartedAtById.remove(focusedTask.taskId);
       await _handlePostCompletion(taskProvider, focusedTask);
       await _logSessionAction(type: 'complete', task: focusedTask);
+    } on StateError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.message.toString()),
+        ),
+      );
     }
-    await persistUpdate;
   }
 
   Future<void> _handlePostCompletion(
@@ -585,6 +642,54 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     }
 
     await _showPomodoroFocusDecision(session);
+  }
+
+  Future<void> _maybeCreateSessionCheckpointSubtask(
+    Task task, {
+    required String reason,
+    required Duration elapsedDuration,
+  }) async {
+    if (task.taskIsDone) return;
+
+    final latestActiveSubtask = await _focusedTaskSubtaskProvider
+        .getLatestActiveSubtaskForTask(task.taskId);
+    if (latestActiveSubtask != null) {
+      await _focusedTaskSubtaskProvider.toggleSubtaskDoneStatus(
+        latestActiveSubtask,
+      );
+      return;
+    }
+
+    final elapsedLabel = _formatElapsedDuration(elapsedDuration);
+    await _focusedTaskSubtaskProvider.addSubtask(
+      subtaskTaskId: task.taskId,
+      subtaskBoardId: task.taskBoardId,
+      subtaskTitle: 'Session checkpoint ($elapsedLabel)',
+      subtaskDescription: '$reason Elapsed focus time: $elapsedLabel.',
+      initialDone: true,
+    );
+  }
+
+  Duration _consumeElapsedForTask(String taskId) {
+    final startedAt = _focusedTaskStartedAtById.remove(taskId);
+    final fallbackStart =
+        widget.session.sessionStartedAt ?? widget.session.sessionCreatedAt;
+    final base = startedAt ?? fallbackStart;
+    final elapsed = DateTime.now().difference(base);
+    return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  String _formatElapsedDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours}h ${minutes}m';
+    }
+    if (duration.inMinutes > 0) {
+      return '${duration.inMinutes}m ${seconds}s';
+    }
+    return '${seconds}s';
   }
 
   Future<void> _showPomodoroFocusDecision(MindSetSession session) async {

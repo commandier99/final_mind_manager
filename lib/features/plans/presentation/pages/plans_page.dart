@@ -34,7 +34,6 @@ class PlansPage extends StatefulWidget {
 
 class _PlansPageState extends State<PlansPage> {
   final PlansQueryController _queryController = PlansQueryController();
-  String? _userId;
   bool _isSearchExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -53,17 +52,6 @@ class _PlansPageState extends State<PlansPage> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final userId = context.read<UserProvider>().userId;
-    if (userId != null && userId != _userId) {
-      setState(() {
-        _userId = userId;
-      });
-    }
   }
 
   void _toggleSearch() {
@@ -242,6 +230,7 @@ class _PlansPageState extends State<PlansPage> {
 
   @override
   Widget build(BuildContext context) {
+    final userId = context.select<UserProvider, String?>((p) => p.userId);
     return Scaffold(
       floatingActionButton: Container(
         decoration: BoxDecoration(
@@ -302,12 +291,12 @@ class _PlansPageState extends State<PlansPage> {
       ),
       body: Padding(
         padding: const EdgeInsets.all(8),
-        child: _userId == null
+        child: userId == null
             ? const Center(child: CircularProgressIndicator())
             : Consumer<PlanProvider>(
                 builder: (context, planProvider, _) {
                   return StreamBuilder<List<Plan>>(
-                    stream: planProvider.streamUserPlans(_userId!),
+                    stream: planProvider.streamUserPlans(userId),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator());

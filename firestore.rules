@@ -217,6 +217,10 @@ service cloud.firestore {
         return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId;
       }
 
+      function isBoardSupervisor(boardId) {
+        return get(/databases/$(database)/documents/boards/$(boardId)).data.memberRoles[request.auth.uid] == 'supervisor';
+      }
+
       allow read: if request.auth != null &&
         ((resource.data.taskOwnerId == request.auth.uid ||
          resource.data.taskAssignedTo == request.auth.uid ||
@@ -229,14 +233,23 @@ service cloud.firestore {
         (request.resource.data.taskOwnerId == request.auth.uid ||
          (request.resource.data.taskBoardId != null &&
           request.resource.data.taskBoardId != '' &&
-          isBoardManager(request.resource.data.taskBoardId)));
+          (isBoardManager(request.resource.data.taskBoardId) ||
+           (isBoardSupervisor(request.resource.data.taskBoardId) &&
+            request.resource.data.taskBoardLane == 'drafts'))));
 
       allow update: if request.auth != null &&
         (resource.data.taskOwnerId == request.auth.uid ||
          resource.data.taskAssignedTo == request.auth.uid ||
          (resource.data.taskBoardId != null &&
           resource.data.taskBoardId != '' &&
-          isBoardManager(resource.data.taskBoardId)));
+          isBoardManager(resource.data.taskBoardId))) &&
+        !(
+          resource.data.taskBoardId != null &&
+          resource.data.taskBoardId != '' &&
+          resource.data.taskBoardLane == 'drafts' &&
+          request.resource.data.taskBoardLane == 'published' &&
+          !isBoardManager(resource.data.taskBoardId)
+        );
 
       allow delete: if request.auth != null &&
         (resource.data.taskOwnerId == request.auth.uid ||
@@ -378,3 +391,4 @@ service cloud.firestore {
     }
   }
 }
+

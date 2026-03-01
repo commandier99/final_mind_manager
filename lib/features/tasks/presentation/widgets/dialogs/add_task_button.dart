@@ -10,9 +10,10 @@ class AddTaskButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return FloatingActionButton(
       onPressed: () {
-        showDialog(
+        showModalBottomSheet<void>(
           context: context,
-          builder: (_) => AddTaskDialog(userId: userId),  // Pass userId to the dialog
+          isScrollControlled: true,
+          builder: (_) => AddTaskDialog(userId: userId),
         );
       },
       shape: const CircleBorder(),

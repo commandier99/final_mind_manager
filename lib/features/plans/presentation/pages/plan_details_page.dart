@@ -57,7 +57,7 @@ class _PlanDetailsPageState extends State<PlanDetailsPage> {
           print(
             '[DEBUG] PlanDetailsPage: SideMenu selected index = $sideMenuIndex',
           );
-          navigation.selectFromSideMenu(sideMenuIndex + 4);
+          navigation.selectFromSideMenu(sideMenuIndex);
         },
       ),
       body: SingleChildScrollView(

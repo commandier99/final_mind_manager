@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
+import '../models/task_model.dart';
 import '../models/task_submission_model.dart';
+import '../../../boards/datasources/models/board_roles.dart';
 import '../../../../shared/utilities/cloudinary_service.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 
@@ -34,8 +36,10 @@ class TaskSubmissionService {
       if (currentUser == null) throw Exception('User not authenticated');
 
       // Get user data
-      final userDoc =
-          await _firestore.collection('users').doc(currentUser.uid).get();
+      final userDoc = await _firestore
+          .collection('users')
+          .doc(currentUser.uid)
+          .get();
       final userData = userDoc.data();
 
       final submissionId = _submissions.doc().id;
@@ -54,7 +58,7 @@ class TaskSubmissionService {
 
         if (file.bytes != null) {
           print('📤 [Upload] Uploading to Cloudinary...');
-          
+
           // Report progress
           onProgress?.call(submissionId, i + 1, files.length, file.name, 0.0);
 
@@ -68,7 +72,7 @@ class TaskSubmissionService {
           print('📤 [Upload] Upload successful!');
           print('📤 [Upload] URL: ${uploadResult['url']}');
           print('📤 [Upload] Public ID: ${uploadResult['publicId']}');
-          
+
           // Report progress complete for this file
           onProgress?.call(submissionId, i + 1, files.length, file.name, 1.0);
 
@@ -108,7 +112,7 @@ class TaskSubmissionService {
         submittedAt: DateTime.now(),
         message: message,
         files: uploadedFiles,
-        status: 'submitted',
+        status: TaskSubmission.statusPending,
       );
 
       print('📤 [Upload] Saving submission to Firestore...');
@@ -118,18 +122,34 @@ class TaskSubmissionService {
 
       print('📤 [Upload] Submission saved to Firestore');
 
-      // Update task with submission ID and status
-      await _firestore.collection('tasks').doc(taskId).update({
-        'taskSubmissionId': submissionId,
-        'taskStatus': 'IN_REVIEW',
-      });
+      // Update task with submission ID.
+      // Completion (taskIsDone) is execution state, approval is review state.
+      final taskRef = _firestore.collection('tasks').doc(taskId);
+      final taskDoc = await taskRef.get();
+      final taskData = taskDoc.data();
+      final currentStatus = Task.normalizeTaskStatus(
+        taskData?['taskStatus'] as String? ?? Task.statusToDo,
+      );
+      final requiresApproval =
+          taskData?['taskRequiresApproval'] as bool? ?? false;
+      final updates = <String, dynamic>{'taskSubmissionId': submissionId};
+      if (requiresApproval) {
+        // Member completed execution; manager approval still pending.
+        updates['taskStatus'] = Task.statusCompleted;
+        updates['taskIsDone'] = true;
+        updates['taskIsDoneAt'] = Timestamp.fromDate(DateTime.now());
+        updates['taskOutcome'] = Task.outcomeNone;
+      } else if (currentStatus != Task.statusCompleted) {
+        updates['taskStatus'] = Task.statusPaused;
+      }
+      await taskRef.update(updates);
 
       // Log activity if task is part of a board
       try {
         final taskDoc = await _firestore.collection('tasks').doc(taskId).get();
         final taskData = taskDoc.data();
         final boardId = taskData?['taskBoardId'];
-        
+
         await _activityEventService.logEvent(
           userId: currentUser.uid,
           userName: userData?['userName'] ?? 'Unknown',
@@ -192,14 +212,30 @@ class TaskSubmissionService {
         });
   }
 
+  /// Stream all submissions (for board-level aggregation views)
+  Stream<List<TaskSubmission>> streamAllSubmissions() {
+    return _submissions
+        .orderBy('submittedAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs
+              .map(
+                (doc) => TaskSubmission.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ),
+              )
+              .toList();
+        });
+  }
+
   /// Get submissions by user
   Future<List<TaskSubmission>> getSubmissionsByUser(String userId) async {
     try {
-      final snapshot =
-          await _submissions
-              .where('submittedBy', isEqualTo: userId)
-              .orderBy('submittedAt', descending: true)
-              .get();
+      final snapshot = await _submissions
+          .where('submittedBy', isEqualTo: userId)
+          .orderBy('submittedAt', descending: true)
+          .get();
 
       return snapshot.docs
           .map(
@@ -253,7 +289,8 @@ class TaskSubmissionService {
       final data = doc.data() as Map<String, dynamic>;
       final String taskId = data['taskId'] as String? ?? '';
       final String submittedBy = data['submittedBy'] as String? ?? '';
-      final String submittedByName = data['submittedByName'] as String? ?? 'Unknown';
+      final String submittedByName =
+          data['submittedByName'] as String? ?? 'Unknown';
       final List<dynamic> files = (data['files'] as List<dynamic>?) ?? [];
 
       // Delete submission document
@@ -265,14 +302,20 @@ class TaskSubmissionService {
       if (taskDoc.exists) {
         final taskData = taskDoc.data() as Map<String, dynamic>;
         final currentSubmissionId = taskData['taskSubmissionId'] as String?;
-        final currentStatus = taskData['taskStatus'] as String?;
+        final currentStatus = Task.normalizeTaskStatus(
+          taskData['taskStatus'] as String? ?? Task.statusToDo,
+        );
         final updates = <String, dynamic>{};
 
         if (currentSubmissionId == submissionId) {
           updates['taskSubmissionId'] = null;
         }
-        if (currentStatus == 'IN_REVIEW') {
-          updates['taskStatus'] = 'IN_PROGRESS';
+        if (currentStatus == Task.statusPaused ||
+            currentStatus == Task.statusCompleted) {
+          updates['taskStatus'] = Task.statusInProgress;
+          updates['taskIsDone'] = false;
+          updates['taskIsDoneAt'] = null;
+          updates['taskOutcome'] = Task.outcomeNone;
         }
         if (updates.isNotEmpty) {
           await taskRef.update(updates);
@@ -290,10 +333,7 @@ class TaskSubmissionService {
           boardId: boardId,
           taskId: taskId,
           description: 'Deleted a submission',
-          metadata: {
-            'submissionId': submissionId,
-            'fileCount': files.length,
-          },
+          metadata: {'submissionId': submissionId, 'fileCount': files.length},
         );
       } catch (e) {
         print('⚠️ Failed to log deletion activity: $e');
@@ -318,6 +358,44 @@ class TaskSubmissionService {
       final currentUser = _auth.currentUser;
       if (currentUser == null) throw Exception('User not authenticated');
 
+      final submission = await getSubmissionById(submissionId);
+      if (submission == null) throw Exception('Submission not found');
+
+      final taskDoc = await _firestore
+          .collection('tasks')
+          .doc(submission.taskId)
+          .get();
+      if (!taskDoc.exists) throw Exception('Task not found');
+      final taskData = taskDoc.data() as Map<String, dynamic>;
+      final taskOwnerId = taskData['taskOwnerId'] as String? ?? '';
+      final taskBoardId = taskData['taskBoardId'] as String? ?? '';
+
+      bool canReview = currentUser.uid == taskOwnerId;
+      if (!canReview && taskBoardId.isNotEmpty) {
+        final boardDoc = await _firestore
+            .collection('boards')
+            .doc(taskBoardId)
+            .get();
+        if (boardDoc.exists) {
+          final boardData = boardDoc.data() as Map<String, dynamic>;
+          final boardManagerId = boardData['boardManagerId'] as String? ?? '';
+          final memberRoles = Map<String, dynamic>.from(
+            boardData['memberRoles'] ?? const <String, dynamic>{},
+          );
+          final reviewerRole = BoardRoles.normalize(
+            memberRoles[currentUser.uid]?.toString(),
+          );
+          canReview =
+              currentUser.uid == boardManagerId ||
+              reviewerRole == BoardRoles.supervisor;
+        }
+      }
+      if (!canReview) {
+        throw Exception(
+          'Only task owner, manager, or supervisor can review submissions.',
+        );
+      }
+
       await _submissions.doc(submissionId).update({
         'status': status,
         if (feedback != null) 'feedback': feedback,
@@ -325,27 +403,66 @@ class TaskSubmissionService {
         'reviewedBy': currentUser.uid,
       });
 
-      // Update task status based on review
-      final submission = await getSubmissionById(submissionId);
-      if (submission != null) {
+      // Update task status based on review.
+      {
         String taskStatus;
+        bool taskIsDone;
+        String taskOutcome;
         switch (status) {
           case 'approved':
-            taskStatus = 'DONE';
+            taskStatus = Task.statusCompleted;
+            taskIsDone = true;
+            taskOutcome = Task.outcomeSuccessful;
             break;
           case 'rejected':
-            taskStatus = 'TODO';
+            taskStatus = Task.statusInProgress;
+            taskIsDone = false;
+            taskOutcome = Task.outcomeNone;
             break;
           case 'revision_requested':
-            taskStatus = 'IN_PROGRESS';
+            taskStatus = Task.statusInProgress;
+            taskIsDone = false;
+            taskOutcome = Task.outcomeNone;
             break;
           default:
-            taskStatus = 'IN_REVIEW';
+            taskStatus = Task.statusInProgress;
+            taskIsDone = false;
+            taskOutcome = Task.outcomeNone;
         }
 
         await _firestore.collection('tasks').doc(submission.taskId).update({
           'taskStatus': taskStatus,
+          'taskIsDone': taskIsDone,
+          'taskIsDoneAt': taskIsDone
+              ? Timestamp.fromDate(DateTime.now())
+              : null,
+          'taskOutcome': taskOutcome,
         });
+      }
+
+      // Log review activity for dashboard analytics.
+      try {
+        final reviewer = _auth.currentUser;
+        if (reviewer != null) {
+          final reviewType = switch (status) {
+            'approved' => 'submission_approved',
+            'rejected' => 'submission_rejected',
+            'revision_requested' => 'submission_revision_requested',
+            _ => 'submission_reviewed',
+          };
+          await _activityEventService.logEvent(
+            userId: reviewer.uid,
+            userName: reviewer.displayName ?? 'Reviewer',
+            userProfilePicture: reviewer.photoURL,
+            activityType: reviewType,
+            boardId: taskBoardId,
+            taskId: submission.taskId,
+            description: 'Reviewed a task submission: $status',
+            metadata: {'submissionId': submissionId, 'status': status},
+          );
+        }
+      } catch (e) {
+        print('Failed to log submission review activity: $e');
       }
 
       print('✅ Submission reviewed: $submissionId');
@@ -354,6 +471,4 @@ class TaskSubmissionService {
       rethrow;
     }
   }
-
-
 }

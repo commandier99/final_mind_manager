@@ -2,6 +2,7 @@ import 'package:async/async.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/board_model.dart';
+import '../models/board_roles.dart';
 import '../models/board_stats_model.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 import 'package:flutter/foundation.dart';
@@ -11,6 +12,7 @@ class BoardService {
   final CollectionReference _boardCollection = FirebaseFirestore.instance
       .collection('boards');
   final ActivityEventService _activityEventService = ActivityEventService();
+  static String _personalBoardDocId(String userId) => 'personal_$userId';
 
   String? get currentUserId => _auth.currentUser?.uid;
 
@@ -49,19 +51,39 @@ class BoardService {
 
     final existing = await _findPersonalBoardForUser(user.uid);
     if (existing != null) return existing;
+    final now = DateTime.now();
+    final personalRef = _boardCollection.doc(_personalBoardDocId(user.uid));
 
-    await addBoard(
+    final personalBoard = Board(
+      boardId: personalRef.id,
+      boardManagerId: user.uid,
+      boardManagerName: user.displayName ?? 'Unknown',
+      boardCreatedAt: now,
       boardTitle: 'Personal',
       boardGoal: 'Personal tasks and projects',
-      boardGoalDescription:
-          'A space to manage your personal tasks and projects',
+      boardGoalDescription: 'A space to manage your personal tasks and projects',
+      stats: BoardStats(),
+      memberIds: [user.uid],
+      boardDeletedAt: null,
+      boardIsDeleted: false,
+      boardIsPublic: false,
+      boardRequiresApproval: true,
+      boardDescription: null,
+      boardMemberLimit: 0,
       boardType: 'personal',
       boardPurpose: 'category',
+      memberRoles: {user.uid: BoardRoles.manager},
+      memberTaskLimits: {},
+      boardTaskCapacity: Board.defaultMemberTaskLimit,
+      boardLastModifiedAt: now,
+      boardLastModifiedBy: user.uid,
     );
+
+    // Deterministic ID prevents duplicate Personal boards during concurrent calls.
+    await personalRef.set(personalBoard.toMap(), SetOptions(merge: true));
 
     final created = await _findPersonalBoardForUser(user.uid);
     if (created != null) return created;
-
     throw Exception('Failed to provision Personal board for user ${user.uid}');
   }
 
@@ -108,8 +130,9 @@ class BoardService {
       boardMemberLimit: 0,
       boardType: boardType ?? 'team', // Default to team
       boardPurpose: boardPurpose ?? 'project',
-      memberRoles: {user.uid: 'manager'},
+      memberRoles: {user.uid: BoardRoles.manager},
       memberTaskLimits: {},
+      boardTaskCapacity: Board.defaultMemberTaskLimit,
       boardLastModifiedAt: now,
       boardLastModifiedBy: user.uid,
     );
@@ -241,6 +264,7 @@ class BoardService {
     String? newGoalDescription,
     BoardStats? newStats,
     Map<String, String>? memberRoles,
+    int? boardTaskCapacity,
   }) async {
     final updateData = <String, dynamic>{};
 
@@ -251,6 +275,9 @@ class BoardService {
     }
     if (newStats != null) updateData['stats'] = newStats.toMap();
     if (memberRoles != null) updateData['memberRoles'] = memberRoles;
+    if (boardTaskCapacity != null) {
+      updateData['boardTaskCapacity'] = boardTaskCapacity;
+    }
 
     if (updateData.isNotEmpty) {
       updateData['boardLastModifiedAt'] = FieldValue.serverTimestamp();
@@ -266,7 +293,7 @@ class BoardService {
   Future<void> addMemberToBoard({
     required String boardId,
     required String userId,
-    String role = 'member', // Default role is 'member', can be 'inspector'
+    String role = BoardRoles.member, // Assignable roles: member/supervisor
   }) async {
     final boardRef = _boardCollection.doc(boardId);
 
@@ -281,8 +308,15 @@ class BoardService {
       );
     }
 
+    final normalizedRole = BoardRoles.normalize(role);
+    if (!BoardRoles.isAssignable(normalizedRole)) {
+      throw Exception(
+        'Invalid role: $role. Allowed roles are member or supervisor.',
+      );
+    }
+
     final currentRoles = Map<String, String>.from(data?['memberRoles'] ?? {});
-    currentRoles[userId] = role;
+    currentRoles[userId] = normalizedRole;
 
     await boardRef.update({
       'memberIds': FieldValue.arrayUnion([userId]),

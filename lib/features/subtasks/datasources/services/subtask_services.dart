@@ -67,6 +67,8 @@ class SubtaskService {
     required String subtaskTaskId,
     required String subtaskBoardId,
     String? subtaskTitle,
+    String? subtaskDescription,
+    bool initialDone = false,
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("User not signed in");
@@ -84,8 +86,11 @@ class SubtaskService {
       subtaskTitle: (subtaskTitle?.isNotEmpty ?? false)
           ? subtaskTitle!
           : 'Untitled Subtask',
-      subtaskIsDone: false,
-      subtaskIsDoneAt: null,
+      subtaskDescription: (subtaskDescription?.trim().isEmpty ?? true)
+          ? null
+          : subtaskDescription!.trim(),
+      subtaskIsDone: initialDone,
+      subtaskIsDoneAt: initialDone ? DateTime.now() : null,
       subtaskStatsAmountOfTimesEdited: 0,
     );
 
@@ -98,7 +103,11 @@ class SubtaskService {
       if (taskSnapshot.exists) {
         transaction.update(
           taskRef,
-          {'taskAmountOfSubtasks': FieldValue.increment(1)},
+          {
+            'taskStats.taskSubtasksCount': FieldValue.increment(1),
+            if (initialDone)
+              'taskStats.taskSubtasksDoneCount': FieldValue.increment(1),
+          },
         );
       }
     });
@@ -129,8 +138,10 @@ class SubtaskService {
     await updateSubtask(subtask.subtaskId, updatedSubtask);
 
     if ((subtask.parentTaskId).isNotEmpty) {
-      await _updateTaskSubtasksDoneCount(
-          subtask.parentTaskId, delta: updatedSubtask.subtaskIsDone ? 1 : -1);
+      await _incrementTaskSubtaskStats(
+        subtask.parentTaskId,
+        doneDelta: updatedSubtask.subtaskIsDone ? 1 : -1,
+      );
     }
 
     // Log activity event if subtask was completed
@@ -168,7 +179,12 @@ class SubtaskService {
     await updateSubtask(subtask.subtaskId, updatedSubtask);
 
     if ((subtask.parentTaskId).isNotEmpty) {
-      await _updateTaskSubtaskCount(subtask.parentTaskId, delta: -1);
+      await _incrementTaskSubtaskStats(
+        subtask.parentTaskId,
+        totalDelta: -1,
+        deletedDelta: 1,
+        doneDelta: subtask.subtaskIsDone ? -1 : 0,
+      );
     }
 
     // Log activity event
@@ -200,7 +216,12 @@ class SubtaskService {
     await updateSubtask(subtask.subtaskId, updatedSubtask);
 
     if ((subtask.parentTaskId).isNotEmpty) {
-      await _updateTaskSubtaskCount(subtask.parentTaskId, delta: 1);
+      await _incrementTaskSubtaskStats(
+        subtask.parentTaskId,
+        totalDelta: 1,
+        deletedDelta: -1,
+        doneDelta: subtask.subtaskIsDone ? 1 : 0,
+      );
     }
 
     // Log activity event
@@ -233,6 +254,19 @@ class SubtaskService {
     return Subtask.fromMap(doc.data() as Map<String, dynamic>, doc.id);
   }
 
+  Future<Subtask?> getLatestActiveSubtaskForTask(String taskId) async {
+    final snapshot = await _subtaskCollection
+        .where('parentTaskId', isEqualTo: taskId)
+        .where('subtaskIsDone', isEqualTo: false)
+        .where('subtaskIsDeleted', isEqualTo: false)
+        .orderBy('subtaskCreatedAt', descending: true)
+        .limit(1)
+        .get();
+    if (snapshot.docs.isEmpty) return null;
+    final doc = snapshot.docs.first;
+    return Subtask.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+  }
+
   Future<void> _permanentlyDeleteSubtask(String subtaskId) async {
     await _subtaskCollection.doc(subtaskId).delete();
   }
@@ -241,18 +275,38 @@ class SubtaskService {
   // HELPERS
   // ------------------------
 
-  Future<void> _updateTaskSubtaskCount(String taskId, {required int delta}) async {
+  Future<void> _incrementTaskSubtaskStats(
+    String taskId, {
+    int totalDelta = 0,
+    int doneDelta = 0,
+    int deletedDelta = 0,
+  }) async {
     final taskRef = FirebaseFirestore.instance.collection('tasks').doc(taskId);
-    await taskRef.update({
-      'taskAmountOfSubtasks': FieldValue.increment(delta),
-    });
+    final updates = <String, dynamic>{};
+    if (totalDelta != 0) {
+      updates['taskStats.taskSubtasksCount'] = FieldValue.increment(totalDelta);
+    }
+    if (doneDelta != 0) {
+      updates['taskStats.taskSubtasksDoneCount'] = FieldValue.increment(
+        doneDelta,
+      );
+    }
+    if (deletedDelta != 0) {
+      updates['taskStats.taskSubtasksDeletedCount'] = FieldValue.increment(
+        deletedDelta,
+      );
+    }
+    if (updates.isEmpty) return;
+    await taskRef.update(updates);
   }
 
-  Future<void> _updateTaskSubtasksDoneCount(String taskId, {required int delta}) async {
-    final taskRef = FirebaseFirestore.instance.collection('tasks').doc(taskId);
-    await taskRef.update({
-      'taskAmountOfSubtasksDone': FieldValue.increment(delta),
-    });
+  Future<bool> hasActiveSubtasksForTask(String taskId) async {
+    final snapshot = await _subtaskCollection
+        .where('parentTaskId', isEqualTo: taskId)
+        .where('subtaskIsDeleted', isEqualTo: false)
+        .limit(1)
+        .get();
+    return snapshot.docs.isNotEmpty;
   }
 
   List<Subtask> _mapSubtaskSnapshot(QuerySnapshot snapshot) {

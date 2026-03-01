@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import '../../../datasources/models/board_model.dart';
+import '../../../datasources/models/board_roles.dart';
 import '../../../datasources/providers/board_provider.dart';
 import '../../controllers/board_member_actions_controller.dart';
 import '../../pages/add_member_to_board_page.dart';
@@ -49,7 +50,9 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
               child: Row(
                 children: [
                   ...widget.memberIds.map((uid) {
-                    final role = widget.board.memberRoles[uid] ?? 'member';
+                    final role = BoardRoles.normalize(
+                      widget.board.memberRoles[uid],
+                    );
                     final isManager = uid == widget.board.boardManagerId;
                     final isCurrentUserManager =
                         widget.currentUserId == widget.board.boardManagerId;
@@ -86,7 +89,7 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                                           : null,
                                     ),
                                   ),
-                                  if (role == 'inspector')
+                                  if (role == BoardRoles.supervisor)
                                     _buildRoleBadge(
                                       color: Colors.orange,
                                       icon: Icons.visibility,
@@ -302,7 +305,7 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
               },
               icon: const Icon(Icons.swap_horiz, size: 18),
               label: Text(
-                'Change to ${role == 'inspector' ? 'Member' : 'Inspector'}',
+                'Change to ${role == BoardRoles.supervisor ? 'Member' : 'Supervisor'}',
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
@@ -413,18 +416,18 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
   }) {
     final color = isManager
         ? Colors.blue
-        : role == 'inspector'
+        : role == BoardRoles.supervisor
         ? Colors.orange
         : Colors.green;
     final icon = isManager
         ? Icons.star
-        : role == 'inspector'
+        : role == BoardRoles.supervisor
         ? Icons.visibility
         : Icons.person;
     final label = isManager
         ? 'Manager'
-        : role == 'inspector'
-        ? 'Inspector'
+        : role == BoardRoles.supervisor
+        ? 'Supervisor'
         : 'Member';
 
     return Container(

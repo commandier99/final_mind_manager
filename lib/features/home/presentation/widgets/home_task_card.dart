@@ -25,16 +25,15 @@ class HomeTaskCard extends StatefulWidget {
 class _HomeTaskCardState extends State<HomeTaskCard> {
   Color _getStatusColor(String status) {
     switch (status.toUpperCase()) {
+      case 'TO DO':
       case 'TODO':
         return Colors.grey;
+      case 'IN PROGRESS':
       case 'IN_PROGRESS':
         return Colors.blue;
-      case 'IN_REVIEW':
-        return Colors.purple;
+      case 'PAUSED':
       case 'ON_PAUSE':
         return Colors.orange;
-      case 'UNDER_REVISION':
-        return Colors.red;
       case 'COMPLETED':
         return Colors.green;
       default:
@@ -44,16 +43,15 @@ class _HomeTaskCardState extends State<HomeTaskCard> {
 
   IconData _getStatusIcon(String status) {
     switch (status.toUpperCase()) {
+      case 'TO DO':
       case 'TODO':
         return Icons.circle_outlined;
+      case 'IN PROGRESS':
       case 'IN_PROGRESS':
         return Icons.autorenew;
-      case 'IN_REVIEW':
-        return Icons.visibility;
+      case 'PAUSED':
       case 'ON_PAUSE':
         return Icons.pause_circle;
-      case 'UNDER_REVISION':
-        return Icons.edit;
       case 'COMPLETED':
         return Icons.check_circle;
       default:

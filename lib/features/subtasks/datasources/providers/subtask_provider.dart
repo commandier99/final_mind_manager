@@ -21,12 +21,16 @@ class SubtaskProvider with ChangeNotifier {
     required String subtaskTaskId,
     required String subtaskBoardId,
     String? subtaskTitle,
+    String? subtaskDescription,
+    bool initialDone = false,
   }) async {
     try {
       await _subtaskService.addSubtask(
         subtaskTaskId: subtaskTaskId,
         subtaskBoardId: subtaskBoardId,
         subtaskTitle: subtaskTitle,
+        subtaskDescription: subtaskDescription,
+        initialDone: initialDone,
       );
     } catch (e) {
       if (kDebugMode) {
@@ -93,6 +97,28 @@ class SubtaskProvider with ChangeNotifier {
         print("Error fetching subtask by ID: $e");
       }
       return null;
+    }
+  }
+
+  Future<Subtask?> getLatestActiveSubtaskForTask(String taskId) async {
+    try {
+      return await _subtaskService.getLatestActiveSubtaskForTask(taskId);
+    } catch (e) {
+      if (kDebugMode) {
+        print("Error fetching latest active subtask: $e");
+      }
+      return null;
+    }
+  }
+
+  Future<bool> hasActiveSubtasksForTask(String taskId) async {
+    try {
+      return await _subtaskService.hasActiveSubtasksForTask(taskId);
+    } catch (e) {
+      if (kDebugMode) {
+        print("Error checking active subtasks: $e");
+      }
+      return false;
     }
   }
 }

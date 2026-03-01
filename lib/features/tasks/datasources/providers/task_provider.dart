@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import 'dart:async';
 import '../models/task_model.dart'; // Import Task model
 import '../services/task_services.dart';
+import '../helpers/task_dependency_helper.dart';
 import '../../../boards/datasources/services/board_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/user_daily_activity_services.dart';
 import '../../../notifications/datasources/helpers/notification_helper.dart';
@@ -99,7 +100,9 @@ class TaskProvider extends ChangeNotifier {
       print(
         '[DEBUG] TaskProvider: streamUserActiveTasks received ${tasks.length} tasks, filtering active ones',
       );
-      final filteredTasks = tasks.where((t) => !t.taskIsDone && !t.taskIsDeleted).toList();
+      final filteredTasks = tasks
+          .where((t) => !t.taskIsDone && !t.taskIsDeleted)
+          .toList();
       print(
         '[DEBUG] TaskProvider: after filtering, ${filteredTasks.length} active tasks remain',
       );
@@ -176,10 +179,16 @@ class TaskProvider extends ChangeNotifier {
   // CRUD ACTIONS
   // ------------------------
 
-  Future<void> addTask(Task task, {String? selectedAssigneeId, String? selectedAssigneeName}) async {
+  Future<void> addTask(
+    Task task, {
+    String? selectedAssigneeId,
+    String? selectedAssigneeName,
+  }) async {
     try {
       print('[DEBUG] TaskProvider: addTask called for taskId = ${task.taskId}');
-      print('[DEBUG] TaskProvider: selectedAssigneeId = $selectedAssigneeId, selectedAssigneeName = $selectedAssigneeName');
+      print(
+        '[DEBUG] TaskProvider: selectedAssigneeId = $selectedAssigneeId, selectedAssigneeName = $selectedAssigneeName',
+      );
       // Ensure taskStats is initialized (fallback to empty TaskStats)
       final newTask = task.copyWith(taskStats: task.taskStats);
 
@@ -192,24 +201,31 @@ class TaskProvider extends ChangeNotifier {
       await _taskService.addTask(newTask);
 
       // Send task assignment notification if a specific member was selected
-      print('[TaskNotification] selectedAssigneeId = "$selectedAssigneeId", isEmpty = ${selectedAssigneeId?.isEmpty ?? true}');
-      
+      print(
+        '[TaskNotification] selectedAssigneeId = "$selectedAssigneeId", isEmpty = ${selectedAssigneeId?.isEmpty ?? true}',
+      );
+
       // Create task assignment notification for the selected assignee
-      if (selectedAssigneeId != null && 
-          selectedAssigneeId.isNotEmpty && 
-          selectedAssigneeId != 'None' && 
+      if (selectedAssigneeId != null &&
+          selectedAssigneeId.isNotEmpty &&
+          selectedAssigneeId != 'None' &&
           selectedAssigneeId != task.taskOwnerId) {
-        print('[TaskNotification] ✅ Conditions met - creating notification for userId: $selectedAssigneeId');
+        print(
+          '[TaskNotification] ✅ Conditions met - creating notification for userId: $selectedAssigneeId',
+        );
         try {
-          final deadlineInfo = task.taskDeadline != null 
-              ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}' 
+          final deadlineInfo = task.taskDeadline != null
+              ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}'
               : '';
-          
-          print('[TaskNotification] Calling NotificationHelper.createInAppOnly...');
+
+          print(
+            '[TaskNotification] Calling NotificationHelper.createInAppOnly...',
+          );
           await NotificationHelper.createInAppOnly(
             userId: selectedAssigneeId,
             title: 'Task Assignment Request',
-            message: '${task.taskAssignedBy} wants to assign you the task "${task.taskTitle}"$deadlineInfo',
+            message:
+                '${task.taskAssignedBy} wants to assign you the task "${task.taskTitle}"$deadlineInfo',
             category: NotificationHelper.categoryTaskAssigned,
             relatedId: task.taskId,
             metadata: {
@@ -222,13 +238,19 @@ class TaskProvider extends ChangeNotifier {
               'taskId': task.taskId,
             },
           );
-          print('[TaskNotification] ✅ Task assignment notification created for: ${task.taskId}');
+          print(
+            '[TaskNotification] ✅ Task assignment notification created for: ${task.taskId}',
+          );
         } catch (e) {
           // Log error but don't fail task creation - notification is optional
-          print('[TaskNotification] ⚠️ Failed to create notification (non-critical): $e');
+          print(
+            '[TaskNotification] ⚠️ Failed to create notification (non-critical): $e',
+          );
         }
       } else {
-        print('[TaskNotification] ⚠️ Notification not created - no assignee selected');
+        print(
+          '[TaskNotification] ⚠️ Notification not created - no assignee selected',
+        );
       }
 
       // Track activity
@@ -251,6 +273,7 @@ class TaskProvider extends ChangeNotifier {
       print('✅ Task ${newTask.taskId} added successfully');
     } catch (e) {
       print('⚠️ Error adding task: $e');
+      rethrow;
     }
   }
 
@@ -263,9 +286,7 @@ class TaskProvider extends ChangeNotifier {
         '[DEBUG] TaskProvider: updateTask called for taskId = ${task.taskId}',
       );
       // Ensure taskStats is initialized (fallback to empty TaskStats)
-      final updatedTask = task.copyWith(
-        taskStats: task.taskStats,
-      );
+      final updatedTask = task.copyWith(taskStats: task.taskStats);
 
       // Optimistic local update for immediate UI feedback.
       existingIndex = _tasks.indexWhere((t) => t.taskId == updatedTask.taskId);
@@ -278,10 +299,14 @@ class TaskProvider extends ChangeNotifier {
       // Update task in tasks collection using TaskService
       await _taskService.updateTask(updatedTask);
 
-      print('[DEBUG] TaskProvider: Task ${updatedTask.taskId} updated successfully');
+      print(
+        '[DEBUG] TaskProvider: Task ${updatedTask.taskId} updated successfully',
+      );
     } catch (e) {
       // Roll back optimistic local update if write fails.
-      if (existingIndex != -1 && previousTask != null && existingIndex < _tasks.length) {
+      if (existingIndex != -1 &&
+          previousTask != null &&
+          existingIndex < _tasks.length) {
         _tasks[existingIndex] = previousTask;
         notifyListeners();
       }
@@ -303,8 +328,9 @@ class TaskProvider extends ChangeNotifier {
           task.taskBoardId,
           tasksDeleted: 1,
           tasksAdded: -1, // Decrement total tasks
-          tasksDone:
-              task.taskIsDone ? -1 : 0, // Decrement done if task was done
+          tasksDone: task.taskIsDone
+              ? -1
+              : 0, // Decrement done if task was done
         );
       }
 
@@ -339,8 +365,9 @@ class TaskProvider extends ChangeNotifier {
           taskToDelete.taskBoardId,
           tasksDeleted: 1,
           tasksAdded: -1, // Decrement total tasks
-          tasksDone:
-              taskToDelete.taskIsDone ? -1 : 0, // Decrement done if task was done
+          tasksDone: taskToDelete.taskIsDone
+              ? -1
+              : 0, // Decrement done if task was done
         );
       }
 
@@ -375,6 +402,20 @@ class TaskProvider extends ChangeNotifier {
       // we determine what the old value was by inverting the current value
       final isNowDone = task.taskIsDone;
       final wasAlreadyDone = !isNowDone; // The opposite of the new value
+
+      if (isNowDone) {
+        final blocker = await getFirstIncompleteDependency(task);
+        if (blocker != null) {
+          final blockerOwner = blocker.taskAssignedToName.trim();
+          final ownerSuffix =
+              blockerOwner.isEmpty || blockerOwner == 'Unassigned'
+              ? ''
+              : ' (${blockerOwner})';
+          throw StateError(
+            'Blocked by "${blocker.taskTitle}"$ownerSuffix. Complete it first.',
+          );
+        }
+      }
 
       await _taskService.toggleTaskDone(task);
 
@@ -429,6 +470,31 @@ class TaskProvider extends ChangeNotifier {
       print('⚠️ Error toggling task done status: $e');
       rethrow;
     }
+  }
+
+  Future<List<Task>> getIncompleteDependencies(Task task) async {
+    final dependencyIds = TaskDependencyHelper.sanitizeDependencyIds(
+      task.taskDependencyIds,
+      selfTaskId: task.taskId,
+    );
+    if (dependencyIds.isEmpty) return const <Task>[];
+
+    final byId = <String, Task>{for (final t in _tasks) t.taskId: t};
+    final unresolved = <Task>[];
+
+    for (final dependencyId in dependencyIds) {
+      Task? dependencyTask = byId[dependencyId];
+      dependencyTask ??= await _taskService.getTaskById(dependencyId);
+      if (dependencyTask != null && !dependencyTask.taskIsDone) {
+        unresolved.add(dependencyTask);
+      }
+    }
+    return unresolved;
+  }
+
+  Future<Task?> getFirstIncompleteDependency(Task task) async {
+    final blockers = await getIncompleteDependencies(task);
+    return blockers.isEmpty ? null : blockers.first;
   }
 
   Future<void> acceptTask(String taskId) async {
@@ -492,8 +558,11 @@ class TaskProvider extends ChangeNotifier {
         if (nextRepeatDate != null && task.taskRepeatInterval != null) {
           // Logic to calculate next repeat based on interval
           // (You can expand this based on your repeat logic)
-          nextRepeatDate = _calculateNextRepeatDate(nextRepeatDate, task.taskRepeatInterval!);
-          
+          nextRepeatDate = _calculateNextRepeatDate(
+            nextRepeatDate,
+            task.taskRepeatInterval!,
+          );
+
           // Create new instance for next repeat
           final nextTask = task.copyWith(
             taskId: const Uuid().v4(),
@@ -532,7 +601,10 @@ class TaskProvider extends ChangeNotifier {
   /// Mark a task as failed (permanent failure)
   Future<void> markTaskFailed(Task task) async {
     try {
-      final updatedTask = task.copyWith(taskFailed: true);
+      final updatedTask = task.copyWith(
+        taskFailed: true,
+        taskOutcome: Task.outcomeFailed,
+      );
       await updateTask(updatedTask);
 
       print('✅ Task ${task.taskId} marked as failed');
@@ -557,14 +629,22 @@ class TaskProvider extends ChangeNotifier {
   }
 
   DateTime _getNextOccurrenceOfDays(DateTime current, List<String> days) {
-    final dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    
+    final dayNames = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+
     DateTime next = current.add(const Duration(days: 1));
-    
+
     while (!days.contains(dayNames[next.weekday - 1])) {
       next = next.add(const Duration(days: 1));
     }
-    
+
     return next;
   }
 

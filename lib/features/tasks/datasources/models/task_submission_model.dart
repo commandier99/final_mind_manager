@@ -1,6 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class TaskSubmission {
+  static const String statusPending = 'pending';
+  static const String statusApproved = 'approved';
+  static const String statusRejected = 'rejected';
+  static const String statusRevisionRequested = 'revision_requested';
+
   final String submissionId;
   final String taskId;
   final String submittedBy;
@@ -10,7 +15,7 @@ class TaskSubmission {
   final String? message;
   final List<SubmissionFile> files;
   final String
-  status; // 'submitted', 'approved', 'rejected', 'revision_requested'
+  status; // 'pending', 'approved', 'rejected', 'revision_requested'
   final String? feedback; // Manager's feedback
   final DateTime? reviewedAt;
   final String? reviewedBy;
@@ -30,6 +35,25 @@ class TaskSubmission {
     this.reviewedBy,
   });
 
+  static String normalizeStatus(String status) {
+    final normalized = status.trim().toLowerCase();
+    switch (normalized) {
+      case 'submitted':
+      case 'in_review':
+      case 'pending':
+        return statusPending;
+      case 'approved':
+        return statusApproved;
+      case 'rejected':
+        return statusRejected;
+      case 'revision_requested':
+      case 'under_revision':
+        return statusRevisionRequested;
+      default:
+        return statusPending;
+    }
+  }
+
   factory TaskSubmission.fromMap(Map<String, dynamic> data, String documentId) {
     return TaskSubmission(
       submissionId: documentId,
@@ -45,7 +69,7 @@ class TaskSubmission {
               ?.map((f) => SubmissionFile.fromMap(f as Map<String, dynamic>))
               .toList() ??
           [],
-      status: data['status'] ?? 'submitted',
+      status: normalizeStatus(data['status'] as String? ?? statusPending),
       feedback: data['feedback'] as String?,
       reviewedAt: (data['reviewedAt'] as Timestamp?)?.toDate(),
       reviewedBy: data['reviewedBy'] as String?,
@@ -62,7 +86,7 @@ class TaskSubmission {
       'submittedAt': Timestamp.fromDate(submittedAt),
       if (message != null) 'message': message,
       'files': files.map((f) => f.toMap()).toList(),
-      'status': status,
+      'status': normalizeStatus(status),
       if (feedback != null) 'feedback': feedback,
       if (reviewedAt != null) 'reviewedAt': Timestamp.fromDate(reviewedAt!),
       if (reviewedBy != null) 'reviewedBy': reviewedBy,

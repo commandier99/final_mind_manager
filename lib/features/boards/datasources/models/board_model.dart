@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'board_stats_model.dart';
+import 'board_roles.dart';
 
 class Board {
+  static const int defaultMemberTaskLimit = 5;
   final String boardId;
   final String boardManagerId;
   final String boardManagerName;
@@ -33,10 +35,12 @@ class Board {
 
   // Role-based access control
   // memberRoles: userId -> role mapping
-  // Roles: 'manager', 'member', 'inspector'
+  // Roles: 'manager', 'member', 'supervisor'
   final Map<String, String> memberRoles;
-  final Map<String, int> memberTaskLimits; // userId -> max tasks they can be assigned
-  
+  final Map<String, int>
+  memberTaskLimits; // userId -> max tasks they can be assigned
+  final int boardTaskCapacity; // uniform active task cap for members, 0 = unlimited
+
   final DateTime boardLastModifiedAt;
   final String boardLastModifiedBy;
 
@@ -57,19 +61,64 @@ class Board {
     this.boardDescription,
     this.boardMemberLimit = 0,
     this.boardType = 'team', // Default to team for backward compatibility
-    this.boardPurpose = 'project', // Default to project for backward compatibility
+    this.boardPurpose =
+        'project', // Default to project for backward compatibility
     this.memberRoles = const {},
     this.memberTaskLimits = const {},
+    this.boardTaskCapacity = defaultMemberTaskLimit,
     required this.boardLastModifiedAt,
     required this.boardLastModifiedBy,
   });
 
   bool get isDeleted => boardIsDeleted;
 
+  String roleOf(String? userId) {
+    if (userId == null || userId.isEmpty) return BoardRoles.member;
+    if (userId == boardManagerId) return BoardRoles.manager;
+    return BoardRoles.normalize(memberRoles[userId]);
+  }
+
+  bool isManager(String? userId) => roleOf(userId) == BoardRoles.manager;
+
+  bool isSupervisor(String? userId) => roleOf(userId) == BoardRoles.supervisor;
+
+  bool canDraftTasks(String? userId) =>
+      isManager(userId) || isSupervisor(userId);
+
+  bool canPublishTasks(String? userId) => isManager(userId);
+
+  bool canReviewSubmissions(String? userId) =>
+      isManager(userId) || isSupervisor(userId);
+
+  bool canPokeMembers(String? userId) =>
+      isManager(userId) || isSupervisor(userId);
+
+  int taskLimitForUser(
+    String? userId, {
+    int fallbackLimit = defaultMemberTaskLimit,
+  }) {
+    if (userId == null || userId.isEmpty) return 0;
+    if (isManager(userId)) return 0; // manager is unlimited
+    final configured = boardTaskCapacity;
+    if (configured > 0) return configured;
+    return fallbackLimit;
+  }
+
   factory Board.fromMap(Map<String, dynamic> data, String documentId) {
+    final rawRoles = Map<String, dynamic>.from(data['memberRoles'] ?? {});
+    final normalizedRoles = <String, String>{};
+    rawRoles.forEach((userId, role) {
+      normalizedRoles[userId] = BoardRoles.normalize(role?.toString());
+    });
+
+    final managerId = data['boardManagerId'] ?? '';
+    if (managerId is String && managerId.isNotEmpty) {
+      normalizedRoles[managerId] = BoardRoles.manager;
+    }
+
     return Board(
       boardId: documentId,
-      boardManagerId: data['boardManagerId'] ?? '',
+      boardManagerId: managerId,
       boardManagerName: data['boardManagerName'] ?? 'Unknown',
       boardCreatedAt: (data['boardCreatedAt'] as Timestamp).toDate(),
       boardTitle: data['boardTitle'],
@@ -87,11 +136,18 @@ class Board {
       boardRequiresApproval: data['boardRequiresApproval'] ?? true,
       boardDescription: data['boardDescription'] as String?,
       boardMemberLimit: data['boardMemberLimit'] ?? 0,
-      boardType: data['boardType'] ?? 'team', // Default to team for backward compatibility
+      boardType:
+          data['boardType'] ??
+          'team', // Default to team for backward compatibility
       boardPurpose: data['boardPurpose'] ?? 'project',
-      memberRoles: Map<String, String>.from(data['memberRoles'] ?? {}),
+      memberRoles: normalizedRoles,
       memberTaskLimits: Map<String, int>.from(data['memberTaskLimits'] ?? {}),
-      boardLastModifiedAt: (data['boardLastModifiedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      boardTaskCapacity:
+          (data['boardTaskCapacity'] as num?)?.toInt() ??
+          defaultMemberTaskLimit,
+      boardLastModifiedAt:
+          (data['boardLastModifiedAt'] as Timestamp?)?.toDate() ??
+          DateTime.now(),
       boardLastModifiedBy: data['boardLastModifiedBy'] ?? '',
     );
   }
@@ -118,6 +174,7 @@ class Board {
       'boardPurpose': boardPurpose,
       'memberRoles': memberRoles,
       'memberTaskLimits': memberTaskLimits,
+      'boardTaskCapacity': boardTaskCapacity,
       'boardLastModifiedAt': Timestamp.fromDate(boardLastModifiedAt),
       'boardLastModifiedBy': boardLastModifiedBy,
     };
@@ -139,6 +196,7 @@ class Board {
     String? boardPurpose,
     Map<String, String>? memberRoles,
     Map<String, int>? memberTaskLimits,
+    int? boardTaskCapacity,
     DateTime? boardLastModifiedAt,
     String? boardLastModifiedBy,
   }) {
@@ -155,16 +213,17 @@ class Board {
       boardDeletedAt: boardDeletedAt ?? this.boardDeletedAt,
       boardIsDeleted: boardIsDeleted ?? this.boardIsDeleted,
       boardIsPublic: boardIsPublic ?? this.boardIsPublic,
-      boardRequiresApproval: boardRequiresApproval ?? this.boardRequiresApproval,
+      boardRequiresApproval:
+          boardRequiresApproval ?? this.boardRequiresApproval,
       boardDescription: boardDescription ?? this.boardDescription,
       boardMemberLimit: boardMemberLimit ?? this.boardMemberLimit,
       boardType: boardType ?? this.boardType,
       boardPurpose: boardPurpose ?? this.boardPurpose,
       memberRoles: memberRoles ?? this.memberRoles,
       memberTaskLimits: memberTaskLimits ?? this.memberTaskLimits,
+      boardTaskCapacity: boardTaskCapacity ?? this.boardTaskCapacity,
       boardLastModifiedAt: boardLastModifiedAt ?? this.boardLastModifiedAt,
       boardLastModifiedBy: boardLastModifiedBy ?? this.boardLastModifiedBy,
     );
   }
 }
-

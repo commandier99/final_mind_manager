@@ -29,6 +29,8 @@ class NavigationProvider extends ChangeNotifier {
     'Settings',
     'Help/FAQ',
     'About',
+    'Mind:Set',
+    'Poke',
   ];
 
   void selectFromBottomNav(int index) {

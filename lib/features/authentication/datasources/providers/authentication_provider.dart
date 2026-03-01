@@ -29,6 +29,28 @@ class AuthenticationProvider extends ChangeNotifier {
     _initAuth();
   }
 
+  String _currentLocaleTag() {
+    return WidgetsBinding.instance.platformDispatcher.locale.toLanguageTag();
+  }
+
+  String _currentTimezoneOffsetLabel() {
+    final offset = DateTime.now().timeZoneOffset;
+    final sign = offset.isNegative ? '-' : '+';
+    final totalMinutes = offset.inMinutes.abs();
+    final hours = (totalMinutes ~/ 60).toString().padLeft(2, '0');
+    final minutes = (totalMinutes % 60).toString().padLeft(2, '0');
+    return 'UTC$sign$hours:$minutes';
+  }
+
+  Future<void> _syncLoginMetadata(String userId) async {
+    await _userService.updateUserFields(userId, {
+      'userLastLogin': FieldValue.serverTimestamp(),
+      'userLastActiveAt': FieldValue.serverTimestamp(),
+      'userLocale': _currentLocaleTag(),
+      'userTimezone': _currentTimezoneOffsetLabel(),
+    });
+  }
+
   void _initAuth() {
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       _user = user;
@@ -43,17 +65,21 @@ class AuthenticationProvider extends ChangeNotifier {
     if (_authStateInitialized) {
       return isAuthenticated;
     }
-    
+
     // Wait for the first auth state change event
-    return await FirebaseAuth.instance.authStateChanges().first.then((user) {
-      return user != null && user.emailVerified;
-    }).timeout(
-      const Duration(seconds: 5),
-      onTimeout: () {
-        _authStateInitialized = true;
-        return false;
-      },
-    );
+    return await FirebaseAuth.instance
+        .authStateChanges()
+        .first
+        .then((user) {
+          return user != null && user.emailVerified;
+        })
+        .timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            _authStateInitialized = true;
+            return false;
+          },
+        );
   }
 
   Future<void> signInWithEmail({
@@ -76,9 +102,12 @@ class AuthenticationProvider extends ChangeNotifier {
         await FirebaseAuth.instance.signOut();
         _user = null;
       } else if (_user != null) {
+        await _syncLoginMetadata(_user!.uid);
         // Trigger UserProvider to load user data
         onUserAuthenticated?.call(_user!.uid);
-        print('✅ [AuthenticationProvider] User signed in, triggering user data load');
+        print(
+          '✅ [AuthenticationProvider] User signed in, triggering user data load',
+        );
       }
     } catch (e) {
       _error = _getErrorMessage(e);
@@ -147,21 +176,26 @@ class AuthenticationProvider extends ChangeNotifier {
       );
 
       print('🔵 [AuthenticationProvider] Signing in to Firebase...');
-      final userCredential =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
 
       _user = userCredential.user;
-      print('🔵 [AuthenticationProvider] Firebase sign-in complete. User: ${_user?.email}');
+      print(
+        '🔵 [AuthenticationProvider] Firebase sign-in complete. User: ${_user?.email}',
+      );
 
       if (_user != null) {
         // Check if user document already exists to determine if this is a new user
-        print('🔵 [AuthenticationProvider] Checking if user document exists...');
+        print(
+          '🔵 [AuthenticationProvider] Checking if user document exists...',
+        );
         final userDoc = await FirebaseFirestore.instance
             .collection('users')
             .doc(_user!.uid)
             .get();
         final isNewUser = !userDoc.exists;
-        
+
         try {
           if (isNewUser) {
             // Create complete user document for NEW users
@@ -172,23 +206,26 @@ class AuthenticationProvider extends ChangeNotifier {
               userName: _user!.displayName ?? 'User',
               userHandle: _user!.email!.split('@')[0],
               userCreatedAt: Timestamp.now(),
+              userLastLogin: Timestamp.now(),
+              userLastActiveAt: Timestamp.now(),
               userIsVerified: _user!.emailVerified,
               userProfilePicture: _user!.photoURL,
               userIsPublic: false,
               userAllowSearch: false,
               userIsActive: true,
               userIsBanned: false,
-              userLocale: 'en',
-              userTimezone: 'UTC',
+              userLocale: _currentLocaleTag(),
+              userTimezone: _currentTimezoneOffsetLabel(),
             );
             await _userService.saveUser(newUser);
-            print('✅ [AuthenticationProvider] New user document and userStats created');
-            
+            print(
+              '✅ [AuthenticationProvider] New user document and userStats created',
+            );
           } else {
             // Update only specific fields for EXISTING users to preserve their data
             print('🔵 [AuthenticationProvider] Updating existing user...');
             final updates = <String, dynamic>{};
-            
+
             // Only update email verification status and profile picture if they changed
             if (_user!.emailVerified) {
               updates['userIsVerified'] = true;
@@ -196,13 +233,21 @@ class AuthenticationProvider extends ChangeNotifier {
             if (_user!.photoURL != null) {
               updates['userProfilePicture'] = _user!.photoURL;
             }
-            
+            updates['userLastLogin'] = FieldValue.serverTimestamp();
+            updates['userLastActiveAt'] = FieldValue.serverTimestamp();
+            updates['userLocale'] = _currentLocaleTag();
+            updates['userTimezone'] = _currentTimezoneOffsetLabel();
+
             // Update the fields if there are any changes
             if (updates.isNotEmpty) {
               await _userService.updateUserFields(_user!.uid, updates);
-              print('✅ [AuthenticationProvider] Existing user updated with: $updates');
+              print(
+                '✅ [AuthenticationProvider] Existing user updated with: $updates',
+              );
             } else {
-              print('ℹ️ [AuthenticationProvider] No updates needed for existing user');
+              print(
+                'ℹ️ [AuthenticationProvider] No updates needed for existing user',
+              );
             }
           }
         } catch (e) {
@@ -213,7 +258,9 @@ class AuthenticationProvider extends ChangeNotifier {
 
         // Trigger UserProvider to load user data
         onUserAuthenticated?.call(_user!.uid);
-        print('✅ [AuthenticationProvider] Google sign-in successful, triggering user data load');
+        print(
+          '✅ [AuthenticationProvider] Google sign-in successful, triggering user data load',
+        );
       }
     } catch (e, stackTrace) {
       print('❌ [AuthenticationProvider] Google Sign-In error: $e');
@@ -265,7 +312,7 @@ class AuthenticationProvider extends ChangeNotifier {
     if (error.toString().contains('network_error')) {
       return 'Network error. Please check your internet connection and try again.';
     }
-    
+
     if (error.toString().contains('ApiException: 7')) {
       return 'Unable to connect to Google services. This may be due to:\n'
           '• Missing or invalid SHA-1 certificate fingerprint\n'
@@ -273,11 +320,11 @@ class AuthenticationProvider extends ChangeNotifier {
           '• Google Play Services not configured\n\n'
           'Please check your Firebase configuration and try again.';
     }
-    
+
     if (error.toString().contains('sign_in_canceled')) {
       return 'Sign-in was cancelled.';
     }
-    
+
     if (error.toString().contains('DEVELOPER_ERROR')) {
       return 'Configuration error. Please verify your Google OAuth credentials.';
     }
@@ -305,4 +352,3 @@ class AuthenticationProvider extends ChangeNotifier {
     return error.toString();
   }
 }
-

@@ -6,7 +6,9 @@ import '../../../tasks/datasources/providers/task_provider.dart';
 import '../../../tasks/datasources/models/task_model.dart';
 
 class TaskEngagementSection extends StatelessWidget {
-  const TaskEngagementSection({super.key});
+  const TaskEngagementSection({super.key, this.onTap});
+
+  final VoidCallback? onTap;
 
   int _getTaskOpenedTodayCount(List<ActivityEvent> events) {
     final today = DateTime.now();
@@ -125,100 +127,115 @@ class TaskEngagementSection extends StatelessWidget {
           taskProvider,
         );
 
-        return Card(
-          elevation: 2,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Text(
-                  'Task Engagement for Today',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-
-                // Stats Row
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildStatCard(
-                        context,
-                        icon: Icons.task_alt,
-                        label: 'Tasks Opened',
-                        value: taskOpenedToday.toString(),
-                        color: Colors.blue,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildStatCard(
-                        context,
-                        icon: Icons.upload_file,
-                        label: 'Files Submitted',
-                        value: submissionsToday.toString(),
-                        color: Colors.green,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Most Visited Task Card
-                if (mostVisitedTask != null)
-                  _buildMostVisitedTaskCard(context, mostVisitedTask),
-
-                if (mostVisitedTask != null && firstTaskVisited != null)
-                  const SizedBox(height: 12),
-
-                // First Task Visited Card
-                if (firstTaskVisited != null)
-                  _buildFirstTaskVisitedCard(context, firstTaskVisited),
-
-                const SizedBox(height: 20),
-
-                // Recently Opened Tasks
-                if (recentTasks.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12.0),
+        final content = Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Expanded(
                     child: Text(
-                      'Recently opened task',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
+                      'Task Engagement for Today',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  _buildRecentTasksList(context, recentTasks, taskProvider),
-                ] else ...[
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.task_alt,
-                            size: 40,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'No tasks opened yet today',
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
+                  if (onTap != null) const Icon(Icons.chevron_right_rounded),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Stats Row
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.task_alt,
+                      label: 'Tasks Opened',
+                      value: taskOpenedToday.toString(),
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildStatCard(
+                      context,
+                      icon: Icons.upload_file,
+                      label: 'Files Submitted',
+                      value: submissionsToday.toString(),
+                      color: Colors.green,
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 12),
+
+              // Most Visited Task Card
+              if (mostVisitedTask != null)
+                _buildMostVisitedTaskCard(context, mostVisitedTask),
+
+              if (mostVisitedTask != null && firstTaskVisited != null)
+                const SizedBox(height: 12),
+
+              // First Task Visited Card
+              if (firstTaskVisited != null)
+                _buildFirstTaskVisitedCard(context, firstTaskVisited),
+
+              const SizedBox(height: 20),
+
+              // Recently Opened Tasks
+              if (recentTasks.isNotEmpty) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12.0),
+                  child: Text(
+                    'Recently opened task',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                _buildRecentTasksList(context, recentTasks, taskProvider),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 20),
+                  child: Center(
+                    child: Column(
+                      children: [
+                        Icon(
+                          Icons.task_alt,
+                          size: 40,
+                          color: Colors.grey.shade300,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'No tasks opened yet today',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
+        );
+
+        return Card(
+          elevation: 2,
+          clipBehavior: onTap != null ? Clip.antiAlias : Clip.none,
+          child: onTap == null
+              ? content
+              : InkWell(
+                  onTap: onTap,
+                  child: content,
+                ),
         );
       },
     );

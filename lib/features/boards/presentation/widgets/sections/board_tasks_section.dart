@@ -24,7 +24,7 @@ class BoardTasksSection extends StatefulWidget {
     super.key,
     required this.boardId,
     required this.board,
-    this.selectedLane = _BoardTasksSectionState.laneBillboard,
+    this.selectedLane = _BoardTasksSectionState.lanePublished,
   });
 
   @override
@@ -32,8 +32,8 @@ class BoardTasksSection extends StatefulWidget {
 }
 
 class _BoardTasksSectionState extends State<BoardTasksSection> {
-  static const String laneWorkshop = 'workshop';
-  static const String laneBillboard = 'billboard';
+  static const String laneDrafts = Task.laneDrafts;
+  static const String lanePublished = Task.lanePublished;
 
   final BoardTasksQueryController _queryController =
       BoardTasksQueryController();
@@ -99,12 +99,12 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
   void _showAddTaskDialog() {
     final user = FirebaseAuth.instance.currentUser;
-    final isManager = widget.board.boardManagerId == user?.uid;
+    final canDraftTasks = widget.board.canDraftTasks(user?.uid);
     if (user == null) return;
-    if (!isManager) {
+    if (!canDraftTasks) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Only board managers can create tasks.'),
+          content: Text('Only managers or supervisors can create draft tasks.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -184,11 +184,11 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
     return Consumer<TaskProvider>(
       builder: (context, taskProvider, _) {
-        final isManager =
-            widget.board.boardManagerId ==
-            FirebaseAuth.instance.currentUser?.uid;
+        final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+        final isManager = widget.board.isManager(currentUserId);
+        final canDraftTasks = widget.board.canDraftTasks(currentUserId);
         final isPersonalBoard = widget.board.boardType == 'personal';
-        final activeLane = isManager ? widget.selectedLane : laneBillboard;
+        final activeLane = canDraftTasks ? widget.selectedLane : lanePublished;
         final suggestions = isPersonalBoard
             ? const <Suggestion>[]
             : context.watch<SuggestionProvider>().suggestions;
@@ -198,7 +198,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
         final visibleTasks = taskProvider.tasks.where((task) {
           final lane = task.taskBoardLane;
-          if (!isManager) return lane != laneWorkshop;
+          if (!canDraftTasks) return lane != laneDrafts;
           return lane == activeLane;
         }).toList();
 
@@ -207,7 +207,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
           selectedFilters: _selectedFilters,
           sortBy: _sortBy,
         );
-        final canAddTask = isManager;
+        final canAddTask = canDraftTasks;
 
         return Padding(
           padding: const EdgeInsets.all(16.0),
@@ -319,7 +319,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                     },
                   ),
                   const SizedBox(width: 4),
-                  if (canAddTask && activeLane == laneWorkshop) ...[
+                  if (canAddTask && activeLane == laneDrafts) ...[
                     InkWell(
                       onTap: () {
                         if (pendingSuggestions.isEmpty) {
@@ -350,14 +350,11 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                       borderRadius: BorderRadius.circular(4),
                       child: _buildHeaderIcon(Icons.add),
                     )
-                  else if (!isPersonalBoard && activeLane == laneBillboard)
+                  else if (!isPersonalBoard && activeLane == lanePublished)
                     InkWell(
                       onTap: _showSuggestionsDialog,
-                      borderRadius: BorderRadius.circular(6),
-                      child: _buildHeaderTextButton(
-                        icon: Icons.lightbulb_outline,
-                        label: 'Suggest',
-                      ),
+                      borderRadius: BorderRadius.circular(4),
+                      child: _buildHeaderIcon(Icons.post_add),
                     ),
                 ],
               ),
@@ -401,8 +398,8 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                 ),
               const SizedBox(height: 4),
               if (!isPersonalBoard &&
-                  isManager &&
-                  activeLane == laneWorkshop &&
+                  canDraftTasks &&
+                  activeLane == laneDrafts &&
                   _isSuggestionsQueueOpen &&
                   pendingSuggestions.isNotEmpty)
                 Column(
@@ -421,7 +418,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                 ),
               if (sortedTasks.isEmpty)
                 _buildEmptyTasksState(
-                  isManager: isManager,
+                  canDraftTasks: canDraftTasks,
                   activeLane: activeLane,
                 ),
               if (sortedTasks.isNotEmpty)
@@ -434,8 +431,10 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                           board: widget.board,
                           currentUserId: FirebaseAuth.instance.currentUser?.uid,
                           showPublishButton:
-                              isManager && activeLane == laneWorkshop,
-                          isPublishing: _publishingTaskIds.contains(task.taskId),
+                              isManager && activeLane == laneDrafts,
+                          isPublishing: _publishingTaskIds.contains(
+                            task.taskId,
+                          ),
                           onPublish: () => _publishTask(task),
                         ),
                       )
@@ -487,7 +486,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         taskStatus: 'To Do',
         taskRequiresApproval: false,
         taskAcceptanceStatus: null,
-        taskBoardLane: laneWorkshop,
+        taskBoardLane: laneDrafts,
       );
 
       await taskProvider.addTask(newTask);
@@ -495,7 +494,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         suggestionId: suggestion.suggestionId,
         status: 'converted',
         reviewerId: currentUser.uid,
-        reviewNote: 'Converted into workshop task',
+        reviewNote: 'Converted into drafts task',
         convertedTaskId: newTask.taskId,
       );
 
@@ -521,6 +520,17 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   }
 
   Future<void> _publishTask(Task task) async {
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (!widget.board.canPublishTasks(currentUserId)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Only managers can publish tasks.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     if (_publishingTaskIds.contains(task.taskId)) return;
     setState(() {
       _publishingTaskIds.add(task.taskId);
@@ -528,12 +538,12 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
     try {
       await context.read<TaskProvider>().updateTask(
-        task.copyWith(taskBoardLane: laneBillboard),
+        task.copyWith(taskBoardLane: lanePublished),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Task moved to Published.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Task moved to Published.')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -552,19 +562,16 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   }
 
   Widget _buildEmptyTasksState({
-    required bool isManager,
+    required bool canDraftTasks,
     required String activeLane,
   }) {
-    final laneLabel = activeLane == laneWorkshop ? 'Drafts' : 'Published';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
         children: [
           Center(
             child: Text(
-              isManager
-                  ? 'No $laneLabel tasks match the selected filters'
-                  : 'No published tasks match the selected filters',
+              'No tasks match the selected filters',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.grey[400],
@@ -572,7 +579,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
               ),
             ),
           ),
-          if (isManager && activeLane == laneWorkshop) ...[
+          if (canDraftTasks && activeLane == laneDrafts) ...[
             const SizedBox(height: 8),
             Center(
               child: Text(
@@ -608,34 +615,6 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         borderRadius: BorderRadius.circular(6),
       ),
       child: Icon(icon, size: 16, color: Colors.grey[700]),
-    );
-  }
-
-  Widget _buildHeaderTextButton({
-    required IconData icon,
-    required String label,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey[300]!),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: Colors.grey[700]),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey[700],
-            ),
-          ),
-        ],
-      ),
     );
   }
 

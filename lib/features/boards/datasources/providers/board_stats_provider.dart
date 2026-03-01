@@ -149,9 +149,6 @@ class BoardStatsProvider extends ChangeNotifier {
   // UTILS
   // ------------------------
   BoardStats? getStatsForBoard(String boardId) {
-    debugPrint(
-      '[BoardStatsProvider] getStatsForBoard called for boardId: $boardId, stats: ${_stats[boardId]?.boardTasksCount ?? "null"}',
-    );
     return _stats[boardId];
   }
 }

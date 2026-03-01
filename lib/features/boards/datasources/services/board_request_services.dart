@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/board_request_model.dart';
+import '../models/board_roles.dart';
 import 'board_services.dart';
 import 'package:flutter/foundation.dart';
 
@@ -21,6 +22,7 @@ class BoardRequestService {
     required String boardId,
     required String boardTitle,
     required String userId,
+    String role = BoardRoles.member,
     String? message,
   }) async {
     try {
@@ -37,6 +39,13 @@ class BoardRequestService {
 
       final requestId = _requestsCollection.doc().id;
 
+      final requestedRole = BoardRoles.normalize(role);
+      if (!BoardRoles.isAssignable(requestedRole)) {
+        throw Exception(
+          'Invalid invitation role: $role. Allowed roles are member or supervisor.',
+        );
+      }
+
       final request = BoardRequest(
         boardRequestId: requestId,
         boardId: boardId,
@@ -49,6 +58,7 @@ class BoardRequestService {
         boardReqStatus: 'pending',
         boardReqType: 'recruitment',
         boardReqMessage: message ?? 'You have been invited to join this board',
+        boardReqRequestedRole: requestedRole,
         boardReqCreatedAt: DateTime.now(),
       );
 
@@ -273,6 +283,7 @@ class BoardRequestService {
       await _boardService.addMemberToBoard(
         boardId: request.boardId,
         userId: request.userId,
+        role: request.boardReqRequestedRole,
       );
 
       // Update request status

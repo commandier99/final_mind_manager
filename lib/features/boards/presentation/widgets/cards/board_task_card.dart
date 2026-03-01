@@ -6,8 +6,8 @@ import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/datasources/services/task_appeal_service.dart';
 import '../../../../tasks/presentation/pages/task_details_page.dart';
-import '../../../../tasks/presentation/pages/task_applications_page.dart';
 import '../../../../tasks/presentation/widgets/dialogs/edit_task_dialog.dart';
+import '../../../../notifications/datasources/helpers/notification_helper.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../datasources/models/board_model.dart';
 
@@ -46,6 +46,7 @@ class BoardTaskCard extends StatefulWidget {
 class _BoardTaskCardState extends State<BoardTaskCard> {
   late String _currentUserId;
   final TaskAppealService _taskAppealService = TaskAppealService();
+  bool _isPoking = false;
 
   @override
   void initState() {
@@ -184,13 +185,65 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     return displayName;
   }
 
+  bool _isSupervisorDraft() {
+    if (widget.board == null) return false;
+    if (widget.task.taskBoardLane != Task.laneDrafts) return false;
+    if (widget.task.taskOwnerId == widget.board!.boardManagerId) return false;
+    return widget.board!.isSupervisor(widget.task.taskOwnerId);
+  }
+
+  bool _canPokeMember() {
+    if (widget.board == null || widget.currentUserId == null) return false;
+    if (!widget.board!.canPokeMembers(widget.currentUserId)) return false;
+    if (widget.task.taskIsDone) return false;
+    if (_isTaskUnassigned()) return false;
+    final assigneeId = widget.task.taskAssignedTo;
+    if (assigneeId.isEmpty || assigneeId == 'None') return false;
+    if (assigneeId == widget.currentUserId) return false;
+    return true;
+  }
+
+  Future<void> _pokeMember() async {
+    if (!_canPokeMember() || _isPoking) return;
+    setState(() => _isPoking = true);
+    try {
+      await NotificationHelper.createInAppOnly(
+        userId: widget.task.taskAssignedTo,
+        title: 'Task Poke',
+        message: 'Please update your progress on "${widget.task.taskTitle}".',
+        category: NotificationHelper.categoryReminder,
+        relatedId: widget.task.taskId,
+        metadata: {
+          'taskId': widget.task.taskId,
+          'boardId': widget.task.taskBoardId,
+          'type': 'task_poke',
+        },
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Poke sent.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send poke: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isPoking = false);
+      }
+    }
+  }
+
   Color _getMemberColor() {
-    // Default to blue for all members
     if (widget.task.taskAssignedToName.isEmpty ||
         widget.task.taskAssignedToName == 'Unassigned') {
       return Colors.transparent;
     }
-    return Colors.blue;
+    return Colors.grey.shade700;
   }
 
   Color _getPriorityColor(String priority) {
@@ -297,6 +350,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         widget.task.taskAssignedToName == 'Unassigned';
     final priorityColor = _getPriorityColor(widget.task.taskPriorityLevel);
     final canHaveUnassigned = _shouldAllowUnassigned();
+    final canPoke = _canPokeMember();
+    final isSupervisorDraft = _isSupervisorDraft();
 
     // Only allow delete for board manager or task owner
     final canDelete =
@@ -322,7 +377,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
             endActionPane: hasSwipeActions
                 ? ActionPane(
                     motion: const DrawerMotion(),
-                    extentRatio: actionCount * 0.25,
+                    extentRatio: actionCount * 0.22,
                     children: [
                       if (canEdit)
                         Expanded(
@@ -422,39 +477,18 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                 onTap: () {
                   if (widget.isDisabled) return;
                   Slidable.of(context)?.close();
-                  // If task is unassigned, go to applications page first
-                  // But only if user is the board manager
-                  final isUnassigned =
-                      widget.task.taskAssignedTo.isEmpty ||
-                      widget.task.taskAssignedTo == 'None';
-                  final isManager =
-                      widget.board?.boardManagerId == _currentUserId;
-
-                  if (isUnassigned && isManager) {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            TaskApplicationsPage(task: widget.task),
-                      ),
-                    );
-                  } else {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) =>
-                            TaskDetailsPage(task: widget.task),
-                      ),
-                    );
-                  }
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => TaskDetailsPage(task: widget.task),
+                    ),
+                  );
                 },
                 child: Card(
                   elevation: 2,
                   clipBehavior: Clip.antiAlias,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.zero,
-                    side: BorderSide(
-                      color: isUnassigned ? Colors.grey.shade300 : memberColor,
-                      width: isUnassigned ? 1 : 2,
-                    ),
+                    side: BorderSide(color: Colors.grey.shade300, width: 1),
                   ),
                   child: Stack(
                     children: [
@@ -515,6 +549,72 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                         ),
                                       ),
                                     ),
+                                    if (isSupervisorDraft)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.deepPurple.shade50,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.deepPurple.shade200,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Supervisor Draft',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.deepPurple.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    if (widget
+                                        .task
+                                        .taskDependencyIds
+                                        .isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(left: 6),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 6,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.blueGrey.shade100,
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.link,
+                                                size: 10,
+                                                color: Colors.blueGrey.shade800,
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Text(
+                                                '${widget.task.taskDependencyIds.length}',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      Colors.blueGrey.shade800,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
                                   ],
                                 ),
                                 // Status badge on the right
@@ -655,6 +755,29 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                 ),
                                 const SizedBox(width: 8),
                                 // Show interest buttons only if task is unassigned AND unassigned is allowed
+                                if (canPoke) ...[
+                                  Tooltip(
+                                    message: 'Poke assignee',
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isPoking ? null : _pokeMember,
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        foregroundColor: Colors.orange.shade800,
+                                      ),
+                                      icon: Icon(
+                                        _isPoking
+                                            ? Icons.hourglass_top
+                                            : Icons
+                                                  .notifications_active_outlined,
+                                        size: 16,
+                                      ),
+                                      label: Text(
+                                        _isPoking ? 'Poking...' : 'Poke',
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                ],
                                 if (_isTaskUnassigned() &&
                                     canHaveUnassigned &&
                                     !widget.showPublishButton)
