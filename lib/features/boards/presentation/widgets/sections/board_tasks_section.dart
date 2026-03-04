@@ -41,11 +41,21 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   bool _isLoading = true;
   String _sortBy = 'created_desc';
   final Set<String> _processingSuggestionIds = <String>{};
+  final Set<String> _deletingSuggestionIds = <String>{};
   final Set<String> _publishingTaskIds = <String>{};
   bool _isSuggestionsQueueOpen = false;
 
   bool _isPendingSuggestion(String status) {
     return status.trim().toLowerCase() == 'pending';
+  }
+
+  void _showSnackBarSafe(
+    ScaffoldMessengerState? messenger,
+    SnackBar snackBar,
+  ) {
+    if (!mounted) return;
+    if (messenger == null || !messenger.mounted) return;
+    messenger.showSnackBar(snackBar);
   }
 
   @override
@@ -122,6 +132,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   }
 
   Future<void> _showSuggestionsDialog() async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final userProvider = context.read<UserProvider>();
     final suggestionProvider = context.read<SuggestionProvider>();
 
@@ -134,8 +145,8 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
     final firebaseUser = FirebaseAuth.instance.currentUser;
     if (firebaseUser == null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBarSafe(
+        messenger,
         const SnackBar(content: Text('You need to be signed in.')),
       );
       return;
@@ -161,13 +172,13 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       );
 
       await suggestionProvider.addSuggestion(suggestion);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBarSafe(
+        messenger,
         const SnackBar(content: Text('Suggestion submitted to Drafts.')),
       );
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBarSafe(
+        messenger,
         SnackBar(
           content: Text('Failed to submit suggestion: $e'),
           backgroundColor: Colors.red,
@@ -411,7 +422,14 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                           isConverting: _processingSuggestionIds.contains(
                             suggestion.suggestionId,
                           ),
+                          isDeleting: _deletingSuggestionIds.contains(
+                            suggestion.suggestionId,
+                          ),
+                          canDelete:
+                              isManager ||
+                              suggestion.suggestionAuthorId == currentUserId,
                           onConvert: () => _convertSuggestionToTask(suggestion),
+                          onDelete: () => _deleteSuggestion(suggestion),
                         ),
                       )
                       .toList(),
@@ -514,6 +532,74 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       if (mounted) {
         setState(() {
           _processingSuggestionIds.remove(suggestion.suggestionId);
+        });
+      }
+    }
+  }
+
+  Future<void> _deleteSuggestion(Suggestion suggestion) async {
+    if (_deletingSuggestionIds.contains(suggestion.suggestionId)) return;
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final canDelete =
+        currentUserId != null &&
+        (widget.board.isManager(currentUserId) ||
+            suggestion.suggestionAuthorId == currentUserId);
+    if (!canDelete) {
+      _showSnackBarSafe(
+        ScaffoldMessenger.maybeOf(context),
+        const SnackBar(
+          content: Text('Only the board manager or suggestion author can delete this suggestion.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    final shouldDelete = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete Suggestion'),
+        content: const Text('Are you sure you want to delete this suggestion?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldDelete != true) return;
+    if (!mounted) return;
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final suggestionProvider = context.read<SuggestionProvider>();
+    setState(() {
+      _deletingSuggestionIds.add(suggestion.suggestionId);
+    });
+
+    try {
+      await suggestionProvider.softDeleteSuggestion(suggestion.suggestionId);
+      _showSnackBarSafe(
+        messenger,
+        const SnackBar(content: Text('Suggestion deleted.')),
+      );
+    } catch (e) {
+      _showSnackBarSafe(
+        messenger,
+        SnackBar(
+          content: Text('Failed to delete suggestion: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _deletingSuggestionIds.remove(suggestion.suggestionId);
         });
       }
     }

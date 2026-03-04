@@ -1,16 +1,14 @@
 import '../models/in_app_notif_model.dart';
-import '../models/push_notif_model.dart';
 import '../services/in_app_notif_service.dart';
-import '../services/push_notif_service.dart';
 
-/// Helper class to create both in-app and push notifications simultaneously
+/// Helper class to create canonical in-app notifications.
+/// Push delivery is triggered by backend functions from the in-app record.
 class NotificationHelper {
   static final InAppNotificationService _inAppService =
       InAppNotificationService();
-  static final PushNotificationService _pushService =
-      PushNotificationService();
 
-  /// Create an in-app notification and trigger a corresponding push notification
+  /// Legacy compatibility method.
+  /// Creates a single in-app notification (source of truth).
   static Future<void> createNotificationPair({
     required String userId,
     required String title,
@@ -21,8 +19,8 @@ class NotificationHelper {
   }) async {
     try {
       print('[NotificationHelper] Starting createNotificationPair for userId: $userId, category: $category');
-      
-      // Create in-app notification
+
+      // Create canonical in-app notification.
       final inAppNotif = InAppNotification(
         notificationId: '', // Will be set by Firestore
         userId: userId,
@@ -38,28 +36,7 @@ class NotificationHelper {
       print('[NotificationHelper] Creating in-app notification...');
       final inAppId = await _inAppService.createNotification(inAppNotif);
       print('[NotificationHelper] ✅ In-app notification created with ID: $inAppId');
-
-      // Create push notification (triggers immediately)
-      final pushNotif = PushNotification(
-        notificationId: '', // Will be set by Firestore
-        userId: userId,
-        title: title,
-        body: message,
-        category: category,
-        relatedId: relatedId,
-        isSent: false,
-        createdAt: DateTime.now(),
-        data: {
-          'inAppNotificationId': inAppId,
-          if (metadata != null) ...metadata,
-        },
-      );
-
-      print('[NotificationHelper] Creating push notification...');
-      final pushId = await _pushService.createNotification(pushNotif);
-      print('[NotificationHelper] ✅ Push notification created with ID: $pushId');
-
-      print('✅ Notification pair created: in-app=$inAppId, push=$pushId');
+      print('✅ Notification created: in-app=$inAppId');
     } catch (e) {
       print('[NotificationHelper] ❌ Error in createNotificationPair: $e');
       rethrow;
@@ -105,19 +82,21 @@ class NotificationHelper {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final pushNotif = PushNotification(
+      // Push-only records are deprecated. Create the canonical in-app item
+      // so backend push delivery can be triggered from one source of truth.
+      final inAppNotif = InAppNotification(
         notificationId: '',
         userId: userId,
         title: title,
-        body: body,
+        message: body,
         category: category,
         relatedId: relatedId,
-        isSent: false,
+        isRead: false,
         createdAt: DateTime.now(),
-        data: data,
+        metadata: data,
       );
 
-      return await _pushService.createNotification(pushNotif);
+      return await _inAppService.createNotification(inAppNotif);
     } catch (e) {
       print('⚠️ Error creating push notification: $e');
       rethrow;

@@ -198,7 +198,7 @@ class InAppNotificationProvider extends ChangeNotifier {
         .toList();
 
     for (final notification in newNotifications) {
-      if (notification.category == 'task_assigned' && !notification.isRead) {
+      if (_shouldShowLocalNotification(notification)) {
         _showLocalNotification(notification);
       }
     }
@@ -206,6 +206,19 @@ class InAppNotificationProvider extends ChangeNotifier {
     _seenNotificationIds
       ..clear()
       ..addAll(notifications.map((n) => n.notificationId));
+  }
+
+  bool _shouldShowLocalNotification(InAppNotification notification) {
+    if (notification.isRead) return false;
+    if (notification.category == 'task_assigned') return true;
+
+    final metadata = notification.metadata ?? const <String, dynamic>{};
+    final isPoke = (metadata['kind']?.toString() ?? '').trim() == 'poke' ||
+        (metadata['type']?.toString() ?? '').toLowerCase().contains('poke');
+    final isPokeReminder =
+        (metadata['kind']?.toString() ?? '').trim() == 'reminder' &&
+        (metadata['source']?.toString() ?? '').trim() == 'poke';
+    return isPoke || isPokeReminder;
   }
 
   Future<void> _showLocalNotification(

@@ -5,11 +5,26 @@ import '../../../../shared/features/users/datasources/services/activity_event_se
 
 class SubtaskService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
-  final CollectionReference _subtaskCollection =
-      FirebaseFirestore.instance.collection('subtasks');
+  final CollectionReference _subtaskCollection = FirebaseFirestore.instance
+      .collection('subtasks');
   final ActivityEventService _activityEventService = ActivityEventService();
 
   static const Duration recycleBinRetention = Duration(days: 30);
+
+  Future<void> _assertParentTaskNotCompleted(String taskId) async {
+    final taskDoc = await FirebaseFirestore.instance
+        .collection('tasks')
+        .doc(taskId)
+        .get();
+    if (!taskDoc.exists) return;
+    final data = taskDoc.data();
+    final isDone = data?['taskIsDone'] as bool? ?? false;
+    if (isDone) {
+      throw StateError(
+        'This task is completed and locked. Subtasks can no longer be changed.',
+      );
+    }
+  }
 
   // ------------------------
   // STREAMS
@@ -44,19 +59,20 @@ class SubtaskService {
         .orderBy('subtaskDeletedAt', descending: true)
         .snapshots()
         .map((snapshot) {
-      final now = DateTime.now();
-      final subtasks = _mapSubtaskSnapshot(snapshot);
+          final now = DateTime.now();
+          final subtasks = _mapSubtaskSnapshot(snapshot);
 
-      // Auto-permanently delete expired subtasks
-      for (var subtask in subtasks) {
-        if (subtask.subtaskDeletedAt != null &&
-            now.difference(subtask.subtaskDeletedAt!).abs() > recycleBinRetention) {
-          _permanentlyDeleteSubtask(subtask.subtaskId);
-        }
-      }
+          // Auto-permanently delete expired subtasks
+          for (var subtask in subtasks) {
+            if (subtask.subtaskDeletedAt != null &&
+                now.difference(subtask.subtaskDeletedAt!).abs() >
+                    recycleBinRetention) {
+              _permanentlyDeleteSubtask(subtask.subtaskId);
+            }
+          }
 
-      return subtasks;
-    });
+          return subtasks;
+        });
   }
 
   // ------------------------
@@ -72,6 +88,7 @@ class SubtaskService {
   }) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("User not signed in");
+    await _assertParentTaskNotCompleted(subtaskTaskId);
 
     final subtaskRef = _subtaskCollection.doc();
     final newSubtask = Subtask(
@@ -95,20 +112,19 @@ class SubtaskService {
     );
 
     await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final taskRef = FirebaseFirestore.instance.collection('tasks').doc(subtaskTaskId);
+      final taskRef = FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(subtaskTaskId);
       final taskSnapshot = await transaction.get(taskRef);
 
       transaction.set(subtaskRef, newSubtask.toMap());
 
       if (taskSnapshot.exists) {
-        transaction.update(
-          taskRef,
-          {
-            'taskStats.taskSubtasksCount': FieldValue.increment(1),
-            if (initialDone)
-              'taskStats.taskSubtasksDoneCount': FieldValue.increment(1),
-          },
-        );
+        transaction.update(taskRef, {
+          'taskStats.taskSubtasksCount': FieldValue.increment(1),
+          if (initialDone)
+            'taskStats.taskSubtasksDoneCount': FieldValue.increment(1),
+        });
       }
     });
 
@@ -130,6 +146,7 @@ class SubtaskService {
   }
 
   Future<void> toggleSubtaskDoneStatus(Subtask subtask) async {
+    await _assertParentTaskNotCompleted(subtask.parentTaskId);
     final updatedSubtask = subtask.copyWith(
       subtaskIsDone: !subtask.subtaskIsDone,
       subtaskIsDoneAt: !subtask.subtaskIsDone ? DateTime.now() : null,
@@ -167,10 +184,15 @@ class SubtaskService {
   }
 
   Future<void> deleteSubtask(String subtaskId) async {
+    final subtask = await getSubtaskById(subtaskId);
+    if (subtask != null) {
+      await _assertParentTaskNotCompleted(subtask.parentTaskId);
+    }
     await _subtaskCollection.doc(subtaskId).delete();
   }
 
   Future<void> softDeleteSubtask(Subtask subtask) async {
+    await _assertParentTaskNotCompleted(subtask.parentTaskId);
     final updatedSubtask = subtask.copyWith(
       subtaskIsDeleted: true,
       subtaskDeletedAt: DateTime.now(),
@@ -208,6 +230,7 @@ class SubtaskService {
   }
 
   Future<void> restoreSubtask(Subtask subtask) async {
+    await _assertParentTaskNotCompleted(subtask.parentTaskId);
     final updatedSubtask = subtask.copyWith(
       subtaskIsDeleted: false,
       subtaskDeletedAt: null,
@@ -245,6 +268,7 @@ class SubtaskService {
   }
 
   Future<void> updateSubtask(String subtaskId, Subtask updatedSubtask) async {
+    await _assertParentTaskNotCompleted(updatedSubtask.parentTaskId);
     await _subtaskCollection.doc(subtaskId).update(updatedSubtask.toMap());
   }
 
@@ -311,7 +335,9 @@ class SubtaskService {
 
   List<Subtask> _mapSubtaskSnapshot(QuerySnapshot snapshot) {
     return snapshot.docs
-        .map((doc) => Subtask.fromMap(doc.data() as Map<String, dynamic>, doc.id))
+        .map(
+          (doc) => Subtask.fromMap(doc.data() as Map<String, dynamic>, doc.id),
+        )
         .toList();
   }
 }

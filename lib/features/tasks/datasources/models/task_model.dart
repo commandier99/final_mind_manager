@@ -65,6 +65,8 @@ class Task {
   // Acceptance status for assigned tasks
   final String?
   taskAcceptanceStatus; // 'pending', 'accepted', 'declined', null for self-assigned
+  final String? taskProposedAssigneeId;
+  final String? taskProposedAssigneeName;
 
   // Board task lane:
   // - 'drafts': manager/supervisor draft/prep space
@@ -73,6 +75,10 @@ class Task {
 
   // Task dependency IDs that must be completed before this task can start/done
   final List<String> taskDependencyIds;
+
+  // Revision linkage fields (optional)
+  final String? taskRevisionOfTaskId;
+  final String? taskRevisionOfSubmissionId;
 
   Task({
     required this.taskId,
@@ -109,8 +115,12 @@ class Task {
     this.taskNextRepeatDate,
     this.taskRepeatTime,
     this.taskAcceptanceStatus,
+    this.taskProposedAssigneeId,
+    this.taskProposedAssigneeName,
     this.taskBoardLane = lanePublished,
     this.taskDependencyIds = const [],
+    this.taskRevisionOfTaskId,
+    this.taskRevisionOfSubmissionId,
   });
 
   // Helper to map legacy Firestore statuses to core statuses
@@ -249,12 +259,16 @@ class Task {
       taskNextRepeatDate: (data['taskNextRepeatDate'] as Timestamp?)?.toDate(),
       taskRepeatTime: data['taskRepeatTime'] as String?,
       taskAcceptanceStatus: data['taskAcceptanceStatus'] as String?,
+      taskProposedAssigneeId: data['taskProposedAssigneeId'] as String?,
+      taskProposedAssigneeName: data['taskProposedAssigneeName'] as String?,
       taskBoardLane: normalizeTaskBoardLane(
         data['taskBoardLane'] as String? ?? lanePublished,
       ),
       taskDependencyIds: List<String>.from(
         data['taskDependencyIds'] ?? const [],
       ),
+      taskRevisionOfTaskId: data['taskRevisionOfTaskId'] as String?,
+      taskRevisionOfSubmissionId: data['taskRevisionOfSubmissionId'] as String?,
     );
   }
 
@@ -302,8 +316,16 @@ class Task {
       if (taskRepeatTime != null) 'taskRepeatTime': taskRepeatTime,
       if (taskAcceptanceStatus != null)
         'taskAcceptanceStatus': taskAcceptanceStatus,
+      if (taskProposedAssigneeId != null)
+        'taskProposedAssigneeId': taskProposedAssigneeId,
+      if (taskProposedAssigneeName != null)
+        'taskProposedAssigneeName': taskProposedAssigneeName,
       'taskBoardLane': normalizeTaskBoardLane(taskBoardLane),
       'taskDependencyIds': taskDependencyIds,
+      if (taskRevisionOfTaskId != null)
+        'taskRevisionOfTaskId': taskRevisionOfTaskId,
+      if (taskRevisionOfSubmissionId != null)
+        'taskRevisionOfSubmissionId': taskRevisionOfSubmissionId,
     };
   }
 
@@ -342,8 +364,12 @@ class Task {
     DateTime? taskNextRepeatDate,
     String? taskRepeatTime,
     String? taskAcceptanceStatus,
+    String? taskProposedAssigneeId,
+    String? taskProposedAssigneeName,
     String? taskBoardLane,
     List<String>? taskDependencyIds,
+    String? taskRevisionOfTaskId,
+    String? taskRevisionOfSubmissionId,
   }) {
     return Task(
       taskId: taskId ?? this.taskId,
@@ -383,10 +409,17 @@ class Task {
       taskNextRepeatDate: taskNextRepeatDate ?? this.taskNextRepeatDate,
       taskRepeatTime: taskRepeatTime ?? this.taskRepeatTime,
       taskAcceptanceStatus: taskAcceptanceStatus ?? this.taskAcceptanceStatus,
+      taskProposedAssigneeId:
+          taskProposedAssigneeId ?? this.taskProposedAssigneeId,
+      taskProposedAssigneeName:
+          taskProposedAssigneeName ?? this.taskProposedAssigneeName,
       taskBoardLane: normalizeTaskBoardLane(
         taskBoardLane ?? this.taskBoardLane,
       ),
       taskDependencyIds: taskDependencyIds ?? this.taskDependencyIds,
+      taskRevisionOfTaskId: taskRevisionOfTaskId ?? this.taskRevisionOfTaskId,
+      taskRevisionOfSubmissionId:
+          taskRevisionOfSubmissionId ?? this.taskRevisionOfSubmissionId,
     );
   }
 

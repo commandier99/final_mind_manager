@@ -3,7 +3,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../datasources/models/task_model.dart';
-import '../../../datasources/services/task_appeal_service.dart';
+import '../../../datasources/services/task_application_service.dart';
 import '../../pages/task_details_page.dart';
 import '../dialogs/edit_task_dialog.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
@@ -48,7 +48,8 @@ class TaskCard extends StatefulWidget {
 
 class _TaskCardState extends State<TaskCard> {
   late String _currentUserId;
-  final TaskAppealService _taskAppealService = TaskAppealService();
+  final TaskApplicationService _taskApplicationService =
+      TaskApplicationService();
 
   @override
   void initState() {
@@ -76,29 +77,37 @@ class _TaskCardState extends State<TaskCard> {
     return board == null || (board.memberIds.length > 1);
   }
 
-  void _showAppealDialog() {
-    final appealController = TextEditingController();
+  bool _canCurrentUserApply() {
+    if (widget.task.taskBoardId.isEmpty) return true;
+    final boardProvider = context.read<BoardProvider>();
+    final board = boardProvider.getBoardById(widget.task.taskBoardId);
+    if (board == null) return true;
+    return _currentUserId != board.boardManagerId;
+  }
+
+  void _showApplicationDialog() {
+    final applicationController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Express Your Interest'),
+        title: const Text('Apply for Task'),
         content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Why should you be assigned to this task?',
+                'Why are you a good fit for this task?',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
               const SizedBox(height: 12),
               TextField(
-                controller: appealController,
+                controller: applicationController,
                 maxLines: 5,
                 minLines: 3,
                 decoration: InputDecoration(
-                  hintText: 'Share your interest and relevant skills...',
+                  hintText: 'Share relevant skills or context...',
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -116,11 +125,11 @@ class _TaskCardState extends State<TaskCard> {
           ElevatedButton.icon(
             onPressed: () {
               Navigator.pop(context);
-              _submitAppeal(appealController.text);
-              appealController.dispose();
+              _submitApplication(applicationController.text);
+              applicationController.dispose();
             },
-            icon: const Icon(Icons.thumb_up),
-            label: const Text('Submit'),
+            icon: const Icon(Icons.how_to_reg),
+            label: const Text('Apply'),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               foregroundColor: Colors.white,
@@ -131,32 +140,43 @@ class _TaskCardState extends State<TaskCard> {
     );
   }
 
-  Stream<bool> _isUserInterestedStream() {
-    return _taskAppealService.hasUserAppealed(
+  Stream<bool> _isUserAppliedStream() {
+    return _taskApplicationService.hasUserApplied(
       widget.task.taskId,
       _currentUserId,
     );
   }
 
-  Future<void> _submitAppeal(String appealText) async {
-    await _taskAppealService.submitAppeal(
-      taskId: widget.task.taskId,
-      userId: _currentUserId,
-      appealText: appealText,
-    );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ Interest submitted!'),
-          backgroundColor: Colors.green,
-        ),
+  Future<void> _submitApplication(String applicationText) async {
+    try {
+      await _taskApplicationService.submitApplication(
+        taskId: widget.task.taskId,
+        userId: _currentUserId,
+        applicationText: applicationText,
       );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Application submitted.'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You cannot apply to this task.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  Future<void> _removeAppeal() async {
-    await _taskAppealService.removeUserAppeals(
+  Future<void> _withdrawApplication() async {
+    await _taskApplicationService.removeUserApplications(
       taskId: widget.task.taskId,
       userId: _currentUserId,
     );
@@ -164,7 +184,7 @@ class _TaskCardState extends State<TaskCard> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Interest removed'),
+          content: Text('Application withdrawn'),
           duration: Duration(seconds: 1),
         ),
       );
@@ -335,16 +355,21 @@ class _TaskCardState extends State<TaskCard> {
     final cardBaseColor = Theme.of(context).cardColor;
     final borderColor = isFocused ? statusColor : Colors.grey.shade300;
 
-    // Check if user can edit (task owner or board manager)
+    // Board tasks: manager/supervisor can edit. Personal tasks: owner can edit.
     bool canEditTask = widget.task.taskOwnerId == _currentUserId;
-    if (!canEditTask && widget.task.taskBoardId.isNotEmpty) {
+    if (widget.task.taskBoardId.isNotEmpty) {
+      canEditTask = false;
       final boardProvider = context.read<BoardProvider>();
       final board = boardProvider.getBoardById(widget.task.taskBoardId);
-      if (board?.boardManagerId == _currentUserId) {
+      if (board?.isManager(_currentUserId) == true ||
+          board?.isSupervisor(_currentUserId) == true) {
         canEditTask = true;
       }
     }
-    final hasDeleteAction = widget.onDelete != null;
+    if (widget.task.taskIsDone) {
+      canEditTask = false;
+    }
+    final hasDeleteAction = widget.onDelete != null && !widget.task.taskIsDone;
     final hasSwipeActions = canEditTask || hasDeleteAction;
     final actionCount = (canEditTask ? 1 : 0) + (hasDeleteAction ? 1 : 0);
 
@@ -367,7 +392,7 @@ class _TaskCardState extends State<TaskCard> {
                             width: 60,
                             height: 60,
                             decoration: BoxDecoration(
-                              color: Colors.blue.shade400,
+                              color: Colors.amber.shade500,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Material(
@@ -659,7 +684,8 @@ class _TaskCardState extends State<TaskCard> {
                                   const SizedBox(height: 3),
                                   // Compact badges row
                                   if (widget.task.taskRequiresApproval ||
-                                      widget.task.taskAcceptanceStatus != null ||
+                                      widget.task.taskAcceptanceStatus !=
+                                          null ||
                                       widget.task.taskDependencyIds.isNotEmpty)
                                     SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
@@ -812,18 +838,19 @@ class _TaskCardState extends State<TaskCard> {
                                 )
                               else if (!showFocusAction &&
                                   _isTaskUnassigned() &&
-                                  _shouldAllowUnassigned())
+                                  _shouldAllowUnassigned() &&
+                                  _canCurrentUserApply())
                                 StreamBuilder<bool>(
-                                  stream: _isUserInterestedStream(),
+                                  stream: _isUserAppliedStream(),
                                   builder: (context, snapshot) {
-                                    final isInterested = snapshot.data ?? false;
+                                    final isApplied = snapshot.data ?? false;
 
                                     return GestureDetector(
                                       onTap: () {
-                                        if (isInterested) {
-                                          _removeAppeal();
+                                        if (isApplied) {
+                                          _withdrawApplication();
                                         } else {
-                                          _showAppealDialog();
+                                          _showApplicationDialog();
                                         }
                                       },
                                       child: Container(
@@ -832,24 +859,24 @@ class _TaskCardState extends State<TaskCard> {
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: isInterested
+                                          color: isApplied
                                               ? Colors.green[100]
                                               : Colors.grey[100],
                                           borderRadius: BorderRadius.circular(
                                             6,
                                           ),
                                           border: Border.all(
-                                            color: isInterested
+                                            color: isApplied
                                                 ? Colors.green
                                                 : Colors.grey[300]!,
                                           ),
                                         ),
                                         child: Icon(
-                                          isInterested
-                                              ? Icons.thumb_up
-                                              : Icons.thumb_up_outlined,
+                                          isApplied
+                                              ? Icons.how_to_reg
+                                              : Icons.app_registration,
                                           size: 16,
-                                          color: isInterested
+                                          color: isApplied
                                               ? Colors.green
                                               : Colors.grey[600],
                                         ),

@@ -3,14 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/providers/task_provider.dart';
-import '../../../datasources/services/task_appeal_service.dart';
+import '../../../datasources/services/task_application_service.dart';
 import '../../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 
-class TaskAppealsSection extends StatelessWidget {
+class TaskApplicationsSection extends StatelessWidget {
   final String taskId;
 
-  const TaskAppealsSection({super.key, required this.taskId});
+  const TaskApplicationsSection({super.key, required this.taskId});
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +28,7 @@ class TaskAppealsSection extends StatelessWidget {
         }
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: TaskAppealService().streamAppeals(task.taskId),
+          stream: TaskApplicationService().streamApplications(task.taskId),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
@@ -37,8 +37,8 @@ class TaskAppealsSection extends StatelessWidget {
               );
             }
 
-            final appeals = snapshot.data?.docs ?? const [];
-            if (appeals.isEmpty) {
+            final applications = snapshot.data?.docs ?? const [];
+            if (applications.isEmpty) {
               return Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(14),
@@ -71,7 +71,7 @@ class TaskAppealsSection extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'No appeals submitted yet.\nNew appeals from members will show up here.',
+                        'No applications submitted yet.\nNew applications from members will show up here.',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.35,
@@ -86,18 +86,20 @@ class TaskAppealsSection extends StatelessWidget {
             }
 
             return Column(
-              children: appeals.map((doc) {
+              children: applications.map((doc) {
                 final data = doc.data();
                 final userId = data['userId'] as String?;
-                final appealText = (data['appealText'] ?? '').toString();
+                final applicationText =
+                    (data['applicationText'] ?? data['appealText'] ?? '')
+                        .toString();
                 final createdAt = data['createdAt'];
 
                 if (userId == null) return const SizedBox.shrink();
-                return _AppealCard(
+                return _ApplicationCard(
                   task: task!,
-                  appealDocId: doc.id,
+                  applicationDocId: doc.id,
                   userId: userId,
-                  appealText: appealText,
+                  applicationText: applicationText,
                   createdAt: createdAt,
                 );
               }).toList(),
@@ -109,26 +111,26 @@ class TaskAppealsSection extends StatelessWidget {
   }
 }
 
-class _AppealCard extends StatefulWidget {
+class _ApplicationCard extends StatefulWidget {
   final Task task;
-  final String appealDocId;
+  final String applicationDocId;
   final String userId;
-  final String appealText;
+  final String applicationText;
   final dynamic createdAt;
 
-  const _AppealCard({
+  const _ApplicationCard({
     required this.task,
-    required this.appealDocId,
+    required this.applicationDocId,
     required this.userId,
-    required this.appealText,
+    required this.applicationText,
     required this.createdAt,
   });
 
   @override
-  State<_AppealCard> createState() => _AppealCardState();
+  State<_ApplicationCard> createState() => _ApplicationCardState();
 }
 
-class _AppealCardState extends State<_AppealCard> {
+class _ApplicationCardState extends State<_ApplicationCard> {
   UserModel? _user;
 
   @override
@@ -162,14 +164,14 @@ class _AppealCardState extends State<_AppealCard> {
   }
 
   Future<void> _decline() async {
-    await TaskAppealService().deleteAppeal(
+    await TaskApplicationService().deleteApplication(
       taskId: widget.task.taskId,
-      appealDocId: widget.appealDocId,
+      applicationDocId: widget.applicationDocId,
     );
     if (!mounted) return;
     ScaffoldMessenger.of(
       context,
-    ).showSnackBar(const SnackBar(content: Text('Appeal removed.')));
+    ).showSnackBar(const SnackBar(content: Text('Application removed.')));
   }
 
   String _formatDate(dynamic timestamp) {
@@ -230,9 +232,9 @@ class _AppealCardState extends State<_AppealCard> {
           ),
           const SizedBox(height: 8),
           Text(
-            widget.appealText.trim().isEmpty
+            widget.applicationText.trim().isEmpty
                 ? 'No message provided.'
-                : widget.appealText,
+                : widget.applicationText,
             style: TextStyle(
               fontSize: 12,
               color: Colors.grey.shade800,
@@ -266,3 +268,4 @@ class _AppealCardState extends State<_AppealCard> {
     );
   }
 }
+

@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
-import '../models/task_model.dart';
 import '../models/task_submission_model.dart';
+import '../models/task_model.dart';
+import '../models/task_stats_model.dart';
 import '../../../boards/datasources/models/board_roles.dart';
+import '../../../notifications/datasources/helpers/notification_helper.dart';
 import '../../../../shared/utilities/cloudinary_service.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 
@@ -15,6 +17,18 @@ class TaskSubmissionService {
 
   CollectionReference get _submissions =>
       _firestore.collection('task_submissions');
+
+  Future<void> _assertTaskOpenForMutation(String taskId) async {
+    final taskDoc = await _firestore.collection('tasks').doc(taskId).get();
+    if (!taskDoc.exists) {
+      throw Exception('Task not found');
+    }
+    final taskData = taskDoc.data() as Map<String, dynamic>;
+    final isDone = taskData['taskIsDone'] as bool? ?? false;
+    if (isDone) {
+      throw Exception('This task is completed and locked.');
+    }
+  }
 
   // ========================
   // CREATE SUBMISSION
@@ -34,6 +48,7 @@ class TaskSubmissionService {
 
       final currentUser = _auth.currentUser;
       if (currentUser == null) throw Exception('User not authenticated');
+      await _assertTaskOpenForMutation(taskId);
 
       // Get user data
       final userDoc = await _firestore
@@ -122,34 +137,23 @@ class TaskSubmissionService {
 
       print('📤 [Upload] Submission saved to Firestore');
 
-      // Update task with submission ID.
-      // Completion (taskIsDone) is execution state, approval is review state.
+      // Link latest submission to task without mutating execution state.
       final taskRef = _firestore.collection('tasks').doc(taskId);
-      final taskDoc = await taskRef.get();
-      final taskData = taskDoc.data();
-      final currentStatus = Task.normalizeTaskStatus(
-        taskData?['taskStatus'] as String? ?? Task.statusToDo,
-      );
-      final requiresApproval =
-          taskData?['taskRequiresApproval'] as bool? ?? false;
-      final updates = <String, dynamic>{'taskSubmissionId': submissionId};
-      if (requiresApproval) {
-        // Member completed execution; manager approval still pending.
-        updates['taskStatus'] = Task.statusCompleted;
-        updates['taskIsDone'] = true;
-        updates['taskIsDoneAt'] = Timestamp.fromDate(DateTime.now());
-        updates['taskOutcome'] = Task.outcomeNone;
-      } else if (currentStatus != Task.statusCompleted) {
-        updates['taskStatus'] = Task.statusPaused;
+      await taskRef.update({'taskSubmissionId': submissionId});
+
+      // Load task metadata once for activity logging + reviewer notifications.
+      String? boardId;
+      Map<String, dynamic>? taskData;
+      try {
+        final taskDoc = await _firestore.collection('tasks').doc(taskId).get();
+        taskData = taskDoc.data();
+        boardId = taskData?['taskBoardId'] as String?;
+      } catch (_) {
+        // Non-critical: keep submission creation successful.
       }
-      await taskRef.update(updates);
 
       // Log activity if task is part of a board
       try {
-        final taskDoc = await _firestore.collection('tasks').doc(taskId).get();
-        final taskData = taskDoc.data();
-        final boardId = taskData?['taskBoardId'];
-
         await _activityEventService.logEvent(
           userId: currentUser.uid,
           userName: userData?['userName'] ?? 'Unknown',
@@ -167,6 +171,19 @@ class TaskSubmissionService {
         print('⚠️ Failed to log activity: $e');
       }
 
+      // Notify reviewers that a member submitted work.
+      try {
+        await _notifySubmissionReviewers(
+          taskId: taskId,
+          submissionId: submissionId,
+          taskData: taskData,
+          submitterId: currentUser.uid,
+          submitterName: userData?['userName'] ?? 'Unknown',
+        );
+      } catch (e) {
+        print('⚠️ Failed to notify reviewers: $e');
+      }
+
       print(
         '✅ Submission created: $submissionId with ${uploadedFiles.length} files',
       );
@@ -174,6 +191,71 @@ class TaskSubmissionService {
     } catch (e) {
       print('⚠️ Error creating submission: $e');
       rethrow;
+    }
+  }
+
+  Future<void> _notifySubmissionReviewers({
+    required String taskId,
+    required String submissionId,
+    required Map<String, dynamic>? taskData,
+    required String submitterId,
+    required String submitterName,
+  }) async {
+    final effectiveTaskData =
+        taskData ??
+        (await _firestore.collection('tasks').doc(taskId).get()).data();
+    if (effectiveTaskData == null) return;
+
+    final taskTitle = (effectiveTaskData['taskTitle'] as String? ?? 'Task')
+        .trim();
+    final taskOwnerId = (effectiveTaskData['taskOwnerId'] as String? ?? '')
+        .trim();
+    final taskBoardId = (effectiveTaskData['taskBoardId'] as String? ?? '')
+        .trim();
+
+    final recipientIds = <String>{};
+    if (taskOwnerId.isNotEmpty && taskOwnerId != submitterId) {
+      recipientIds.add(taskOwnerId);
+    }
+
+    if (taskBoardId.isNotEmpty) {
+      final boardDoc = await _firestore
+          .collection('boards')
+          .doc(taskBoardId)
+          .get();
+      if (boardDoc.exists) {
+        final boardData = boardDoc.data() as Map<String, dynamic>;
+        final managerId = (boardData['boardManagerId'] as String? ?? '').trim();
+        if (managerId.isNotEmpty && managerId != submitterId) {
+          recipientIds.add(managerId);
+        }
+        final memberRoles = Map<String, dynamic>.from(
+          boardData['memberRoles'] ?? const <String, dynamic>{},
+        );
+        memberRoles.forEach((userId, rawRole) {
+          final role = BoardRoles.normalize(rawRole?.toString());
+          if (role == BoardRoles.supervisor && userId != submitterId) {
+            recipientIds.add(userId);
+          }
+        });
+      }
+    }
+
+    for (final recipientId in recipientIds) {
+      await NotificationHelper.createNotificationPair(
+        userId: recipientId,
+        title: 'New Submission',
+        message: '$submitterName submitted work for "$taskTitle".',
+        category: NotificationHelper.categoryApproval,
+        relatedId: submissionId,
+        metadata: {
+          'taskId': taskId,
+          'submissionId': submissionId,
+          'submitterId': submitterId,
+          'submitterName': submitterName,
+          if (taskBoardId.isNotEmpty) 'boardId': taskBoardId,
+        },
+      );
     }
   }
 
@@ -278,7 +360,7 @@ class TaskSubmissionService {
   // DELETE SUBMISSION
   // ========================
 
-  /// Deletes a submission document and updates the related task.
+  /// Deletes a submission document and unlinks it from task if it was the latest one.
   /// Note: Cloudinary deletion is not supported by cloudinary_public; files remain in storage.
   Future<void> deleteSubmission(String submissionId) async {
     try {
@@ -293,32 +375,19 @@ class TaskSubmissionService {
           data['submittedByName'] as String? ?? 'Unknown';
       final List<dynamic> files = (data['files'] as List<dynamic>?) ?? [];
 
+      await _assertTaskOpenForMutation(taskId);
+
       // Delete submission document
       await _submissions.doc(submissionId).delete();
 
-      // Update task: clear submissionId and reset status if needed
+      // Update task: clear submission link only.
       final taskRef = _firestore.collection('tasks').doc(taskId);
       final taskDoc = await taskRef.get();
       if (taskDoc.exists) {
         final taskData = taskDoc.data() as Map<String, dynamic>;
         final currentSubmissionId = taskData['taskSubmissionId'] as String?;
-        final currentStatus = Task.normalizeTaskStatus(
-          taskData['taskStatus'] as String? ?? Task.statusToDo,
-        );
-        final updates = <String, dynamic>{};
-
         if (currentSubmissionId == submissionId) {
-          updates['taskSubmissionId'] = null;
-        }
-        if (currentStatus == Task.statusPaused ||
-            currentStatus == Task.statusCompleted) {
-          updates['taskStatus'] = Task.statusInProgress;
-          updates['taskIsDone'] = false;
-          updates['taskIsDoneAt'] = null;
-          updates['taskOutcome'] = Task.outcomeNone;
-        }
-        if (updates.isNotEmpty) {
-          await taskRef.update(updates);
+          await taskRef.update({'taskSubmissionId': null});
         }
       }
 
@@ -367,6 +436,9 @@ class TaskSubmissionService {
           .get();
       if (!taskDoc.exists) throw Exception('Task not found');
       final taskData = taskDoc.data() as Map<String, dynamic>;
+      if ((taskData['taskIsDone'] as bool? ?? false) == true) {
+        throw Exception('This task is completed and locked.');
+      }
       final taskOwnerId = taskData['taskOwnerId'] as String? ?? '';
       final taskBoardId = taskData['taskBoardId'] as String? ?? '';
 
@@ -396,55 +468,46 @@ class TaskSubmissionService {
         );
       }
 
+      String? revisionTaskId;
+      final normalizedStatus = TaskSubmission.normalizeStatus(status);
+      if (normalizedStatus == TaskSubmission.statusRejected ||
+          normalizedStatus == TaskSubmission.statusRevisionRequested) {
+        revisionTaskId = await _ensureRevisionTask(
+          submission: submission,
+          taskData: taskData,
+          reviewerId: currentUser.uid,
+          feedback: feedback,
+        );
+      }
+
       await _submissions.doc(submissionId).update({
-        'status': status,
+        'status': normalizedStatus,
         if (feedback != null) 'feedback': feedback,
+        if (revisionTaskId != null) 'revisionTaskId': revisionTaskId,
         'reviewedAt': Timestamp.fromDate(DateTime.now()),
         'reviewedBy': currentUser.uid,
       });
 
-      // Update task status based on review.
-      {
-        String taskStatus;
-        bool taskIsDone;
-        String taskOutcome;
-        switch (status) {
-          case 'approved':
-            taskStatus = Task.statusCompleted;
-            taskIsDone = true;
-            taskOutcome = Task.outcomeSuccessful;
-            break;
-          case 'rejected':
-            taskStatus = Task.statusInProgress;
-            taskIsDone = false;
-            taskOutcome = Task.outcomeNone;
-            break;
-          case 'revision_requested':
-            taskStatus = Task.statusInProgress;
-            taskIsDone = false;
-            taskOutcome = Task.outcomeNone;
-            break;
-          default:
-            taskStatus = Task.statusInProgress;
-            taskIsDone = false;
-            taskOutcome = Task.outcomeNone;
-        }
-
-        await _firestore.collection('tasks').doc(submission.taskId).update({
-          'taskStatus': taskStatus,
-          'taskIsDone': taskIsDone,
-          'taskIsDoneAt': taskIsDone
-              ? Timestamp.fromDate(DateTime.now())
-              : null,
-          'taskOutcome': taskOutcome,
-        });
+      try {
+        await _notifySubmissionResult(
+          submission: submission,
+          status: normalizedStatus,
+          reviewerId: currentUser.uid,
+          taskData: taskData,
+          feedback: feedback,
+        );
+      } catch (e) {
+        print('⚠️ Failed to notify submitter of review result: $e');
       }
+
+      // Intentionally do not mutate task execution fields here.
+      // Submission review is separate from taskStatus/taskIsDone/taskOutcome.
 
       // Log review activity for dashboard analytics.
       try {
         final reviewer = _auth.currentUser;
         if (reviewer != null) {
-          final reviewType = switch (status) {
+          final reviewType = switch (normalizedStatus) {
             'approved' => 'submission_approved',
             'rejected' => 'submission_rejected',
             'revision_requested' => 'submission_revision_requested',
@@ -457,8 +520,11 @@ class TaskSubmissionService {
             activityType: reviewType,
             boardId: taskBoardId,
             taskId: submission.taskId,
-            description: 'Reviewed a task submission: $status',
-            metadata: {'submissionId': submissionId, 'status': status},
+            description: 'Reviewed a task submission: $normalizedStatus',
+            metadata: {
+              'submissionId': submissionId,
+              'status': normalizedStatus,
+            },
           );
         }
       } catch (e) {
@@ -470,5 +536,111 @@ class TaskSubmissionService {
       print('⚠️ Error reviewing submission: $e');
       rethrow;
     }
+  }
+
+  Future<String> _ensureRevisionTask({
+    required TaskSubmission submission,
+    required Map<String, dynamic> taskData,
+    required String reviewerId,
+    String? feedback,
+  }) async {
+    final existing = await _firestore
+        .collection('tasks')
+        .where('taskRevisionOfSubmissionId', isEqualTo: submission.submissionId)
+        .where('taskIsDeleted', isEqualTo: false)
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty) {
+      return existing.docs.first.id;
+    }
+
+    final taskTitle = (taskData['taskTitle'] as String? ?? 'Task').trim();
+    final taskDescription = (taskData['taskDescription'] as String? ?? '')
+        .trim();
+    final boardId = (taskData['taskBoardId'] as String? ?? '').trim();
+    final boardTitle = (taskData['taskBoardTitle'] as String?)?.trim();
+    final assignedBy = (taskData['taskAssignedBy'] as String?)?.trim();
+    final assigneeName = (submission.submittedByName).trim();
+
+    final revisionTitle = 'Revision: $taskTitle';
+    final feedbackText = feedback?.trim();
+    final revisionDescription = <String>[
+      'Follow-up task for submission ${submission.submissionId}.',
+      if (feedbackText != null && feedbackText.isNotEmpty)
+        'Feedback: $feedbackText',
+      if (taskDescription.isNotEmpty) '',
+      if (taskDescription.isNotEmpty) 'Original task notes: $taskDescription',
+    ].join('\n');
+
+    final revisionTaskRef = _firestore.collection('tasks').doc();
+    final revisionTask = Task(
+      taskId: revisionTaskRef.id,
+      taskBoardId: boardId,
+      taskBoardTitle: boardTitle,
+      taskOwnerId: reviewerId,
+      taskOwnerName: _auth.currentUser?.displayName ?? 'Reviewer',
+      taskAssignedBy: assignedBy != null && assignedBy.isNotEmpty
+          ? assignedBy
+          : reviewerId,
+      taskAssignedTo: submission.submittedBy,
+      taskAssignedToName: assigneeName.isNotEmpty ? assigneeName : 'Unknown',
+      taskCreatedAt: DateTime.now(),
+      taskTitle: revisionTitle,
+      taskDescription: revisionDescription,
+      taskStats: TaskStats(),
+      taskStatus: Task.statusToDo,
+      taskIsDone: false,
+      taskIsDoneAt: null,
+      taskFailed: false,
+      taskOutcome: Task.outcomeNone,
+      taskAllowsSubmissions: true,
+      taskRequiresSubmission: true,
+      taskRequiresApproval: true,
+      taskSubmissionId: null,
+      taskBoardLane: Task.lanePublished,
+      taskRevisionOfTaskId: submission.taskId,
+      taskRevisionOfSubmissionId: submission.submissionId,
+    );
+
+    await revisionTaskRef.set(revisionTask.toMap());
+
+    return revisionTaskRef.id;
+  }
+
+  Future<void> _notifySubmissionResult({
+    required TaskSubmission submission,
+    required String status,
+    required String reviewerId,
+    required Map<String, dynamic> taskData,
+    String? feedback,
+  }) async {
+    if (submission.submittedBy == reviewerId) return;
+
+    final taskTitle = (taskData['taskTitle'] as String? ?? 'Task').trim();
+    final boardId = (taskData['taskBoardId'] as String? ?? '').trim();
+    final feedbackText = feedback?.trim();
+
+    final resultText = switch (status) {
+      TaskSubmission.statusApproved => 'approved',
+      TaskSubmission.statusRejected => 'rejected',
+      TaskSubmission.statusRevisionRequested => 'sent back for revision',
+      _ => 'reviewed',
+    };
+
+    await NotificationHelper.createNotificationPair(
+      userId: submission.submittedBy,
+      title: 'Submission Update',
+      message: 'Your submission for "$taskTitle" was $resultText.',
+      category: NotificationHelper.categoryApproval,
+      relatedId: submission.submissionId,
+      metadata: {
+        'taskId': submission.taskId,
+        'submissionId': submission.submissionId,
+        'status': status,
+        if (boardId.isNotEmpty) 'boardId': boardId,
+        if (feedbackText != null && feedbackText.isNotEmpty)
+          'feedback': feedbackText,
+      },
+    );
   }
 }

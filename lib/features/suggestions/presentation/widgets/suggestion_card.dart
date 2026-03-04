@@ -4,13 +4,19 @@ import '../../datasources/models/suggestion_model.dart';
 class SuggestionCard extends StatelessWidget {
   final Suggestion suggestion;
   final VoidCallback? onConvert;
+  final VoidCallback? onDelete;
   final bool isConverting;
+  final bool isDeleting;
+  final bool canDelete;
 
   const SuggestionCard({
     super.key,
     required this.suggestion,
     this.onConvert,
+    this.onDelete,
     this.isConverting = false,
+    this.isDeleting = false,
+    this.canDelete = false,
   });
 
   @override
@@ -79,6 +85,21 @@ class SuggestionCard extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                   ),
                 ),
+                if (canDelete) ...[
+                  const SizedBox(width: 6),
+                  OutlinedButton.icon(
+                    onPressed: isDeleting ? null : onDelete,
+                    icon: Icon(
+                      isDeleting ? Icons.hourglass_top : Icons.delete_outline,
+                      size: 16,
+                    ),
+                    label: Text(isDeleting ? 'Deleting' : 'Delete'),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: Colors.red.shade700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ],

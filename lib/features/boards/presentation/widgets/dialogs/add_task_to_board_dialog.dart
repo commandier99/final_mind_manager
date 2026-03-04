@@ -247,13 +247,31 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
+        taskProposedAssigneeId: widget.board.boardType == 'personal'
+            ? null
+            : (_assignedToUserId != null &&
+                      _assignedToUserId != widget.userId
+                  ? _assignedToUserId
+                  : null),
+        taskProposedAssigneeName: widget.board.boardType == 'personal'
+            ? null
+            : (_assignedToUserId != null &&
+                      _assignedToUserId != widget.userId
+                  ? _assignedToUserName
+                  : null),
         // Personal boards always assign to board manager.
         taskAssignedTo: widget.board.boardType == 'personal'
             ? widget.board.boardManagerId
-            : (_assignedToUserId ?? 'None'),
+            : ((_assignedToUserId != null &&
+                      _assignedToUserId != widget.userId)
+                  ? 'None'
+                  : (_assignedToUserId ?? 'None')),
         taskAssignedToName: widget.board.boardType == 'personal'
             ? (_boardMembers[widget.board.boardManagerId] ?? _currentUserName)
-            : (_assignedToUserName ?? 'Unassigned'),
+            : ((_assignedToUserId != null &&
+                      _assignedToUserId != widget.userId)
+                  ? 'Unassigned'
+                  : (_assignedToUserName ?? 'Unassigned')),
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),

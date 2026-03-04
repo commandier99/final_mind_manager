@@ -1,11 +1,19 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../models/suggestion_model.dart';
+import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
+import '../../../notifications/datasources/helpers/notification_helper.dart';
 
 class SuggestionService {
   final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
+  final ActivityEventService _activityEventService;
 
-  SuggestionService({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+  SuggestionService({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _auth = auth ?? FirebaseAuth.instance,
+      _activityEventService = ActivityEventService();
 
   CollectionReference<Map<String, dynamic>> get _suggestions =>
       _firestore.collection('suggestions');
@@ -68,6 +76,53 @@ class SuggestionService {
 
   Future<void> addSuggestion(Suggestion suggestion) async {
     await _suggestions.doc(suggestion.suggestionId).set(suggestion.toMap());
+    await _activityEventService.logEvent(
+      userId: suggestion.suggestionAuthorId,
+      userName: suggestion.suggestionAuthorName,
+      userProfilePicture: suggestion.suggestionAuthorProfilePicture,
+      activityType: 'suggestion_created',
+      boardId: suggestion.suggestionBoardId,
+      description: 'created a suggestion',
+      metadata: {
+        'suggestionId': suggestion.suggestionId,
+        'suggestionTitle': suggestion.suggestionTitle,
+      },
+    );
+
+    try {
+      final boardDoc = await _firestore
+          .collection('boards')
+          .doc(suggestion.suggestionBoardId)
+          .get();
+      final boardData = boardDoc.data();
+      final managerId = (boardData?['boardManagerId'] as String? ?? '').trim();
+      final boardTitle =
+          (boardData?['boardTitle'] as String? ?? 'Untitled Board').trim();
+
+      if (managerId.isNotEmpty && managerId != suggestion.suggestionAuthorId) {
+        await NotificationHelper.createInAppOnly(
+          userId: managerId,
+          title: 'New Suggestion',
+          message:
+              '${suggestion.suggestionAuthorName} submitted a suggestion on $boardTitle: ${suggestion.suggestionTitle}',
+          category: NotificationHelper.categoryReminder,
+          relatedId: suggestion.suggestionId,
+          metadata: {
+            'type': 'suggestion_created',
+            'suggestionId': suggestion.suggestionId,
+            'suggestionTitle': suggestion.suggestionTitle,
+            'suggestionDescription': suggestion.suggestionDescription,
+            'boardId': suggestion.suggestionBoardId,
+            'boardTitle': boardTitle,
+            'authorId': suggestion.suggestionAuthorId,
+            'authorName': suggestion.suggestionAuthorName,
+          },
+        );
+      }
+    } catch (e) {
+      // Notification failure should not block suggestion creation.
+      debugPrint('[SuggestionService] Failed to notify board manager: $e');
+    }
   }
 
   Future<void> updateSuggestion(Suggestion suggestion) async {
@@ -76,13 +131,44 @@ class SuggestionService {
         .update(
           suggestion.copyWith(suggestionUpdatedAt: DateTime.now()).toMap(),
         );
+    await _activityEventService.logEvent(
+      userId: suggestion.suggestionAuthorId,
+      userName: suggestion.suggestionAuthorName,
+      userProfilePicture: suggestion.suggestionAuthorProfilePicture,
+      activityType: 'suggestion_updated',
+      boardId: suggestion.suggestionBoardId,
+      description: 'updated a suggestion',
+      metadata: {
+        'suggestionId': suggestion.suggestionId,
+        'suggestionTitle': suggestion.suggestionTitle,
+      },
+    );
   }
 
   Future<void> softDeleteSuggestion(String suggestionId) async {
+    final doc = await _suggestions.doc(suggestionId).get();
+    final data = doc.data();
     await _suggestions.doc(suggestionId).update({
       'suggestionIsDeleted': true,
       'suggestionDeletedAt': Timestamp.now(),
     });
+    if (data != null) {
+      await _activityEventService.logEvent(
+        userId:
+            data['suggestionAuthorId'] as String? ??
+            _auth.currentUser?.uid ??
+            '',
+        userName: data['suggestionAuthorName'] as String? ?? 'Unknown User',
+        userProfilePicture: data['suggestionAuthorProfilePicture'] as String?,
+        activityType: 'suggestion_deleted',
+        boardId: data['suggestionBoardId'] as String?,
+        description: 'deleted a suggestion',
+        metadata: {
+          'suggestionId': suggestionId,
+          'suggestionTitle': data['suggestionTitle'] as String? ?? '',
+        },
+      );
+    }
   }
 
   Future<void> reviewSuggestion({
@@ -96,6 +182,9 @@ class SuggestionService {
       throw ArgumentError('Invalid suggestion review status: $status');
     }
 
+    final doc = await _suggestions.doc(suggestionId).get();
+    final data = doc.data();
+
     await _suggestions.doc(suggestionId).update({
       'suggestionStatus': status,
       'suggestionReviewerId': reviewerId,
@@ -104,5 +193,23 @@ class SuggestionService {
       if (convertedTaskId != null) 'suggestionConvertedTaskId': convertedTaskId,
       'suggestionUpdatedAt': Timestamp.now(),
     });
+
+    if (data != null) {
+      final reviewerName = _auth.currentUser?.displayName ?? 'Reviewer';
+      await _activityEventService.logEvent(
+        userId: reviewerId,
+        userName: reviewerName,
+        userProfilePicture: _auth.currentUser?.photoURL,
+        activityType: 'suggestion_reviewed',
+        boardId: data['suggestionBoardId'] as String?,
+        description: 'reviewed a suggestion',
+        metadata: {
+          'suggestionId': suggestionId,
+          'suggestionTitle': data['suggestionTitle'] as String? ?? '',
+          'status': status,
+          if (convertedTaskId != null) 'convertedTaskId': convertedTaskId,
+        },
+      );
+    }
   }
 }

@@ -7,7 +7,6 @@ import '../../../datasources/helpers/task_dependency_helper.dart';
 import '../../../../boards/datasources/models/board_model.dart';
 import '../../../../boards/datasources/services/board_services.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
-import '../../../../notifications/datasources/helpers/notification_helper.dart';
 
 class EditTaskDialog extends StatefulWidget {
   final Task task;
@@ -94,8 +93,15 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     _taskAllowsSubmissions = widget.task.taskAllowsSubmissions;
     _taskRequiresSubmission = widget.task.taskRequiresSubmission;
     _taskRequiresApproval = widget.task.taskRequiresApproval;
+    // Pending external assignments are tracked in proposed assignee fields.
+    if (widget.task.taskAcceptanceStatus == 'pending' &&
+        widget.task.taskProposedAssigneeId != null &&
+        widget.task.taskProposedAssigneeId!.isNotEmpty) {
+      _assignedToUserId = widget.task.taskProposedAssigneeId;
+      _assignedToUserName = widget.task.taskProposedAssigneeName;
+    }
     // Handle "None" or empty assignedTo values
-    if (widget.task.taskAssignedTo.isEmpty ||
+    else if (widget.task.taskAssignedTo.isEmpty ||
         widget.task.taskAssignedTo == 'None') {
       _assignedToUserId = null;
       _assignedToUserName = null;
@@ -176,8 +182,16 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     try {
       final taskProvider = context.read<TaskProvider>();
 
+      final currentAssigneeForComparison =
+          (widget.task.taskAcceptanceStatus == 'pending' &&
+              (widget.task.taskProposedAssigneeId ?? '').isNotEmpty)
+          ? widget.task.taskProposedAssigneeId
+          : ((widget.task.taskAssignedTo == 'None' ||
+                    widget.task.taskAssignedTo.isEmpty)
+                ? null
+                : widget.task.taskAssignedTo);
       final bool assigneeChanged =
-          _assignedToUserId != widget.task.taskAssignedTo;
+          _assignedToUserId != currentAssigneeForComparison;
 
       if (_boardType != 'personal' &&
           _assignedToUserId != null &&
@@ -201,6 +215,11 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         );
         return;
       }
+
+      final hasPendingExternalAssignment =
+          _boardType != 'personal' &&
+          _assignedToUserId != null &&
+          _assignedToUserId != widget.task.taskOwnerId;
 
       final updatedTask = widget.task.copyWith(
         taskTitle: _titleController.text.trim(),
@@ -226,10 +245,14 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         // Personal boards always assign to manager.
         taskAssignedTo: _boardType == 'personal'
             ? widget.task.taskOwnerId
-            : (_assignedToUserId ?? 'None'),
+            : (hasPendingExternalAssignment
+                  ? 'None'
+                  : (_assignedToUserId ?? 'None')),
         taskAssignedToName: _boardType == 'personal'
             ? widget.task.taskOwnerName
-            : (_assignedToUserName ?? 'Unassigned'),
+            : (hasPendingExternalAssignment
+                  ? 'Unassigned'
+                  : (_assignedToUserName ?? 'Unassigned')),
         taskBoardLane: _boardType == 'personal'
             ? _lanePublished
             : _taskBoardLane,
@@ -242,6 +265,12 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                   ? 'pending'
                   : null)
             : widget.task.taskAcceptanceStatus),
+        taskProposedAssigneeId: _boardType == 'personal'
+            ? null
+            : (hasPendingExternalAssignment ? _assignedToUserId : null),
+        taskProposedAssigneeName: _boardType == 'personal'
+            ? null
+            : (hasPendingExternalAssignment ? _assignedToUserName : null),
         taskDependencyIds: TaskDependencyHelper.sanitizeDependencyIds(
           _selectedDependencyIds,
           selfTaskId: widget.task.taskId,
@@ -256,41 +285,6 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       );
 
       await taskProvider.updateTask(updatedTask);
-
-      // Send notification if task was reassigned to a different user
-      if (assigneeChanged &&
-          _assignedToUserId != null &&
-          _assignedToUserId != 'None' &&
-          _assignedToUserId != widget.task.taskOwnerId) {
-        try {
-          final deadlineInfo = updatedTask.taskDeadline != null
-              ? ' with a deadline on ${updatedTask.taskDeadline!.toString().split(' ')[0]}'
-              : '';
-
-          await NotificationHelper.createInAppOnly(
-            userId: _assignedToUserId!,
-            title: 'Task Assigned',
-            message:
-                'You have been assigned to "${updatedTask.taskTitle}"$deadlineInfo',
-            category: 'task_assignment',
-            relatedId: updatedTask.taskId,
-            metadata: {
-              'boardId': updatedTask.taskBoardId,
-              'taskId': updatedTask.taskId,
-              'taskTitle': updatedTask.taskTitle,
-              'deadline': updatedTask.taskDeadline?.toIso8601String() ?? '',
-              'assignedBy': updatedTask.taskAssignedBy,
-            },
-          );
-          print(
-            '[TaskNotification] ? Task reassignment notification sent to: $_assignedToUserId',
-          );
-        } catch (e) {
-          print(
-            '[TaskNotification] ?? Failed to send reassignment notification: $e',
-          );
-        }
-      }
 
       if (mounted) {
         Navigator.pop(context);

@@ -188,6 +188,7 @@ class _TaskFileSubmissionsSectionState
   }
 
   bool _canUploadFiles() {
+    if (widget.task.taskIsDone) return false;
     final userProvider = context.read<UserProvider>();
     final currentUserId = userProvider.userId ?? '';
 
@@ -210,6 +211,7 @@ class _TaskFileSubmissionsSectionState
   }
 
   bool _canProvideSubmissionFeedback(String currentUserId) {
+    if (widget.task.taskIsDone) return false;
     if (currentUserId.isEmpty) return false;
     if (currentUserId == widget.task.taskOwnerId) return true;
     final board = _findBoard();
@@ -894,6 +896,7 @@ class _TaskFileSubmissionsSectionState
   }
 
   bool _canDeleteSubmission(TaskSubmission submission, String currentUserId) {
+    if (widget.task.taskIsDone) return false;
     // Allow delete if user is the submitter, task owner or assignee
     if (submission.submittedBy == currentUserId) return true;
     if (widget.task.taskOwnerId == currentUserId) return true;

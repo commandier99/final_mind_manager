@@ -16,6 +16,30 @@ class BoardService {
 
   String? get currentUserId => _auth.currentUser?.uid;
 
+  Future<void> _logSafe({
+    required String userId,
+    required String userName,
+    required String activityType,
+    String? userProfilePicture,
+    String? boardId,
+    String? description,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      await _activityEventService.logEvent(
+        userId: userId,
+        userName: userName,
+        activityType: activityType,
+        userProfilePicture: userProfilePicture,
+        boardId: boardId,
+        description: description,
+        metadata: metadata,
+      );
+    } catch (e) {
+      debugPrint('[ERROR] Failed to log activity $activityType: $e');
+    }
+  }
+
   Future<Board?> _findPersonalBoardForUser(String userId) async {
     final personalByTypeSnapshot = await _boardCollection
         .where('boardManagerId', isEqualTo: userId)
@@ -61,7 +85,8 @@ class BoardService {
       boardCreatedAt: now,
       boardTitle: 'Personal',
       boardGoal: 'Personal tasks and projects',
-      boardGoalDescription: 'A space to manage your personal tasks and projects',
+      boardGoalDescription:
+          'A space to manage your personal tasks and projects',
       stats: BoardStats(),
       memberIds: [user.uid],
       boardDeletedAt: null,
@@ -284,6 +309,19 @@ class BoardService {
       updateData['boardLastModifiedBy'] = _auth.currentUser?.uid ?? '';
 
       await _boardCollection.doc(boardId).update(updateData);
+
+      final actor = _auth.currentUser;
+      if (actor != null) {
+        await _logSafe(
+          userId: actor.uid,
+          userName: actor.displayName ?? 'Unknown User',
+          userProfilePicture: actor.photoURL,
+          boardId: boardId,
+          activityType: 'board_updated',
+          description: 'updated board details',
+          metadata: {'updatedFields': updateData.keys.toList()},
+        );
+      }
     }
   }
 
@@ -294,19 +332,9 @@ class BoardService {
     required String boardId,
     required String userId,
     String role = BoardRoles.member, // Assignable roles: member/supervisor
+    String? invitationRequestId,
   }) async {
     final boardRef = _boardCollection.doc(boardId);
-
-    // Get current board data to update roles
-    final boardDoc = await boardRef.get();
-    final data = boardDoc.data() as Map<String, dynamic>?;
-    final boardType = (data?['boardType'] as String? ?? 'team').toLowerCase();
-    final canAcceptMembers = boardType == 'team';
-    if (!canAcceptMembers) {
-      throw Exception(
-        'Only Team boards can add members. Change this board type to Team first.',
-      );
-    }
 
     final normalizedRole = BoardRoles.normalize(role);
     if (!BoardRoles.isAssignable(normalizedRole)) {
@@ -315,13 +343,17 @@ class BoardService {
       );
     }
 
-    final currentRoles = Map<String, String>.from(data?['memberRoles'] ?? {});
-    currentRoles[userId] = normalizedRole;
-
-    await boardRef.update({
+    final updateData = <String, dynamic>{
       'memberIds': FieldValue.arrayUnion([userId]),
-      'memberRoles': currentRoles,
-    });
+      'memberRoles.$userId': normalizedRole,
+      'boardLastModifiedAt': FieldValue.serverTimestamp(),
+      'boardLastModifiedBy': _auth.currentUser?.uid ?? userId,
+    };
+    if (invitationRequestId != null && invitationRequestId.trim().isNotEmpty) {
+      updateData['boardLastJoinRequestId'] = invitationRequestId.trim();
+    }
+
+    await boardRef.update(updateData);
 
     // Log user activity event
     final user = _auth.currentUser;
@@ -408,6 +440,18 @@ class BoardService {
       'boardLastModifiedAt': FieldValue.serverTimestamp(),
       'boardLastModifiedBy': userId,
     });
+
+    final actor = _auth.currentUser;
+    if (actor != null) {
+      await _logSafe(
+        userId: actor.uid,
+        userName: actor.displayName ?? 'Unknown User',
+        userProfilePicture: actor.photoURL,
+        boardId: boardId,
+        activityType: 'member_left',
+        description: 'left the board',
+      );
+    }
   }
 
   /// Board manager kicks a member from the board
@@ -450,6 +494,19 @@ class BoardService {
       'boardLastModifiedAt': FieldValue.serverTimestamp(),
       'boardLastModifiedBy': managerId,
     });
+
+    final actor = _auth.currentUser;
+    if (actor != null) {
+      await _logSafe(
+        userId: actor.uid,
+        userName: actor.displayName ?? 'Unknown User',
+        userProfilePicture: actor.photoURL,
+        boardId: boardId,
+        activityType: 'member_kicked',
+        description: 'removed a member from the board',
+        metadata: {'memberId': memberIdToKick, 'memberName': memberName},
+      );
+    }
   }
 
   Future<bool> isMember({required Board board, required String userId}) async {
@@ -479,6 +536,17 @@ class BoardService {
   // DELETE / SOFT DELETE
   // ------------------------
   Future<void> deleteBoard(String boardId) async {
+    final actor = _auth.currentUser;
+    if (actor != null) {
+      await _logSafe(
+        userId: actor.uid,
+        userName: actor.displayName ?? 'Unknown User',
+        userProfilePicture: actor.photoURL,
+        boardId: boardId,
+        activityType: 'board_deleted',
+        description: 'deleted a board',
+      );
+    }
     await _boardCollection.doc(boardId).delete();
   }
 
@@ -495,6 +563,17 @@ class BoardService {
     );
 
     await _boardCollection.doc(board.boardId).update(updatedBoard.toMap());
+    if (user != null) {
+      await _logSafe(
+        userId: user.uid,
+        userName: user.displayName ?? 'Unknown User',
+        userProfilePicture: user.photoURL,
+        boardId: board.boardId,
+        activityType: 'board_archived',
+        description: 'archived a board',
+        metadata: {'boardName': board.boardTitle},
+      );
+    }
     debugPrint(
       '[DEBUG] BoardService: board ${board.boardId} soft-deleted successfully',
     );
@@ -510,6 +589,17 @@ class BoardService {
     );
 
     await _boardCollection.doc(board.boardId).update(updatedBoard.toMap());
+    if (user != null) {
+      await _logSafe(
+        userId: user.uid,
+        userName: user.displayName ?? 'Unknown User',
+        userProfilePicture: user.photoURL,
+        boardId: board.boardId,
+        activityType: 'board_restored',
+        description: 'restored a board',
+        metadata: {'boardName': board.boardTitle},
+      );
+    }
   }
 
   // ------------------------

@@ -28,7 +28,7 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
   static const String _tabDrafts = 'drafts';
   static const String _tabPublished = 'published';
   static const String _tabStats = 'stats';
-  static const String _tabReview = 'review';
+  static const String _tabSubmissions = 'submissions';
 
   bool _isSearchExpanded = false;
   bool _isDetailsPanelExpanded = true;
@@ -73,19 +73,19 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
     final currentUserId = context.watch<UserProvider>().userId;
     final isManager = widget.board.isManager(currentUserId);
     final canDraftTasks = widget.board.canDraftTasks(currentUserId);
-    final canReviewSubmissions = widget.board.canReviewSubmissions(
-      currentUserId,
-    );
+    final canViewSubmissionsTab =
+        currentUserId != null &&
+        widget.board.canReviewSubmissions(currentUserId);
     final showDraftsTab = canDraftTasks && widget.board.boardType == 'team';
     final showReviewTab =
-        canReviewSubmissions &&
+        canViewSubmissionsTab &&
         widget.board.boardType == 'team' &&
         widget.board.boardPurpose != 'category';
 
     if (!showDraftsTab && _selectedTab == _tabDrafts) {
       _selectedTab = _tabPublished;
     }
-    if (!showReviewTab && _selectedTab == _tabReview) {
+    if (!showReviewTab && _selectedTab == _tabSubmissions) {
       _selectedTab = _tabPublished;
     }
 
@@ -247,10 +247,10 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: _buildViewTab(
-                          label: 'Review',
-                          selected: _selectedTab == _tabReview,
+                          label: 'Submissions',
+                          selected: _selectedTab == _tabSubmissions,
                           onTap: () =>
-                              setState(() => _selectedTab = _tabReview),
+                              setState(() => _selectedTab = _tabSubmissions),
                         ),
                       ),
                     ],
@@ -270,7 +270,7 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                   boardId: widget.board.boardId,
                   board: widget.board,
                 )
-              else if (_selectedTab == _tabReview)
+              else if (_selectedTab == _tabSubmissions)
                 BoardSubmissionsSection(boardId: widget.board.boardId)
               else
                 BoardTasksSection(

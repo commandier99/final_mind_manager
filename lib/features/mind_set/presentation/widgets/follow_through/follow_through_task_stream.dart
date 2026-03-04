@@ -90,19 +90,6 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
       return;
     }
 
-    final orderedPlanTasks = _sortTasksByPlanOrder(
-      taskProvider.tasks,
-      widget.taskIds,
-    );
-    final blocker = _firstBlockingTask(
-      task: task,
-      orderedPlanTasks: orderedPlanTasks,
-    );
-    if (blocker != null) {
-      _showBlockedBySequenceMessage(blocker);
-      return;
-    }
-
     Task? focusedTask;
     for (final candidate in taskProvider.tasks) {
       if (candidate.taskId == task.taskId) continue;
@@ -340,38 +327,6 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     final session = widget.session;
     if (session == null) return;
     await _runtimeService.pausePomodoroIfNeeded(session);
-  }
-
-  Task? _firstBlockingTask({
-    required Task task,
-    required List<Task> orderedPlanTasks,
-  }) {
-    final orderIndex = <String, int>{};
-    for (var i = 0; i < orderedPlanTasks.length; i++) {
-      orderIndex[orderedPlanTasks[i].taskId] = i;
-    }
-
-    final targetIndex = orderIndex[task.taskId];
-    if (targetIndex == null || targetIndex == 0) return null;
-
-    for (var i = 0; i < targetIndex; i++) {
-      final predecessor = orderedPlanTasks[i];
-      if (!predecessor.taskIsDone) {
-        return predecessor;
-      }
-    }
-    return null;
-  }
-
-  void _showBlockedBySequenceMessage(Task blocker) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Complete "${blocker.taskTitle}" first to unlock this task.',
-        ),
-      ),
-    );
   }
 
   void _showBlockedByDependencyMessage(Task blocker) {
@@ -652,18 +607,12 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                       itemBuilder: (context, index) {
                         final task = displayTasks[index];
                         final isFocused = _isInProgressStatus(task.taskStatus);
-                        final blocker = _firstBlockingTask(
-                          task: task,
-                          orderedPlanTasks: orderedPlanTasks,
-                        );
-                        final isBlockedBySequence =
-                            blocker != null && !isFocused && !task.taskIsDone;
                         final canFocusByMode = modePolicy.canFocusTask(
                           isSessionActive: isSessionActive,
                           hasFocusedTask: hasFocusedTask,
                           isTaskFocused: isFocused,
                         );
-                        final canFocus = canFocusByMode && !isBlockedBySequence;
+                        final canFocus = canFocusByMode;
                         final canPause = modePolicy.canPauseTask(
                           isSessionActive: isSessionActive,
                           isTaskFocused: isFocused,
@@ -680,20 +629,14 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                               task: task,
                               showFocusAction:
                                   !isPomodoroBreak &&
-                                  (canFocusByMode ||
-                                      canPause ||
-                                      isBlockedBySequence),
+                                  (canFocusByMode || canPause),
                               showFocusInMainRow: true,
                               showCheckboxWhenFocusedOnly: true,
                               useStatusColor: true,
                               isPomodoroMode: modePolicy.isPomodoro,
                               showFrogBadge: isFrogTask,
-                              isDimmed: isBlockedBySequence,
-                              onFocus: isBlockedBySequence
-                                  ? () => _showBlockedBySequenceMessage(blocker)
-                                  : canFocus
-                                  ? () => _focusTask(task)
-                                  : null,
+                              isDimmed: false,
+                              onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,
                               onToggleDone: canToggleDone
                                   ? (isDone) => _toggleDoneForTask(task, isDone)

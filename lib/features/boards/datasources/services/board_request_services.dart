@@ -4,11 +4,14 @@ import '../models/board_request_model.dart';
 import '../models/board_roles.dart';
 import 'board_services.dart';
 import 'package:flutter/foundation.dart';
+import '../../../notifications/datasources/helpers/notification_helper.dart';
+import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 
 class BoardRequestService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final BoardService _boardService = BoardService();
+  final ActivityEventService _activityEventService = ActivityEventService();
 
   CollectionReference get _requestsCollection =>
       _firestore.collection('board_join_requests');
@@ -56,13 +59,45 @@ class BoardRequestService {
         userName: userData?['userName'] ?? 'Unknown User',
         userProfilePicture: userData?['userProfilePicture'],
         boardReqStatus: 'pending',
-        boardReqType: 'recruitment',
+        boardReqType: BoardRequest.typeRecruitment,
         boardReqMessage: message ?? 'You have been invited to join this board',
         boardReqRequestedRole: requestedRole,
         boardReqCreatedAt: DateTime.now(),
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
+
+      await _activityEventService.logEvent(
+        userId: currentUser.uid,
+        userName: boardData?['boardManagerName'] ?? 'Unknown User',
+        activityType: 'board_invitation_sent',
+        boardId: boardId,
+        description: 'sent a board invitation',
+        metadata: {
+          'boardRequestId': requestId,
+          'invitedUserId': userId,
+          'invitedUserName': userData?['userName'] ?? 'Unknown User',
+          'requestedRole': requestedRole,
+        },
+      );
+
+      await NotificationHelper.createNotificationPair(
+        userId: userId,
+        title: 'Board Invitation',
+        message:
+            '${boardData?['boardManagerName'] ?? 'A manager'} invited you to join "$boardTitle".',
+        category: NotificationHelper.categoryInvitation,
+        relatedId: requestId,
+        metadata: {
+          'boardId': boardId,
+          'boardTitle': boardTitle,
+          'boardRequestId': requestId,
+          'boardReqType': BoardRequest.typeRecruitment,
+          'requestedRole': requestedRole,
+          'managerId': boardData?['boardManagerId'] ?? '',
+          'managerName': boardData?['boardManagerName'] ?? 'Unknown',
+        },
+      );
 
       debugPrint('✅ Invitation created for user $userId to board $boardId');
     } catch (e) {
@@ -112,12 +147,22 @@ class BoardRequestService {
         userName: userData?['userName'] ?? 'Unknown User',
         userProfilePicture: userData?['userProfilePicture'],
         boardReqStatus: 'pending',
-        boardReqType: 'application',
+        boardReqType: BoardRequest.typeApplication,
         boardReqMessage: message,
         boardReqCreatedAt: DateTime.now(),
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
+
+      await _activityEventService.logEvent(
+        userId: currentUser.uid,
+        userName: userData?['userName'] ?? 'Unknown User',
+        userProfilePicture: userData?['userProfilePicture'] as String?,
+        activityType: 'board_join_requested',
+        boardId: boardId,
+        description: 'requested to join a board',
+        metadata: {'boardRequestId': requestId, 'boardTitle': boardTitle},
+      );
 
       debugPrint(
         '✅ Join request created by ${currentUser.uid} for board $boardId',
@@ -156,7 +201,7 @@ class BoardRequestService {
     return _requestsCollection
         .where('boardId', isEqualTo: boardId)
         .where('boardReqStatus', isEqualTo: 'pending')
-        .where('boardReqType', isEqualTo: 'recruitment')
+        .where('boardReqType', isEqualTo: BoardRequest.typeRecruitment)
         .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -176,7 +221,7 @@ class BoardRequestService {
     return _requestsCollection
         .where('boardId', isEqualTo: boardId)
         .where('boardReqStatus', isEqualTo: 'pending')
-        .where('boardReqType', isEqualTo: 'application')
+        .where('boardReqType', isEqualTo: BoardRequest.typeApplication)
         .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -195,7 +240,24 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamInvitationsByUser(String userId) {
     return _requestsCollection
         .where('userId', isEqualTo: userId)
-        .where('boardReqType', isEqualTo: 'recruitment')
+        .where('boardReqType', isEqualTo: BoardRequest.typeRecruitment)
+        .orderBy('boardReqCreatedAt', descending: true)
+        .snapshots()
+        .map((snapshot) {
+          return snapshot.docs.map((doc) {
+            return BoardRequest.fromMap(
+              doc.data() as Map<String, dynamic>,
+              doc.id,
+            );
+          }).toList();
+        });
+  }
+
+  /// Get all invitations sent by a manager
+  Stream<List<BoardRequest>> streamInvitationsSentByManager(String managerId) {
+    return _requestsCollection
+        .where('boardManagerId', isEqualTo: managerId)
+        .where('boardReqType', isEqualTo: BoardRequest.typeRecruitment)
         .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -212,7 +274,7 @@ class BoardRequestService {
   Stream<List<BoardRequest>> streamJoinRequestsByUser(String userId) {
     return _requestsCollection
         .where('userId', isEqualTo: userId)
-        .where('boardReqType', isEqualTo: 'application')
+        .where('boardReqType', isEqualTo: BoardRequest.typeApplication)
         .orderBy('boardReqCreatedAt', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -270,7 +332,9 @@ class BoardRequestService {
   // UPDATE REQUEST
   // ========================
 
-  /// Approve a join request and add user to board
+  /// Approve a board request.
+  /// - application: manager approves and user is added immediately.
+  /// - recruitment: invitee accepts; backend trigger adds user to board.
   Future<void> approveRequest(
     BoardRequest request, {
     String? responseMessage,
@@ -279,12 +343,16 @@ class BoardRequestService {
       final currentUser = _auth.currentUser;
       if (currentUser == null) throw Exception('User not authenticated');
 
-      // Add user to board
-      await _boardService.addMemberToBoard(
-        boardId: request.boardId,
-        userId: request.userId,
-        role: request.boardReqRequestedRole,
-      );
+      final requestType = BoardRequest.normalizeType(request.boardReqType);
+      final isRecruitment = requestType == BoardRequest.typeRecruitment;
+      if (isRecruitment && currentUser.uid != request.userId) {
+        throw Exception('Only the invited user can accept this invitation.');
+      }
+      if (!isRecruitment && currentUser.uid == request.userId) {
+        throw Exception(
+          'Only the board manager can approve this join request.',
+        );
+      }
 
       // Update request status
       await _requestsCollection.doc(request.boardRequestId).update({
@@ -294,7 +362,43 @@ class BoardRequestService {
         if (responseMessage != null) 'boardReqResponseMessage': responseMessage,
       });
 
-      debugPrint('✅ Join request approved for user ${request.userId}');
+      if (requestType == BoardRequest.typeApplication) {
+        await _boardService.addMemberToBoard(
+          boardId: request.boardId,
+          userId: request.userId,
+          role: request.boardReqRequestedRole,
+        );
+      } else {
+        // Recruitment (invite) path: invited user accepts and is added immediately.
+        await _boardService.addMemberToBoard(
+          boardId: request.boardId,
+          userId: request.userId,
+          role: request.boardReqRequestedRole,
+          invitationRequestId: request.boardRequestId,
+        );
+      }
+
+      await _activityEventService.logEvent(
+        userId: currentUser.uid,
+        userName: currentUser.displayName ?? request.userName,
+        userProfilePicture: currentUser.photoURL,
+        activityType: requestType == BoardRequest.typeRecruitment
+            ? 'board_invitation_accepted'
+            : 'board_join_request_approved',
+        boardId: request.boardId,
+        description: requestType == BoardRequest.typeRecruitment
+            ? 'accepted a board invitation'
+            : 'approved a board join request',
+        metadata: {
+          'boardRequestId': request.boardRequestId,
+          'targetUserId': request.userId,
+          'targetUserName': request.userName,
+        },
+      );
+
+      debugPrint(
+        '✅ ${requestType == BoardRequest.typeRecruitment ? 'Recruitment' : 'Application'} approved for user ${request.userId}',
+      );
     } catch (e) {
       debugPrint('⚠️ Error approving join request: $e');
       rethrow;
@@ -309,6 +413,14 @@ class BoardRequestService {
     try {
       final currentUser = _auth.currentUser;
       if (currentUser == null) throw Exception('User not authenticated');
+      final requestType = BoardRequest.normalizeType(request.boardReqType);
+      final isRecruitment = requestType == BoardRequest.typeRecruitment;
+      if (isRecruitment && currentUser.uid != request.userId) {
+        throw Exception('Only the invited user can decline this invitation.');
+      }
+      if (!isRecruitment && currentUser.uid == request.userId) {
+        throw Exception('Only the board manager can reject this join request.');
+      }
 
       await _requestsCollection.doc(request.boardRequestId).update({
         'boardReqStatus': 'rejected',
@@ -316,6 +428,24 @@ class BoardRequestService {
         'boardReqRespondedBy': currentUser.uid,
         if (responseMessage != null) 'boardReqResponseMessage': responseMessage,
       });
+
+      await _activityEventService.logEvent(
+        userId: currentUser.uid,
+        userName: currentUser.displayName ?? request.userName,
+        userProfilePicture: currentUser.photoURL,
+        activityType: requestType == BoardRequest.typeRecruitment
+            ? 'board_invitation_declined'
+            : 'board_join_request_rejected',
+        boardId: request.boardId,
+        description: requestType == BoardRequest.typeRecruitment
+            ? 'declined a board invitation'
+            : 'rejected a board join request',
+        metadata: {
+          'boardRequestId': request.boardRequestId,
+          'targetUserId': request.userId,
+          'targetUserName': request.userName,
+        },
+      );
 
       debugPrint('✅ Join request rejected for user ${request.userId}');
     } catch (e) {
@@ -331,7 +461,36 @@ class BoardRequestService {
   /// Cancel a pending request (by the requester)
   Future<void> cancelRequest(String requestId) async {
     try {
+      final currentUser = _auth.currentUser;
+      if (currentUser == null) throw Exception('User not authenticated');
+      final requestDoc = await _requestsCollection.doc(requestId).get();
+      final requestData = requestDoc.data() as Map<String, dynamic>?;
+
       await _requestsCollection.doc(requestId).delete();
+
+      if (requestData != null) {
+        final requestType = BoardRequest.normalizeType(
+          requestData['boardReqType']?.toString() ??
+              requestData['requestType']?.toString(),
+        );
+        await _activityEventService.logEvent(
+          userId: currentUser.uid,
+          userName:
+              currentUser.displayName ??
+              requestData['userName']?.toString() ??
+              'Unknown User',
+          userProfilePicture: currentUser.photoURL,
+          activityType: requestType == BoardRequest.typeRecruitment
+              ? 'board_invitation_cancelled'
+              : 'board_join_request_cancelled',
+          boardId: requestData['boardId']?.toString(),
+          description: requestType == BoardRequest.typeRecruitment
+              ? 'cancelled a board invitation'
+              : 'cancelled a board join request',
+          metadata: {'boardRequestId': requestId},
+        );
+      }
+
       debugPrint('✅ Join request cancelled');
     } catch (e) {
       debugPrint('⚠️ Error cancelling join request: $e');

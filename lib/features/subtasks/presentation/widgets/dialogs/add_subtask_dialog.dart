@@ -18,28 +18,25 @@ class AddSubtaskDialog extends StatefulWidget {
 }
 
 class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
-  late TextEditingController _titleController;
-  late TextEditingController _descriptionController;
+  late TextEditingController _stepController;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _titleController = TextEditingController();
-    _descriptionController = TextEditingController();
+    _stepController = TextEditingController();
   }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
+    _stepController.dispose();
     super.dispose();
   }
 
   void _handleAddSubtask() async {
-    if (_titleController.text.isEmpty) {
+    if (_stepController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a subtask title')),
+        const SnackBar(content: Text('Please enter a step')),
       );
       return;
     }
@@ -49,8 +46,8 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
     await widget.subtaskProvider.addSubtask(
       subtaskTaskId: widget.parentTaskId,
       subtaskBoardId: widget.subtaskBoardId ?? '',
-      subtaskTitle: _titleController.text.trim(),
-      subtaskDescription: _descriptionController.text.trim(),
+      subtaskTitle: _stepController.text.trim(),
+      subtaskDescription: null,
     );
 
     setState(() => _isLoading = false);
@@ -58,7 +55,7 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
     if (mounted) {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Subtask created successfully!')),
+        const SnackBar(content: Text('Step added successfully!')),
       );
     }
   }
@@ -76,14 +73,14 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Add Subtask',
+              'Add Step',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 16),
             TextField(
-              controller: _titleController,
+              controller: _stepController,
               decoration: InputDecoration(
-                hintText: 'Subtask title',
+                hintText: 'Step',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -94,22 +91,6 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
               ),
               enabled: !_isLoading,
               maxLines: 1,
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _descriptionController,
-              decoration: InputDecoration(
-                hintText: 'Description (optional)',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 12,
-                ),
-              ),
-              enabled: !_isLoading,
-              maxLines: 3,
             ),
             const SizedBox(height: 24),
             Row(

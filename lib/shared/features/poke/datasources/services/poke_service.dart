@@ -10,6 +10,10 @@ class PokeService {
     final ref = _pokes.doc();
     final payload = poke.toMap();
     payload['pokeId'] = ref.id;
+    payload['threadId'] = (poke.threadId ?? '').trim().isEmpty
+        ? ref.id
+        : poke.threadId!.trim();
+    payload['updatedAt'] = Timestamp.fromDate(DateTime.now());
     await ref.set(payload);
     return ref.id;
   }
@@ -30,5 +34,21 @@ class PokeService {
               .toList(),
         );
   }
-}
 
+  Stream<List<PokeModel>> streamReceivedByUser(String userId) {
+    return _pokes
+        .where('recipientUserId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => PokeModel.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ),
+              )
+              .toList(),
+        );
+  }
+}

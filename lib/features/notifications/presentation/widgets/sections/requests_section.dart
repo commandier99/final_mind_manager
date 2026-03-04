@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../boards/datasources/providers/board_request_provider.dart';
 import '../../../../boards/datasources/models/board_request_model.dart';
-import '../../../datasources/providers/in_app_notif_provider.dart';
-import '../../../datasources/providers/push_notif_provider.dart';
-import '../../../datasources/models/in_app_notif_model.dart';
-import '../../../datasources/models/push_notif_model.dart';
 import '../cards/notif_card.dart';
 
 Widget buildRequestsSection(
@@ -14,19 +10,27 @@ Widget buildRequestsSection(
   DateTime Function(dynamic) getNotificationDate,
   Widget Function() buildEmptyState,
 ) {
-  return Consumer3<BoardRequestProvider, InAppNotificationProvider, PushNotificationProvider>(
-    builder: (context, boardProvider, inAppProvider, pushProvider, child) {
+  return Consumer<BoardRequestProvider>(
+    builder: (context, boardProvider, child) {
       final recruitments = boardProvider.invitations;
+      final sentRecruitments = boardProvider.sentInvitations;
       final applications = boardProvider.joinRequests;
-      final inAppNotifs = inAppProvider.notifications;
-      final pushNotifs = pushProvider.notifications;
 
-      final displayList = [
+      final displayList = <dynamic>[
         ...recruitments,
+        ...sentRecruitments,
         ...applications,
-        ...inAppNotifs.where((n) => n.category == 'invitation'),
-        ...pushNotifs.where((n) => n.category == 'invitation'),
-      ]..sort((a, b) {
+      ];
+
+      final seenBoardRequestIds = <String>{};
+      displayList.removeWhere((item) {
+        if (item is! BoardRequest) return false;
+        if (seenBoardRequestIds.contains(item.boardRequestId)) return true;
+        seenBoardRequestIds.add(item.boardRequestId);
+        return false;
+      });
+
+      displayList.sort((a, b) {
         DateTime dateA = getNotificationDate(a);
         DateTime dateB = getNotificationDate(b);
         return dateB.compareTo(dateA);
@@ -51,19 +55,7 @@ Widget buildRequestsSection(
           final item = displayList[index];
 
           if (item is BoardRequest) {
-            return NotificationCard(
-              notification: item,
-            );
-          } else if (item is InAppNotification) {
-            return NotificationCard(
-              notification: item,
-              inAppProvider: inAppProvider,
-            );
-          } else if (item is PushNotification) {
-            return NotificationCard(
-              notification: item,
-              pushProvider: pushProvider,
-            );
+            return NotificationCard(notification: item);
           }
 
           return const SizedBox.shrink();

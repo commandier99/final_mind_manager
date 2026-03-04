@@ -18,7 +18,7 @@ Boards now support public/private settings:
 
 ## Request Types
 
-### 1. Invitation (`requestType: 'invitation'`)
+### 1. Invitation (`boardReqType: 'recruitment'`)
 **Who initiates:** Board manager  
 **Target:** Specific user  
 **Use case:** Manager wants to recruit a user to their board
@@ -39,7 +39,7 @@ await boardJoinRequestProvider.createInvitation(
 );
 ```
 
-### 2. Join Request (`requestType: 'join_request'`)
+### 2. Join Request (`boardReqType: 'application'`)
 **Who initiates:** Any user  
 **Target:** Public board  
 **Use case:** User wants to join a public board
@@ -63,7 +63,7 @@ await boardJoinRequestProvider.createJoinRequest(
 
 ### Fields
 ```dart
-class BoardJoinRequest {
+class BoardRequest {
   final String boardJoinRequestId;
   final String boardId;
   final String boardTitle;
@@ -72,13 +72,13 @@ class BoardJoinRequest {
   final String userId;
   final String userName;
   final String? userProfilePicture;
-  final String requestStatus;      // 'pending', 'approved', 'rejected'
-  final String requestType;        // 'invitation' or 'join_request'
-  final String? requestMessage;
-  final DateTime requestCreatedAt;
-  final DateTime? requestRespondedAt;
-  final String? requestRespondedBy;
-  final String? requestResponseMessage;
+  final String boardReqStatus;      // 'pending', 'approved', 'rejected'
+  final String boardReqType;        // 'recruitment' or 'application'
+  final String? boardReqMessage;
+  final DateTime boardReqCreatedAt;
+  final DateTime? boardReqRespondedAt;
+  final String? boardReqRespondedBy;
+  final String? boardReqResponseMessage;
 }
 ```
 
@@ -195,7 +195,7 @@ Consumer<BoardJoinRequestProvider>(
         final request = joinRequests[index];
         return ListTile(
           title: Text(request.userName),
-          subtitle: Text(request.requestMessage ?? 'Wants to join'),
+          subtitle: Text(request.boardReqMessage ?? 'Wants to join'),
           trailing: Row(
             children: [
               IconButton(
@@ -278,26 +278,27 @@ Consumer<BoardJoinRequestProvider>(
   "userId": "user_id",
   "userName": "User Name",
   "userProfilePicture": "url",
-  "requestStatus": "pending|approved|rejected",
-  "requestType": "invitation|join_request",
-  "requestMessage": "Optional message",
-  "requestCreatedAt": "timestamp",
-  "requestRespondedAt": "timestamp",
-  "requestRespondedBy": "responder_user_id",
-  "requestResponseMessage": "Optional response"
+  "boardReqStatus": "pending|approved|rejected",
+  "boardReqType": "recruitment|application",
+  "boardReqMessage": "Optional message",
+  "boardReqCreatedAt": "timestamp",
+  "boardReqRespondedAt": "timestamp",
+  "boardReqRespondedBy": "responder_user_id",
+  "boardReqResponseMessage": "Optional response"
 }
 ```
 
 ### Indexes Needed
-- `boardId` + `requestStatus` + `requestCreatedAt`
-- `boardId` + `requestStatus` + `requestType` + `requestCreatedAt`
-- `userId` + `requestCreatedAt`
-- `userId` + `requestType` + `requestCreatedAt`
+- `boardId` + `boardReqStatus` + `boardReqCreatedAt`
+- `boardId` + `boardReqStatus` + `boardReqType` + `boardReqCreatedAt`
+- `userId` + `boardReqCreatedAt`
+- `userId` + `boardReqType` + `boardReqCreatedAt`
 
 ## Migration Notes
 
 ### Backward Compatibility
-- Existing requests without `requestType` will default to `'invitation'`
+- Existing legacy requests are normalized to `boardReqType` values
+  (`invitation` -> `recruitment`, `join_request` -> `application`)
 - Old code using `createJoinRequest` with `userId` parameter should be updated to use `createInvitation`
 - A deprecated method `createJoinRequestLegacy` is provided for gradual migration
 

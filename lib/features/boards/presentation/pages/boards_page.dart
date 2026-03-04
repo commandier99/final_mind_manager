@@ -6,6 +6,7 @@ import '../../../../shared/features/users/datasources/providers/user_provider.da
 import '../widgets/cards/board_card.dart';
 import '../widgets/dialogs/add_board_button.dart';
 import '../widgets/dialogs/board_delete_flow_dialog.dart';
+import '../widgets/dialogs/edit_board_dialog.dart';
 import '../controllers/boards_query_controller.dart';
 import 'board_details_page.dart';
 
@@ -368,6 +369,14 @@ class _BoardsPageState extends State<BoardsPage> {
                             ),
                           );
                         },
+                        onEdit: _userId == board.boardManagerId
+                            ? () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => EditBoardDialog(board: board),
+                                );
+                              }
+                            : null,
                         onDelete: _userId == board.boardManagerId
                             ? () => BoardDeleteFlowDialog.show(
                                 context,

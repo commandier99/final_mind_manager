@@ -6,13 +6,12 @@ import '../../../../shared/presentation/widgets/app_side_menu.dart';
 import '../../../../shared/datasources/providers/navigation_provider.dart';
 import 'package:provider/provider.dart';
 import '../widgets/sections/task_details_section.dart';
-import '../widgets/sections/task_appeals_section.dart';
+import '../widgets/sections/task_applications_section.dart';
 import '../widgets/sections/task_subtasks_list.dart';
 import '../widgets/sections/task_file_submissions_section.dart';
 import '../widgets/sections/task_stats_section.dart';
 import '../../../subtasks/datasources/providers/subtask_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
-import '../../../../shared/features/users/datasources/providers/activity_event_provider.dart';
 import '../widgets/dialogs/edit_task_dialog.dart';
 import '../../datasources/providers/task_provider.dart';
 import '../../../boards/datasources/providers/board_provider.dart';
@@ -30,7 +29,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
   static const String _tabSubtasks = 'subtasks';
   static const String _tabSubmissions = 'submissions';
   static const String _tabStats = 'stats';
-  static const String _tabAppeals = 'appeals';
+  static const String _tabApplications = 'applications';
 
   bool _isDetailsPanelExpanded = true;
   bool _isSearchExpanded = false;
@@ -40,25 +39,6 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
   @override
   void initState() {
     super.initState();
-    // Log task_opened activity
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final userProvider = context.read<UserProvider>();
-      final activityProvider = context.read<ActivityEventProvider>();
-
-      if (userProvider.userId != null && userProvider.currentUser != null) {
-        activityProvider.logEvent(
-          userId: userProvider.userId!,
-          userName: userProvider.currentUser!.userName,
-          activityType: 'task_opened',
-          userProfilePicture: userProvider.currentUser!.userProfilePicture,
-          taskId: widget.task.taskId,
-          boardId: widget.task.taskBoardId.isNotEmpty
-              ? widget.task.taskBoardId
-              : null,
-          description: 'Opened task: ${widget.task.taskTitle}',
-        );
-      }
-    });
   }
 
   @override
@@ -88,6 +68,15 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       '[DEBUG] TaskDetailsPage: build called for taskId = ${widget.task.taskId}',
     );
     final navigation = context.watch<NavigationProvider>();
+    final currentUserId = context.watch<UserProvider>().userId;
+    final boardProvider = context.watch<BoardProvider>();
+    final board = widget.task.taskBoardId.isNotEmpty
+        ? boardProvider.getBoardById(widget.task.taskBoardId)
+        : null;
+    final canEditTaskDetails = widget.task.taskBoardId.isNotEmpty
+        ? (board?.isManager(currentUserId) == true ||
+              board?.isSupervisor(currentUserId) == true)
+        : currentUserId == widget.task.taskOwnerId;
 
     return Scaffold(
       appBar: AppTopBar(
@@ -124,18 +113,20 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
               itemBuilder: (context) => [
-                PopupMenuItem(
-                  child: const Text('Edit'),
-                  onTap: () {
-                    // Show edit task dialog after menu closes
-                    Future.delayed(Duration.zero, () {
-                      showDialog(
-                        context: context,
-                        builder: (context) => EditTaskDialog(task: widget.task),
-                      );
-                    });
-                  },
-                ),
+                if (canEditTaskDetails)
+                  PopupMenuItem(
+                    child: const Text('Edit'),
+                    onTap: () {
+                      // Show edit task dialog after menu closes
+                      Future.delayed(Duration.zero, () {
+                        showDialog(
+                          context: context,
+                          builder: (context) =>
+                              EditTaskDialog(task: widget.task),
+                        );
+                      });
+                    },
+                  ),
                 PopupMenuItem(
                   child: const Text(
                     'Delete',
@@ -177,16 +168,17 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
             final isUnassigned = _isTaskUnassigned(currentTask);
             final isAcceptedOrNoAcceptanceNeeded =
                 _isAcceptedOrNoAcceptanceNeeded(currentTask);
-            final showAppealsTab = isUnassigned && _canViewAppeals(currentTask);
+            final showApplicationsTab =
+                isUnassigned && _canViewApplications(currentTask);
             final showWorkTabs =
                 !isUnassigned && isAcceptedOrNoAcceptanceNeeded;
             final showSubmissionsTab =
                 showWorkTabs && currentTask.taskAllowsSubmissions;
 
-            if (showAppealsTab && _selectedTab != _tabAppeals) {
-              _selectedTab = _tabAppeals;
+            if (showApplicationsTab && _selectedTab != _tabApplications) {
+              _selectedTab = _tabApplications;
             }
-            if (!showAppealsTab && _selectedTab == _tabAppeals) {
+            if (!showApplicationsTab && _selectedTab == _tabApplications) {
               _selectedTab = _tabSubtasks;
             }
             if (!showSubmissionsTab && _selectedTab == _tabSubmissions) {
@@ -252,7 +244,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                     ],
                   ),
                 ),
-                if (showAppealsTab || showWorkTabs)
+                if (showApplicationsTab || showWorkTabs)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                     child: Row(
@@ -270,7 +262,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildViewTab(
-                              label: 'Submissions',
+                              label: 'Uploads',
                               selected: _selectedTab == _tabSubmissions,
                               onTap: () =>
                                   setState(() => _selectedTab = _tabSubmissions),
@@ -288,13 +280,13 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                             ),
                           ),
                         ],
-                        if (showAppealsTab)
+                        if (showApplicationsTab)
                           Expanded(
                             child: _buildViewTab(
-                              label: 'Appeals',
-                              selected: _selectedTab == _tabAppeals,
+                              label: 'Applications',
+                              selected: _selectedTab == _tabApplications,
                               onTap: () =>
-                                  setState(() => _selectedTab = _tabAppeals),
+                                  setState(() => _selectedTab = _tabApplications),
                             ),
                           ),
                       ],
@@ -318,10 +310,11 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                   TaskFileSubmissionsSection(task: currentTask)
                 else if (showWorkTabs && _selectedTab == _tabStats)
                   TaskStatsSection(task: currentTask)
-                else if (showAppealsTab && _selectedTab == _tabAppeals)
+                else if (showApplicationsTab &&
+                    _selectedTab == _tabApplications)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: TaskAppealsSection(taskId: currentTask.taskId),
+                    child: TaskApplicationsSection(taskId: currentTask.taskId),
                   )
                 else
                   Padding(
@@ -360,7 +353,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
     );
   }
 
-  bool _canViewAppeals(Task task) {
+  bool _canViewApplications(Task task) {
     final currentUserId = context.read<UserProvider>().userId;
     if (currentUserId == null) return false;
 

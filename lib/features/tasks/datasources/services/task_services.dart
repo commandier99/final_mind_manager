@@ -2,12 +2,11 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import '../models/task_model.dart'; // Ensure TaskModel is imported
 import '../models/task_stats_model.dart'; // Ensure TaskStats is imported
 import 'task_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
-import '../../../../shared/services/notification_dispatch_service.dart';
+import '../../../notifications/datasources/helpers/notification_helper.dart';
 
 class TaskService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -18,9 +17,7 @@ class TaskService {
   CollectionReference get _tasks => _firestore.collection('tasks');
 
   bool _isPersonalBoardData(Map<String, dynamic> boardData) {
-    final type = (boardData['boardType'] as String? ?? '')
-        .trim()
-        .toLowerCase();
+    final type = (boardData['boardType'] as String? ?? '').trim().toLowerCase();
     if (type == 'personal') return true;
     final title = (boardData['boardTitle'] as String? ?? '')
         .trim()
@@ -147,6 +144,7 @@ class TaskService {
   /// Update existing task
   Future<void> updateTask(Task task) async {
     try {
+      await _assertTaskNotCompleted(task.taskId);
       final normalizedTask = await _normalizeTaskForBoardRules(task);
       await _assertAssigneeWithinBoardTaskLimit(
         normalizedTask,
@@ -168,9 +166,20 @@ class TaskService {
     }
   }
 
+  Future<void> _assertTaskNotCompleted(String taskId) async {
+    final taskDoc = await _tasks.doc(taskId).get();
+    if (!taskDoc.exists) return;
+    final data = taskDoc.data() as Map<String, dynamic>?;
+    final isDone = data?['taskIsDone'] as bool? ?? false;
+    if (isDone) {
+      throw StateError('This task is locked because it is already completed.');
+    }
+  }
+
   /// Soft-delete a task
   Future<void> softDeleteTask(Task task) async {
     try {
+      await _assertTaskNotCompleted(task.taskId);
       await _tasks.doc(task.taskId).update({
         'taskIsDeleted': true,
         'taskDeletedAt': Timestamp.now(),
@@ -200,6 +209,7 @@ class TaskService {
   /// Hard-delete a task (delete task from Firestore completely)
   Future<void> hardDeleteTask(String taskId, {Task? task}) async {
     try {
+      await _assertTaskNotCompleted(taskId);
       // Get task data if not provided (for activity logging)
       Task? taskData = task;
       taskData ??= await getTaskById(taskId);
@@ -240,6 +250,7 @@ class TaskService {
   /// Toggle task done status
   Future<void> toggleTaskDone(Task task) async {
     try {
+      await _assertTaskNotCompleted(task.taskId);
       final newIsDone = task.taskIsDone;
       final taskOutcome = newIsDone
           ? Task.outcomeSuccessful
@@ -525,11 +536,49 @@ class TaskService {
   /// Accept a task (user indicates "I got this")
   Future<void> acceptTask(String taskId, String userId, String userName) async {
     try {
-      await _tasks.doc(taskId).update({'taskAcceptanceStatus': 'accepted'});
+      await _firestore.runTransaction((transaction) async {
+        final taskRef = _tasks.doc(taskId);
+        final snapshot = await transaction.get(taskRef);
+        if (!snapshot.exists) return;
 
-      print('✅ Task $taskId accepted by $userName');
+        final data = snapshot.data() as Map<String, dynamic>;
+        final proposedId = (data['taskProposedAssigneeId'] as String?)?.trim();
+        final proposedName = (data['taskProposedAssigneeName'] as String?)
+            ?.trim();
+
+        if (proposedId == null || proposedId.isEmpty || proposedId != userId) {
+          throw StateError('No pending assignment found for this user.');
+        }
+
+        transaction.update(taskRef, {
+          'taskAssignedTo': userId,
+          'taskAssignedToName':
+              (proposedName != null && proposedName.isNotEmpty)
+              ? proposedName
+              : userName,
+          'taskAcceptanceStatus': 'accepted',
+          'taskProposedAssigneeId': FieldValue.delete(),
+          'taskProposedAssigneeName': FieldValue.delete(),
+        });
+      });
+
+      final task = await getTaskById(taskId);
+      await _activityEventService.logEvent(
+        userId: userId,
+        userName: userName,
+        activityType: 'task_assignment_accepted',
+        boardId: task?.taskBoardId.isNotEmpty == true
+            ? task!.taskBoardId
+            : null,
+        taskId: taskId,
+        description: 'accepted a task assignment',
+        metadata: {'taskTitle': task?.taskTitle ?? ''},
+      );
+
+      print('Task $taskId accepted by $userName');
     } catch (e) {
-      print('⚠️ Error accepting task: $e');
+      print('Error accepting task: $e');
+      rethrow;
     }
   }
 
@@ -540,11 +589,43 @@ class TaskService {
     String userName,
   ) async {
     try {
-      await _tasks.doc(taskId).update({'taskAcceptanceStatus': 'declined'});
+      await _firestore.runTransaction((transaction) async {
+        final taskRef = _tasks.doc(taskId);
+        final snapshot = await transaction.get(taskRef);
+        if (!snapshot.exists) return;
 
-      print('✅ Task $taskId declined by $userName');
+        final data = snapshot.data() as Map<String, dynamic>;
+        final proposedId = (data['taskProposedAssigneeId'] as String?)?.trim();
+        if (proposedId == null || proposedId.isEmpty || proposedId != userId) {
+          throw StateError('No pending assignment found for this user.');
+        }
+
+        transaction.update(taskRef, {
+          'taskAssignedTo': 'None',
+          'taskAssignedToName': 'Unassigned',
+          'taskAcceptanceStatus': 'declined',
+          'taskProposedAssigneeId': FieldValue.delete(),
+          'taskProposedAssigneeName': FieldValue.delete(),
+        });
+      });
+
+      final task = await getTaskById(taskId);
+      await _activityEventService.logEvent(
+        userId: userId,
+        userName: userName,
+        activityType: 'task_assignment_declined',
+        boardId: task?.taskBoardId.isNotEmpty == true
+            ? task!.taskBoardId
+            : null,
+        taskId: taskId,
+        description: 'declined a task assignment',
+        metadata: {'taskTitle': task?.taskTitle ?? ''},
+      );
+
+      print('Task $taskId declined by $userName');
     } catch (e) {
-      print('⚠️ Error declining task: $e');
+      print('Error declining task: $e');
+      rethrow;
     }
   }
 
@@ -591,6 +672,16 @@ class TaskService {
             'respondedByName': null,
           });
 
+      await _activityEventService.logEvent(
+        userId: userId,
+        userName: userName,
+        activityType: 'task_volunteer_requested',
+        boardId: task.taskBoardId.isNotEmpty ? task.taskBoardId : null,
+        taskId: taskId,
+        description: 'requested to volunteer for a task',
+        metadata: {'taskTitle': task.taskTitle, 'requestId': requestId},
+      );
+
       print('✅ $userName requested to volunteer for task $taskId');
     } catch (e) {
       print('⚠️ Error creating volunteer request: $e');
@@ -615,19 +706,53 @@ class TaskService {
 
       print('[Notification] Starting to send deadline notifications...');
 
-      // Use NotificationDispatchService to send notification
-      final localNotifications = FlutterLocalNotificationsPlugin();
-      final dispatchService = NotificationDispatchService(localNotifications);
+      var boardTitle = (task.taskBoardTitle ?? '').trim();
+      var boardManagerName = '';
+      final taskSummary = _buildTaskSummary(task.taskDescription);
 
-      await dispatchService.sendNotificationToUser(
+      if (task.taskBoardId.trim().isNotEmpty) {
+        try {
+          final boardDoc = await _firestore
+              .collection('boards')
+              .doc(task.taskBoardId)
+              .get();
+          if (boardDoc.exists) {
+            final boardData = boardDoc.data() as Map<String, dynamic>;
+            if (boardTitle.isEmpty) {
+              boardTitle = (boardData['boardTitle'] as String? ?? '').trim();
+            }
+            boardManagerName =
+                (boardData['boardManagerName'] as String? ?? '').trim();
+          }
+        } catch (_) {
+          // Best effort enrichment for notification content.
+        }
+      }
+
+      final resolvedBoardTitle = boardTitle.isNotEmpty ? boardTitle : 'Unknown Board';
+      final resolvedManagerName = boardManagerName.isNotEmpty
+          ? boardManagerName
+          : 'Unknown Manager';
+      final remainingTime = _formatDeadline(task.taskDeadline!);
+      final deadlineSentence =
+          '${task.taskTitle} from $resolvedBoardTitle by $resolvedManagerName is due in $remainingTime.';
+
+      await NotificationHelper.createInAppOnly(
         userId: assignedUserId,
-        title: 'Task Deadline: ${task.taskTitle}',
-        body: '${task.taskTitle} is due ${_formatDeadline(task.taskDeadline!)}',
-        category: 'task_deadline',
-        data: {
+        title: 'Task Deadline',
+        message: deadlineSentence,
+        category: NotificationHelper.categoryTaskDeadline,
+        metadata: {
           'taskId': task.taskId,
           'boardId': task.taskBoardId,
           'type': 'task_deadline',
+          'taskTitle': task.taskTitle,
+          'boardTitle': resolvedBoardTitle,
+          'boardManagerName': resolvedManagerName,
+          'taskPriorityLevel': task.taskPriorityLevel,
+          if (taskSummary.isNotEmpty) 'taskSummary': taskSummary,
+          if (task.taskDeadline != null)
+            'deadline': task.taskDeadline!.toIso8601String(),
         },
       );
     } catch (e) {
@@ -648,8 +773,11 @@ class TaskService {
       return '${difference.inDays} days';
     }
   }
+
+  String _buildTaskSummary(String raw) {
+    final text = raw.trim();
+    if (text.isEmpty) return '';
+    if (text.length <= 180) return text;
+    return '${text.substring(0, 177)}...';
+  }
 }
-
-
-
-

@@ -8,9 +8,16 @@ import '../../../../../shared/features/users/datasources/providers/user_provider
 class BoardCard extends StatefulWidget {
   final Board board;
   final VoidCallback? onTap;
+  final VoidCallback? onEdit;
   final VoidCallback? onDelete;
 
-  const BoardCard({super.key, required this.board, this.onTap, this.onDelete});
+  const BoardCard({
+    super.key,
+    required this.board,
+    this.onTap,
+    this.onEdit,
+    this.onDelete,
+  });
 
   @override
   State<BoardCard> createState() => _BoardCardState();
@@ -52,7 +59,9 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
 
   @override
   Widget build(BuildContext context) {
+    final canEdit = widget.onEdit != null;
     final canDelete = widget.onDelete != null;
+    final hasActions = canEdit || canDelete;
     final variant = _BoardVariant.fromBoard(widget.board);
     final colors = _variantColors(variant);
 
@@ -70,47 +79,84 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Slidable(
             key: ValueKey(widget.board.boardId),
-            endActionPane: variant == _BoardVariant.defaultPersonal || !canDelete
+            endActionPane: variant == _BoardVariant.defaultPersonal || !hasActions
                 ? null
                 : ActionPane(
                     motion: const ScrollMotion(),
-                    extentRatio: 0.25,
+                    extentRatio: (canEdit ? 0.25 : 0) + (canDelete ? 0.25 : 0),
                     children: [
-                      Expanded(
-                        child: Container(
-                          alignment: Alignment.center,
+                      if (canEdit)
+                        Expanded(
                           child: Container(
-                            width: 60,
-                            height: 60,
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade400,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: widget.onDelete,
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.amber.shade500,
                                 borderRadius: BorderRadius.circular(8),
-                                child: const Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.delete, color: Colors.white, size: 20),
-                                    SizedBox(height: 2),
-                                    Text(
-                                      'Delete',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w500,
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: widget.onEdit,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.edit, color: Colors.white, size: 20),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Edit',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
+                      if (canDelete)
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade400,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: widget.onDelete,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.delete, color: Colors.white, size: 20),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Delete',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ),
             child: Builder(

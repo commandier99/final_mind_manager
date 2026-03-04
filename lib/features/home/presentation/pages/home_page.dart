@@ -452,17 +452,8 @@ class _HomePageState extends State<HomePage> {
         await showModalBottomSheet<void>(
           context: context,
           isScrollControlled: true,
-          showDragHandle: false,
-          builder: (context) {
-            final height = (MediaQuery.of(context).size.height * 0.82).clamp(
-              420.0,
-              720.0,
-            );
-            return SizedBox(
-              height: height,
-              child: const PokePage(),
-            );
-          },
+          showDragHandle: true,
+          builder: (context) => const PokePage(composeOnly: true),
         );
         return;
       default:

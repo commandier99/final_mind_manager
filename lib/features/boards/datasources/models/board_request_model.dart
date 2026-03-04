@@ -2,6 +2,21 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'board_roles.dart';
 
 class BoardRequest {
+  static const String typeRecruitment = 'recruitment';
+  static const String typeApplication = 'application';
+  static const Set<String> allowedTypes = {typeRecruitment, typeApplication};
+
+  static String normalizeType(String? type) {
+    final raw = (type ?? '').trim().toLowerCase();
+    if (raw == typeRecruitment || raw == 'invitation') {
+      return typeRecruitment;
+    }
+    if (raw == typeApplication || raw == 'join_request') {
+      return typeApplication;
+    }
+    return typeRecruitment;
+  }
+
   final String boardRequestId;
   final String boardId;
   final String boardTitle;
@@ -30,8 +45,7 @@ class BoardRequest {
     required this.userName,
     this.userProfilePicture,
     required this.boardReqStatus,
-    this.boardReqType =
-        'recruitment', // Default to recruitment for backward compatibility
+    this.boardReqType = typeRecruitment,
     this.boardReqMessage,
     this.boardReqRequestedRole = BoardRoles.member,
     required this.boardReqCreatedAt,
@@ -52,10 +66,9 @@ class BoardRequest {
       userProfilePicture: data['userProfilePicture'] as String?,
       boardReqStatus:
           data['boardReqStatus'] ?? data['requestStatus'] ?? 'pending',
-      boardReqType:
-          data['boardReqType'] ??
-          data['requestType'] ??
-          'recruitment', // Handle migration from old field names
+      boardReqType: normalizeType(
+        data['boardReqType']?.toString() ?? data['requestType']?.toString(),
+      ),
       boardReqMessage:
           data['boardReqMessage'] ?? data['requestMessage'] as String?,
       boardReqRequestedRole: BoardRoles.normalize(
@@ -87,7 +100,7 @@ class BoardRequest {
       'userName': userName,
       if (userProfilePicture != null) 'userProfilePicture': userProfilePicture,
       'boardReqStatus': boardReqStatus,
-      'boardReqType': boardReqType,
+      'boardReqType': normalizeType(boardReqType),
       if (boardReqMessage != null) 'boardReqMessage': boardReqMessage,
       'boardReqRequestedRole': boardReqRequestedRole,
       'boardReqCreatedAt': Timestamp.fromDate(boardReqCreatedAt),
@@ -128,7 +141,7 @@ class BoardRequest {
       userName: userName ?? this.userName,
       userProfilePicture: userProfilePicture ?? this.userProfilePicture,
       boardReqStatus: boardReqStatus ?? this.boardReqStatus,
-      boardReqType: boardReqType ?? this.boardReqType,
+      boardReqType: normalizeType(boardReqType ?? this.boardReqType),
       boardReqMessage: boardReqMessage ?? this.boardReqMessage,
       boardReqRequestedRole: BoardRoles.normalize(
         boardReqRequestedRole ?? this.boardReqRequestedRole,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../boards/datasources/models/board_request_model.dart';
 import '../../../datasources/models/in_app_notif_model.dart';
@@ -62,7 +63,20 @@ class NotificationCard extends StatelessWidget {
 
   // Board Request Card - Basic version
   Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
-    final isRecruitment = request.boardReqType == 'recruitment';
+    final isRecruitment =
+        BoardRequest.normalizeType(request.boardReqType) ==
+        BoardRequest.typeRecruitment;
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+    final isSender =
+        currentUserId.isNotEmpty && currentUserId == request.boardManagerId;
+    final requestLabel = isRecruitment
+        ? (isSender ? 'Invite Sent' : 'Invite Received')
+        : (isSender ? 'Application Received' : 'Application Sent');
+    final secondaryLine = isRecruitment
+        ? (isSender
+              ? 'To ${request.userName}'
+              : 'From ${request.boardManagerName}')
+        : (isSender ? 'From ${request.userName}' : 'To ${request.boardTitle}');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -83,7 +97,7 @@ class NotificationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isRecruitment ? 'Recruitment' : 'Application',
+                      requestLabel,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -91,21 +105,15 @@ class NotificationCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      request.boardTitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      secondaryLine,
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       timeago.format(request.boardReqCreatedAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
@@ -151,20 +159,14 @@ class NotificationCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       notif.message,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       timeago.format(notif.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
@@ -181,9 +183,7 @@ class NotificationCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: notif.isRead
-                        ? Colors.grey[600]
-                        : Colors.blue[700],
+                    color: notif.isRead ? Colors.grey[600] : Colors.blue[700],
                   ),
                 ),
               ),
@@ -226,20 +226,14 @@ class NotificationCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       notif.body,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
                     Text(
                       timeago.format(notif.createdAt),
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[500],
-                      ),
+                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
                     ),
                   ],
                 ),
@@ -248,9 +242,7 @@ class NotificationCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: notif.isSent
-                      ? Colors.green[100]
-                      : Colors.orange[100],
+                  color: notif.isSent ? Colors.green[100] : Colors.orange[100],
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -292,9 +284,9 @@ class NotificationCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
         label,

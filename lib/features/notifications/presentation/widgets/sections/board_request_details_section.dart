@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../boards/datasources/models/board_request_model.dart';
@@ -12,9 +13,26 @@ Widget buildBoardRequestDetailsSection(
   return Consumer<BoardRequestProvider>(
     builder: (context, boardProvider, child) {
       final currentRequest = _findLatestRequest(boardProvider, request);
-      final isRecruitment = currentRequest.boardReqType == 'recruitment';
+      final isRecruitment =
+          BoardRequest.normalizeType(currentRequest.boardReqType) ==
+          BoardRequest.typeRecruitment;
       final isPending = currentRequest.boardReqStatus == 'pending';
       final isProcessing = boardProvider.isLoading;
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
+      final isSender =
+          currentUserId.isNotEmpty &&
+          currentUserId == currentRequest.boardManagerId;
+      final isReceiver =
+          currentUserId.isNotEmpty && currentUserId == currentRequest.userId;
+      final canApproveReject =
+          isPending &&
+          ((isRecruitment && isReceiver) || (!isRecruitment && isSender));
+      final canCancel =
+          isPending &&
+          ((isRecruitment && isSender) || (!isRecruitment && !isSender));
+      final headerTitle = isRecruitment
+          ? (isSender ? 'Board Invite Sent' : 'Board Invite Received')
+          : (isSender ? 'Join Request Received' : 'Join Request Sent');
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -22,7 +40,7 @@ Widget buildBoardRequestDetailsSection(
           Row(
             children: [
               Icon(
-                isRecruitment ? Icons.mail : Icons.send,
+                isSender ? Icons.outgoing_mail : Icons.mail,
                 color: isRecruitment ? Colors.blue : Colors.green,
                 size: 32,
               ),
@@ -32,9 +50,7 @@ Widget buildBoardRequestDetailsSection(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      isRecruitment
-                          ? 'Recruitment Request'
-                          : 'Application Request',
+                      headerTitle,
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.grey,
@@ -58,10 +74,16 @@ Widget buildBoardRequestDetailsSection(
 
           // From/To information
           _buildInfoSection(
-            label: isRecruitment ? 'From Manager' : 'To Board',
+            label: isRecruitment
+                ? (isSender ? 'Invited User' : 'From Manager')
+                : (isSender ? 'Requester' : 'To Board'),
             value: isRecruitment
-                ? currentRequest.boardManagerName
-                : currentRequest.boardTitle,
+                ? (isSender
+                      ? currentRequest.userName
+                      : currentRequest.boardManagerName)
+                : (isSender
+                      ? currentRequest.userName
+                      : currentRequest.boardTitle),
             icon: Icons.person,
           ),
           if (isRecruitment) ...[
@@ -97,11 +119,11 @@ Widget buildBoardRequestDetailsSection(
           ],
 
           // Timeline
-          _buildTimeline(currentRequest, isRecruitment),
+          _buildTimeline(currentRequest),
           const SizedBox(height: 24),
 
-          // Action buttons for pending recruitment
-          if (isPending && isRecruitment) ...[
+          // Action buttons based on sender/receiver role
+          if (canApproveReject) ...[
             Row(
               children: [
                 Expanded(
@@ -118,7 +140,11 @@ Widget buildBoardRequestDetailsSection(
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text(isProcessing ? 'Processing...' : 'Accept'),
+                    child: Text(
+                      isProcessing
+                          ? 'Processing...'
+                          : (isRecruitment ? 'Accept' : 'Approve'),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -135,15 +161,39 @@ Widget buildBoardRequestDetailsSection(
                       foregroundColor: Colors.red,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
-                    child: Text(isProcessing ? 'Processing...' : 'Decline'),
+                    child: Text(
+                      isProcessing
+                          ? 'Processing...'
+                          : (isRecruitment ? 'Decline' : 'Reject'),
+                    ),
                   ),
                 ),
               ],
             ),
           ],
+          if (canCancel) ...[
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: isProcessing
+                    ? null
+                    : () => _handleCancelRequest(
+                        context,
+                        currentRequest,
+                        boardProvider,
+                      ),
+                icon: const Icon(Icons.cancel_outlined),
+                label: Text(isProcessing ? 'Processing...' : 'Cancel Request'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
 
-          // Response state for non-pending recruitment
-          if (!isPending && isRecruitment) ...[
+          // Response state for non-pending requests
+          if (!isPending) ...[
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -159,9 +209,11 @@ Widget buildBoardRequestDetailsSection(
                 ),
               ),
               child: Text(
-                currentRequest.boardReqStatus == 'approved'
-                    ? 'You have accepted this request.'
-                    : 'You have declined this request.',
+                _buildResolvedStateMessage(
+                  currentRequest: currentRequest,
+                  isSender: isSender,
+                  isRecruitment: isRecruitment,
+                ),
                 style: TextStyle(
                   color: currentRequest.boardReqStatus == 'approved'
                       ? Colors.green[800]
@@ -217,6 +269,7 @@ BoardRequest _findLatestRequest(
 ) {
   final allRequests = <BoardRequest>[
     ...provider.invitations,
+    ...provider.sentInvitations,
     ...provider.joinRequests,
     ...provider.pendingRequests,
     ...provider.userRequests,
@@ -263,7 +316,7 @@ Widget _buildInfoSection({
   );
 }
 
-Widget _buildTimeline(BoardRequest request, bool isRecruitment) {
+Widget _buildTimeline(BoardRequest request) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -297,6 +350,33 @@ Widget _buildTimeline(BoardRequest request, bool isRecruitment) {
       ],
     ],
   );
+}
+
+String _buildResolvedStateMessage({
+  required BoardRequest currentRequest,
+  required bool isSender,
+  required bool isRecruitment,
+}) {
+  final approved = currentRequest.boardReqStatus == 'approved';
+  if (approved) {
+    if (isRecruitment) {
+      return isSender
+          ? '${currentRequest.userName} accepted your invite.'
+          : 'You accepted this invite.';
+    }
+    return isSender
+        ? 'You approved this join request.'
+        : 'Your join request was approved.';
+  }
+
+  if (isRecruitment) {
+    return isSender
+        ? '${currentRequest.userName} declined your invite.'
+        : 'You declined this invite.';
+  }
+  return isSender
+      ? 'You declined this join request.'
+      : 'Your join request was declined.';
 }
 
 Widget _buildTimelineItem({
@@ -391,31 +471,28 @@ Future<void> _handleAccept(
   BoardRequest request,
   BoardRequestProvider provider,
 ) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     await provider.approveRequest(
       request,
       responseMessage: 'Recruitment accepted',
     );
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Joined ${request.boardTitle} as ${_roleLabel(request.boardReqRequestedRole)}!',
-          ),
-          backgroundColor: Colors.green,
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text(
+          'Joined ${request.boardTitle} as ${_roleLabel(request.boardReqRequestedRole)}!',
         ),
-      );
-    }
+        backgroundColor: Colors.green,
+      ),
+    );
   } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error accepting: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text('Error accepting: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
 }
 
@@ -424,6 +501,7 @@ Future<void> _handleDecline(
   BoardRequest request,
   BoardRequestProvider provider,
 ) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
   final reasonController = TextEditingController();
 
   showDialog(
@@ -473,23 +551,19 @@ Future<void> _handleDecline(
                     : 'Recruitment declined',
               );
 
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Recruitment declined'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
+              messenger?.showSnackBar(
+                const SnackBar(
+                  content: Text('Recruitment declined'),
+                  backgroundColor: Colors.red,
+                ),
+              );
             } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error declining: $e'),
-                    backgroundColor: Colors.red,
-                  ),
-                );
-              }
+              messenger?.showSnackBar(
+                SnackBar(
+                  content: Text('Error declining: $e'),
+                  backgroundColor: Colors.red,
+                ),
+              );
             }
           },
           style: ElevatedButton.styleFrom(
@@ -501,4 +575,28 @@ Future<void> _handleDecline(
       ],
     ),
   );
+}
+
+Future<void> _handleCancelRequest(
+  BuildContext context,
+  BoardRequest request,
+  BoardRequestProvider provider,
+) async {
+  final messenger = ScaffoldMessenger.maybeOf(context);
+  try {
+    await provider.cancelRequest(request.boardRequestId);
+    messenger?.showSnackBar(
+      const SnackBar(
+        content: Text('Request cancelled'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  } catch (e) {
+    messenger?.showSnackBar(
+      SnackBar(
+        content: Text('Error cancelling request: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
 }

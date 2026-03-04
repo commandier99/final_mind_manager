@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../../datasources/providers/task_provider.dart'; // Import TaskProvider
 import '../../../datasources/models/task_model.dart';
@@ -44,6 +45,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   String? _assignedToUserName;
   Map<String, String> _boardMembers = {};
   bool _loadingMembers = false;
+  final String? _viewerUserId = FirebaseAuth.instance.currentUser?.uid;
   static const String _lanePublished = Task.lanePublished;
   static const String _laneDrafts = Task.laneDrafts;
   final Set<String> _selectedDependencyIds = <String>{};
@@ -88,6 +90,13 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       memberId: memberId,
     );
     return active >= limit;
+  }
+
+  String _assigneeOptionLabel(String memberId, String memberName) {
+    if (_viewerUserId != null && memberId == _viewerUserId) {
+      return '$memberName (You)';
+    }
+    return memberName;
   }
 
   @override
@@ -293,11 +302,21 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
       // Determine the assigned to name and ID
       final isTeamBoard = selectedBoard.boardType == 'team';
+      final proposedAssigneeId = isTeamBoard ? _assignedToUserId : null;
+      final proposedAssigneeName = isTeamBoard ? _assignedToUserName : null;
+      final isPendingExternalAssignment = isTeamBoard &&
+          proposedAssigneeId != null &&
+          proposedAssigneeId.isNotEmpty &&
+          proposedAssigneeId != 'None' &&
+          proposedAssigneeId != widget.userId;
+
       String assignedToId = isTeamBoard
-          ? (_assignedToUserId ?? 'None')
+          ? (isPendingExternalAssignment ? 'None' : (_assignedToUserId ?? 'None'))
           : widget.userId;
       String assignedToName = isTeamBoard
-          ? (_assignedToUserName ?? 'Unassigned')
+          ? (isPendingExternalAssignment
+                ? 'Unassigned'
+                : (_assignedToUserName ?? 'Unassigned'))
           : _currentUserName;
 
       if (isTeamBoard &&
@@ -385,12 +404,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskNextRepeatDate: null,
         taskRepeatTime: isRepeating ? repeatTimeStr : null,
         // Set acceptance status to 'pending' if assigning to someone else
-        taskAcceptanceStatus: isTeamBoard &&
-            (assignedToId.isNotEmpty &&
-                assignedToId != 'None' &&
-                assignedToId != widget.userId)
-            ? 'pending'
-            : null,
+        taskAcceptanceStatus: isPendingExternalAssignment ? 'pending' : null,
+        taskProposedAssigneeId:
+            isPendingExternalAssignment ? proposedAssigneeId : null,
+        taskProposedAssigneeName:
+            isPendingExternalAssignment ? proposedAssigneeName : null,
         taskBoardLane: selectedBoard.boardType == 'personal'
             ? _lanePublished
             : _laneDrafts,
@@ -973,7 +991,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                       // "None" option for unassigned tasks
                       const DropdownMenuItem<String?>(
                         value: null,
-                        child: Text('None - Open for petitions'),
+                        child: Text('None'),
                       ),
                       // All board members
                       ..._boardMembers.entries.map((entry) {
@@ -1000,7 +1018,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                           value: entry.key,
                           enabled: !atCapacity,
                           child: Text(
-                            '${entry.value}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
+                            '${_assigneeOptionLabel(entry.key, entry.value)}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
                           ),
                         );
                       }),

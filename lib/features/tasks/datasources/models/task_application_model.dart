@@ -1,61 +1,62 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class TaskAppeal {
+class TaskApplication {
   final String userId;
   final String userName;
   final String userProfilePicture;
-  final String appealText;
+  final String applicationText;
   final Timestamp createdAt;
 
-  const TaskAppeal({
+  const TaskApplication({
     required this.userId,
     required this.userName,
     required this.userProfilePicture,
-    required this.appealText,
+    required this.applicationText,
     required this.createdAt,
   });
 
-  /// Create a TaskAppeal from a map
-  factory TaskAppeal.fromMap(Map<String, dynamic> map) {
-    return TaskAppeal(
+  /// Create a TaskApplication from a map
+  factory TaskApplication.fromMap(Map<String, dynamic> map) {
+    return TaskApplication(
       userId: map['userId'] as String,
       userName: map['userName'] as String,
       userProfilePicture: map['userProfilePicture'] as String? ?? '',
-      appealText: map['appealText'] as String,
+      applicationText:
+          (map['applicationText'] ?? map['appealText'] ?? '') as String,
       createdAt: map['createdAt'] as Timestamp,
     );
   }
 
-  /// Convert TaskAppeal to a map for Firestore
+  /// Convert TaskApplication to a map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'userId': userId,
       'userName': userName,
       'userProfilePicture': userProfilePicture,
-      'appealText': appealText,
+      'applicationText': applicationText,
       'createdAt': createdAt,
     };
   }
 
   /// Create a copy with optional field updates
-  TaskAppeal copyWith({
+  TaskApplication copyWith({
     String? userId,
     String? userName,
     String? userProfilePicture,
-    String? appealText,
+    String? applicationText,
     Timestamp? createdAt,
   }) {
-    return TaskAppeal(
+    return TaskApplication(
       userId: userId ?? this.userId,
       userName: userName ?? this.userName,
       userProfilePicture: userProfilePicture ?? this.userProfilePicture,
-      appealText: appealText ?? this.appealText,
+      applicationText: applicationText ?? this.applicationText,
       createdAt: createdAt ?? this.createdAt,
     );
   }
 
   @override
   String toString() {
-    return 'TaskAppeal(userId: $userId, userName: $userName, appealText: $appealText, createdAt: $createdAt)';
+    return 'TaskApplication(userId: $userId, userName: $userName, applicationText: $applicationText, createdAt: $createdAt)';
   }
 }

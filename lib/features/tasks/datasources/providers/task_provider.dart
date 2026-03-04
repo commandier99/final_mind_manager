@@ -50,6 +50,59 @@ class TaskProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  String? _notificationTargetAssigneeId(Task task) {
+    final assignedId = task.taskAssignedTo.trim();
+    if (assignedId.isNotEmpty &&
+        assignedId != 'None' &&
+        assignedId != task.taskOwnerId) {
+      return assignedId;
+    }
+
+    final proposedId = (task.taskProposedAssigneeId ?? '').trim();
+    if (task.taskAcceptanceStatus == 'pending' &&
+        proposedId.isNotEmpty &&
+        proposedId != task.taskOwnerId) {
+      return proposedId;
+    }
+    return null;
+  }
+
+  Future<void> _sendTaskAssignmentNotification({
+    required Task task,
+    required String assigneeId,
+    String? assigneeName,
+  }) async {
+    final deadlineInfo = task.taskDeadline != null
+        ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}'
+        : '';
+    final taskSummary = task.taskDescription.trim().isEmpty
+        ? ''
+        : (task.taskDescription.trim().length <= 180
+              ? task.taskDescription.trim()
+              : '${task.taskDescription.trim().substring(0, 177)}...');
+    await NotificationHelper.createInAppOnly(
+      userId: assigneeId,
+      title: 'Task Assignment Request',
+      message:
+          '${task.taskAssignedBy} wants to assign you the task "${task.taskTitle}"$deadlineInfo',
+      category: NotificationHelper.categoryTaskAssigned,
+      relatedId: task.taskId,
+      metadata: {
+        'boardTitle': task.taskBoardTitle,
+        'taskTitle': task.taskTitle,
+        'assigneeName':
+            assigneeName ??
+            task.taskProposedAssigneeName ??
+            task.taskAssignedToName,
+        if (task.taskDeadline != null) 'deadline': task.taskDeadline.toString(),
+        'assignedBy': task.taskAssignedBy,
+        'taskId': task.taskId,
+        'taskPriorityLevel': task.taskPriorityLevel,
+        if (taskSummary.isNotEmpty) 'taskSummary': taskSummary,
+      },
+    );
+  }
+
   // ------------------------
   // STREAM TASKS
   // ------------------------
@@ -205,54 +258,40 @@ class TaskProvider extends ChangeNotifier {
         '[TaskNotification] selectedAssigneeId = "$selectedAssigneeId", isEmpty = ${selectedAssigneeId?.isEmpty ?? true}',
       );
 
-      // Create task assignment notification for the selected assignee
-      if (selectedAssigneeId != null &&
-          selectedAssigneeId.isNotEmpty &&
-          selectedAssigneeId != 'None' &&
-          selectedAssigneeId != task.taskOwnerId) {
+      final shouldNotifyAssignment =
+          newTask.taskBoardLane == Task.lanePublished &&
+          _notificationTargetAssigneeId(newTask) != null;
+      final assigneeId = (selectedAssigneeId == null ||
+              selectedAssigneeId.isEmpty ||
+              selectedAssigneeId == 'None')
+          ? _notificationTargetAssigneeId(newTask)
+          : selectedAssigneeId;
+
+      // Create task assignment notification only when task is already published.
+      if (shouldNotifyAssignment && assigneeId != null) {
         print(
-          '[TaskNotification] ✅ Conditions met - creating notification for userId: $selectedAssigneeId',
+          '[TaskNotification] published task - creating notification for userId: $assigneeId',
         );
         try {
-          final deadlineInfo = task.taskDeadline != null
-              ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}'
-              : '';
-
-          print(
-            '[TaskNotification] Calling NotificationHelper.createInAppOnly...',
-          );
-          await NotificationHelper.createInAppOnly(
-            userId: selectedAssigneeId,
-            title: 'Task Assignment Request',
-            message:
-                '${task.taskAssignedBy} wants to assign you the task "${task.taskTitle}"$deadlineInfo',
-            category: NotificationHelper.categoryTaskAssigned,
-            relatedId: task.taskId,
-            metadata: {
-              'boardTitle': task.taskBoardTitle,
-              'taskTitle': task.taskTitle,
-              'assigneeName': selectedAssigneeName ?? 'Unknown',
-              if (task.taskDeadline != null)
-                'deadline': task.taskDeadline.toString(),
-              'assignedBy': task.taskAssignedBy,
-              'taskId': task.taskId,
-            },
+          await _sendTaskAssignmentNotification(
+            task: newTask,
+            assigneeId: assigneeId,
+            assigneeName: selectedAssigneeName,
           );
           print(
-            '[TaskNotification] ✅ Task assignment notification created for: ${task.taskId}',
+            '[TaskNotification] task assignment notification created for: ${newTask.taskId}',
           );
         } catch (e) {
           // Log error but don't fail task creation - notification is optional
           print(
-            '[TaskNotification] ⚠️ Failed to create notification (non-critical): $e',
+            '[TaskNotification] failed to create notification (non-critical): $e',
           );
         }
       } else {
         print(
-          '[TaskNotification] ⚠️ Notification not created - no assignee selected',
+          '[TaskNotification] notification skipped - task not published or no valid assignee',
         );
       }
-
       // Track activity
       await _userDailyActivityService.incrementToday(newTask.taskOwnerId, {
         'tasksCreatedCount': 1,
@@ -294,10 +333,40 @@ class TaskProvider extends ChangeNotifier {
         previousTask = _tasks[existingIndex];
         _tasks[existingIndex] = updatedTask;
         notifyListeners();
+      } else {
+        previousTask = await _taskService.getTaskById(updatedTask.taskId);
       }
 
       // Update task in tasks collection using TaskService
       await _taskService.updateTask(updatedTask);
+
+      // Notify assignee only when task becomes published, or reassigned while published.
+      if (previousTask != null &&
+          _notificationTargetAssigneeId(updatedTask) != null) {
+        final previousNotifyTarget = _notificationTargetAssigneeId(previousTask);
+        final currentNotifyTarget = _notificationTargetAssigneeId(updatedTask);
+        final becamePublished =
+            previousTask.taskBoardLane != Task.lanePublished &&
+            updatedTask.taskBoardLane == Task.lanePublished;
+        final reassignedWhilePublished =
+            previousTask.taskBoardLane == Task.lanePublished &&
+            updatedTask.taskBoardLane == Task.lanePublished &&
+            previousNotifyTarget != currentNotifyTarget;
+
+        if ((becamePublished || reassignedWhilePublished) &&
+            currentNotifyTarget != null) {
+          try {
+            await _sendTaskAssignmentNotification(
+              task: updatedTask,
+              assigneeId: currentNotifyTarget,
+            );
+          } catch (e) {
+            print(
+              '[TaskNotification] failed to send assignment notification on update: $e',
+            );
+          }
+        }
+      }
 
       print(
         '[DEBUG] TaskProvider: Task ${updatedTask.taskId} updated successfully',

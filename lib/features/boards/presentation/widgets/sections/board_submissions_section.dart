@@ -1,39 +1,158 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/models/task_submission_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/datasources/services/task_submission_service.dart';
+import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../datasources/providers/board_provider.dart';
 
-class BoardSubmissionsSection extends StatelessWidget {
+class BoardSubmissionsSection extends StatefulWidget {
   final String boardId;
 
   const BoardSubmissionsSection({super.key, required this.boardId});
 
   @override
+  State<BoardSubmissionsSection> createState() => _BoardSubmissionsSectionState();
+}
+
+class _BoardSubmissionsSectionState extends State<BoardSubmissionsSection> {
+  final TaskSubmissionService _submissionService = TaskSubmissionService();
+  final Set<String> _reviewingSubmissionIds = <String>{};
+
+  int _statusRank(String status) {
+    switch (TaskSubmission.normalizeStatus(status)) {
+      case TaskSubmission.statusPending:
+        return 0;
+      case TaskSubmission.statusRevisionRequested:
+        return 1;
+      case TaskSubmission.statusRejected:
+        return 2;
+      case TaskSubmission.statusApproved:
+        return 3;
+      default:
+        return 9;
+    }
+  }
+
+  Color _statusColor(String status) {
+    switch (TaskSubmission.normalizeStatus(status)) {
+      case TaskSubmission.statusApproved:
+        return Colors.green;
+      case TaskSubmission.statusRejected:
+        return Colors.red;
+      case TaskSubmission.statusRevisionRequested:
+        return Colors.orange;
+      default:
+        return Colors.blue;
+    }
+  }
+
+  String _statusLabel(String status) {
+    return TaskSubmission.normalizeStatus(
+      status,
+    ).replaceAll('_', ' ').toUpperCase();
+  }
+
+  Future<void> _openFile(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  Future<void> _reviewSubmission({
+    required TaskSubmission submission,
+    required String status,
+  }) async {
+    final feedbackController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(status == 'approved' ? 'Approve submission?' : 'Reject submission?'),
+        content: TextField(
+          controller: feedbackController,
+          minLines: 2,
+          maxLines: 5,
+          decoration: const InputDecoration(
+            labelText: 'Feedback (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Submit'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      feedbackController.dispose();
+      return;
+    }
+
+    setState(() => _reviewingSubmissionIds.add(submission.submissionId));
+    try {
+      final feedback = feedbackController.text.trim();
+      await _submissionService.reviewSubmission(
+        submissionId: submission.submissionId,
+        status: status,
+        feedback: feedback.isEmpty ? null : feedback,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Submission ${status.replaceAll('_', ' ')}.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to review submission: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      feedbackController.dispose();
+      if (mounted) {
+        setState(() => _reviewingSubmissionIds.remove(submission.submissionId));
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, _) {
+    return Consumer3<TaskProvider, BoardProvider, UserProvider>(
+      builder: (context, taskProvider, boardProvider, userProvider, _) {
+        final currentUserId = userProvider.userId;
+        final board = boardProvider.getBoardById(widget.boardId);
+        final canReview = board?.canReviewSubmissions(currentUserId) == true;
+
         final boardTasks = taskProvider.tasks
             .where(
               (task) =>
-                  task.taskBoardId == boardId &&
+                  task.taskBoardId == widget.boardId &&
                   !task.taskIsDeleted &&
-                  task.taskBoardLane == Task.lanePublished,
+                  task.taskBoardLane == Task.lanePublished &&
+                  task.taskAllowsSubmissions,
             )
             .toList();
 
         if (boardTasks.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: _buildStyledNoSubmissionsState(),
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: Text('No tasks with submissions enabled.')),
           );
         }
 
-        final taskIds = boardTasks.map((t) => t.taskId).toSet();
+        final taskById = <String, Task>{for (final t in boardTasks) t.taskId: t};
 
         return StreamBuilder<List<TaskSubmission>>(
-          stream: TaskSubmissionService().streamAllSubmissions(),
+          stream: _submissionService.streamAllSubmissions(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
@@ -43,121 +162,194 @@ class BoardSubmissionsSection extends StatelessWidget {
             }
 
             final allSubmissions = snapshot.data ?? const <TaskSubmission>[];
-            final boardSubmissions = allSubmissions
-                .where((submission) => taskIds.contains(submission.taskId))
-                .toList();
+            final submissions = allSubmissions
+                .where((s) => taskById.containsKey(s.taskId))
+                .toList()
+              ..sort((a, b) {
+                final statusCompare = _statusRank(a.status).compareTo(
+                  _statusRank(b.status),
+                );
+                if (statusCompare != 0) return statusCompare;
+                return b.submittedAt.compareTo(a.submittedAt);
+              });
 
-            final latestSubmissionByTaskId = <String, TaskSubmission>{};
-            for (final submission in boardSubmissions) {
-              final existing = latestSubmissionByTaskId[submission.taskId];
-              if (existing == null ||
-                  submission.submittedAt.isAfter(existing.submittedAt)) {
-                latestSubmissionByTaskId[submission.taskId] = submission;
-              }
+            if (submissions.isEmpty) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: Text('No file submissions yet.')),
+              );
             }
 
-            final tasksWithSubmission =
-                boardTasks
-                    .where(
-                      (task) =>
-                          latestSubmissionByTaskId.containsKey(task.taskId),
-                    )
-                    .toList()
-                  ..sort((a, b) {
-                    final aSub = latestSubmissionByTaskId[a.taskId]!;
-                    final bSub = latestSubmissionByTaskId[b.taskId]!;
-                    return bSub.submittedAt.compareTo(aSub.submittedAt);
-                  });
-
-            final missingTasks =
-                boardTasks
-                    .where(
-                      (task) =>
-                          !latestSubmissionByTaskId.containsKey(task.taskId),
-                    )
-                    .toList()
-                  ..sort((a, b) {
-                    if (a.taskDeadline == null && b.taskDeadline == null) {
-                      return 0;
-                    }
-                    if (a.taskDeadline == null) {
-                      return 1;
-                    }
-                    if (b.taskDeadline == null) {
-                      return -1;
-                    }
-                    return a.taskDeadline!.compareTo(b.taskDeadline!);
-                  });
-
-            return Padding(
+            return ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Review',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: submissions.length,
+              itemBuilder: (context, index) {
+                final submission = submissions[index];
+                final task = taskById[submission.taskId]!;
+                final statusColor = _statusColor(submission.status);
+                final isReviewing = _reviewingSubmissionIds.contains(
+                  submission.submissionId,
+                );
+                final canReviewThis =
+                    canReview &&
+                    !isReviewing &&
+                    TaskSubmission.normalizeStatus(submission.status) !=
+                        TaskSubmission.statusApproved;
+
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                task.taskTitle,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: statusColor.withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                _statusLabel(submission.status),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: statusColor,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'By ${submission.submittedByName} • ${_formatDateTime(submission.submittedAt)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade700,
+                          ),
+                        ),
+                        if (submission.feedback != null &&
+                            submission.feedback!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Feedback: ${submission.feedback}',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 8),
+                        ...submission.files.map(
+                          (file) => Padding(
+                            padding: const EdgeInsets.only(bottom: 6),
+                            child: InkWell(
+                              onTap: () => _openFile(file.fileUrl),
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: Colors.blue.withValues(alpha: 0.2),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.attach_file,
+                                      size: 16,
+                                      color: Colors.blue,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        file.fileName,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blue,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        if (canReviewThis) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _reviewSubmission(
+                                    submission: submission,
+                                    status: TaskSubmission.statusApproved,
+                                  ),
+                                  icon: const Icon(Icons.check, size: 16),
+                                  label: const Text('Approve'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.green,
+                                    foregroundColor: Colors.white,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _reviewSubmission(
+                                    submission: submission,
+                                    status: TaskSubmission.statusRejected,
+                                  ),
+                                  icon: const Icon(Icons.close, size: 16),
+                                  label: const Text('Reject'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                    visualDensity: VisualDensity.compact,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ] else if (isReviewing) ...[
+                          const SizedBox(height: 8),
+                          const LinearProgressIndicator(minHeight: 3),
+                        ],
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Track completed uploads and tasks still missing submissions.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey[700]),
-                  ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildCountPill(
-                        icon: Icons.assignment,
-                        label: 'Tasks',
-                        value: '${boardTasks.length}',
-                        color: Colors.blueGrey,
-                      ),
-                      _buildCountPill(
-                        icon: Icons.check_circle_outline,
-                        label: 'Submitted',
-                        value: '${tasksWithSubmission.length}',
-                        color: Colors.green,
-                      ),
-                      _buildCountPill(
-                        icon: Icons.error_outline,
-                        label: 'Missing',
-                        value: '${missingTasks.length}',
-                        color: Colors.orange,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  _buildSectionTitle('Missing Submissions'),
-                  const SizedBox(height: 8),
-                  if (missingTasks.isEmpty)
-                    _buildInfoState(
-                      icon: Icons.verified_outlined,
-                      title: 'No missing submissions',
-                      subtitle:
-                          'All published tasks currently have at least one submission.',
-                    )
-                  else ...[
-                    ...missingTasks.map(_buildMissingTaskTile),
-                  ],
-                  const SizedBox(height: 14),
-                  _buildSectionTitle('Submitted'),
-                  const SizedBox(height: 8),
-                  if (tasksWithSubmission.isEmpty)
-                    _buildStyledNoSubmissionsState()
-                  else ...[
-                    ...tasksWithSubmission.map(
-                      (task) => _buildSubmittedTile(
-                        task: task,
-                        submission: latestSubmissionByTaskId[task.taskId]!,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+                );
+              },
             );
           },
         );
@@ -165,246 +357,8 @@ class BoardSubmissionsSection extends StatelessWidget {
     );
   }
 
-  Widget _buildCountPill({
-    required IconData icon,
-    required String label,
-    required String value,
-    required MaterialColor color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.shade50,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.shade100),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color.shade700),
-          const SizedBox(width: 6),
-          Text(
-            '$label: $value',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color.shade800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        color: Colors.blueGrey.shade700,
-      ),
-    );
-  }
-
-  Widget _buildMissingTaskTile(Task task) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.orange.shade200),
-        color: Colors.orange.shade50,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.warning_amber_rounded,
-            color: Colors.orange.shade700,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.taskTitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Assignee: ${task.taskAssignedToName.isEmpty ? 'Unassigned' : task.taskAssignedToName} - Due: ${_formatDate(task.taskDeadline)}',
-                  style: TextStyle(fontSize: 11, color: Colors.orange.shade900),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubmittedTile({
-    required Task task,
-    required TaskSubmission submission,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.green.shade200),
-        color: Colors.green.shade50,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.check_circle_outline,
-            color: Colors.green.shade700,
-            size: 18,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  task.taskTitle,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'By ${submission.submittedByName} - ${submission.files.length} file(s) - ${_formatDateTime(submission.submittedAt)}',
-                  style: TextStyle(fontSize: 11, color: Colors.green.shade900),
-                ),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(999),
-              color: Colors.white,
-              border: Border.all(color: Colors.green.shade200),
-            ),
-            child: Text(
-              submission.status,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                color: Colors.green.shade800,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoState({
-    required IconData icon,
-    required String title,
-    required String subtitle,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.grey.shade300),
-        color: Colors.grey.shade50,
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: Colors.grey.shade700),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStyledNoSubmissionsState() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.blueGrey.shade100),
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.blueGrey.shade50, Colors.white],
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 34,
-            height: 34,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.blueGrey.shade100),
-            ),
-            child: Icon(
-              Icons.inbox_outlined,
-              size: 18,
-              color: Colors.blueGrey.shade500,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'No submissions yet\nMembers have not uploaded files for these tasks yet.',
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.35,
-                fontWeight: FontWeight.w500,
-                color: Colors.blueGrey.shade700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(DateTime? date) {
-    if (date == null) return '-';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
-  }
-
-  String _formatDateTime(DateTime date) {
-    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
-    final minute = date.minute.toString().padLeft(2, '0');
-    final period = date.hour >= 12 ? 'PM' : 'AM';
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')} $hour:$minute $period';
+  String _formatDateTime(DateTime dateTime) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${dateTime.year}-${two(dateTime.month)}-${two(dateTime.day)} ${two(dateTime.hour)}:${two(dateTime.minute)}';
   }
 }

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/board_request_model.dart';
 import '../models/board_roles.dart';
 import '../services/board_request_services.dart';
@@ -10,13 +11,23 @@ class BoardRequestProvider extends ChangeNotifier {
   List<BoardRequest> _pendingRequests = [];
   List<BoardRequest> _userRequests = [];
   List<BoardRequest> _invitations = [];
+  List<BoardRequest> _sentInvitations = [];
   List<BoardRequest> _joinRequests = [];
 
   bool _isLoading = false;
 
+  StreamSubscription<List<BoardRequest>>? _pendingRequestsSub;
+  StreamSubscription<List<BoardRequest>>? _pendingInvitationsForBoardSub;
+  StreamSubscription<List<BoardRequest>>? _pendingJoinRequestsForBoardSub;
+  StreamSubscription<List<BoardRequest>>? _invitationsByUserSub;
+  StreamSubscription<List<BoardRequest>>? _sentInvitationsSub;
+  StreamSubscription<List<BoardRequest>>? _joinRequestsByUserSub;
+  StreamSubscription<List<BoardRequest>>? _userRequestsSub;
+
   List<BoardRequest> get pendingRequests => _pendingRequests;
   List<BoardRequest> get userRequests => _userRequests;
   List<BoardRequest> get invitations => _invitations;
+  List<BoardRequest> get sentInvitations => _sentInvitations;
   List<BoardRequest> get joinRequests => _joinRequests;
   bool get isLoading => _isLoading;
 
@@ -26,7 +37,8 @@ class BoardRequestProvider extends ChangeNotifier {
 
   /// Stream pending requests for a board (for managers) - all types
   void streamPendingRequestsForBoard(String boardId) {
-    _service
+    _pendingRequestsSub?.cancel();
+    _pendingRequestsSub = _service
         .streamPendingRequestsForBoard(boardId)
         .listen(
           (requests) {
@@ -43,16 +55,17 @@ class BoardRequestProvider extends ChangeNotifier {
 
   /// Stream pending invitations for a board (manager inviting users)
   void streamPendingInvitationsForBoard(String boardId) {
-    _service
+    _pendingInvitationsForBoardSub?.cancel();
+    _pendingInvitationsForBoardSub = _service
         .streamPendingInvitationsForBoard(boardId)
         .listen(
           (requests) {
-            _invitations = requests;
+            _pendingRequests = requests;
             notifyListeners();
           },
           onError: (error) {
             debugPrint(
-              '[BoardRequestProvider] ERROR streaming invitations: $error',
+              '[BoardRequestProvider] ERROR streaming board invitations: $error',
             );
           },
         );
@@ -60,16 +73,17 @@ class BoardRequestProvider extends ChangeNotifier {
 
   /// Stream pending join requests for a board (users requesting to join)
   void streamPendingJoinRequestsForBoard(String boardId) {
-    _service
+    _pendingJoinRequestsForBoardSub?.cancel();
+    _pendingJoinRequestsForBoardSub = _service
         .streamPendingJoinRequestsForBoard(boardId)
         .listen(
           (requests) {
-            _joinRequests = requests;
+            _pendingRequests = requests;
             notifyListeners();
           },
           onError: (error) {
             debugPrint(
-              '[BoardRequestProvider] ERROR streaming join requests: $error',
+              '[BoardRequestProvider] ERROR streaming board join requests: $error',
             );
           },
         );
@@ -77,7 +91,8 @@ class BoardRequestProvider extends ChangeNotifier {
 
   /// Stream invitations received by a user
   void streamInvitationsByUser(String userId) {
-    _service
+    _invitationsByUserSub?.cancel();
+    _invitationsByUserSub = _service
         .streamInvitationsByUser(userId)
         .listen(
           (requests) {
@@ -92,9 +107,28 @@ class BoardRequestProvider extends ChangeNotifier {
         );
   }
 
+  /// Stream invitations sent by a manager
+  void streamInvitationsSentByManager(String managerId) {
+    _sentInvitationsSub?.cancel();
+    _sentInvitationsSub = _service
+        .streamInvitationsSentByManager(managerId)
+        .listen(
+          (requests) {
+            _sentInvitations = requests;
+            notifyListeners();
+          },
+          onError: (error) {
+            debugPrint(
+              '[BoardRequestProvider] ERROR streaming sent invitations: $error',
+            );
+          },
+        );
+  }
+
   /// Stream join requests made by a user
   void streamJoinRequestsByUser(String userId) {
-    _service
+    _joinRequestsByUserSub?.cancel();
+    _joinRequestsByUserSub = _service
         .streamJoinRequestsByUser(userId)
         .listen(
           (requests) {
@@ -112,7 +146,8 @@ class BoardRequestProvider extends ChangeNotifier {
   /// Stream requests by user (for users to track their own requests)
   void streamRequestsByUser(String userId) {
     debugPrint('[BoardRequestProvider] Streaming requests for user: $userId');
-    _service
+    _userRequestsSub?.cancel();
+    _userRequestsSub = _service
         .streamRequestsByUser(userId)
         .listen(
           (requests) {
@@ -252,5 +287,17 @@ class BoardRequestProvider extends ChangeNotifier {
   /// Check if user has pending request for a board
   Future<bool> hasPendingRequest(String boardId, String userId) async {
     return await _service.hasPendingRequest(boardId, userId);
+  }
+
+  @override
+  void dispose() {
+    _pendingRequestsSub?.cancel();
+    _pendingInvitationsForBoardSub?.cancel();
+    _pendingJoinRequestsForBoardSub?.cancel();
+    _invitationsByUserSub?.cancel();
+    _sentInvitationsSub?.cancel();
+    _joinRequestsByUserSub?.cancel();
+    _userRequestsSub?.cancel();
+    super.dispose();
   }
 }

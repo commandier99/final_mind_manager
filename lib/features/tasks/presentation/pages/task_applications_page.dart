@@ -3,20 +3,23 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../datasources/models/task_model.dart';
 import '../../datasources/providers/task_provider.dart';
-import '../../datasources/services/task_appeal_service.dart';
+import '../../datasources/services/task_application_service.dart';
 import '../../../../shared/presentation/widgets/app_top_bar.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../shared/features/users/datasources/services/user_services.dart';
 
 class TaskApplicationsPage extends StatelessWidget {
   final Task task;
-  final TaskAppealService _taskAppealService = TaskAppealService();
+  final TaskApplicationService _taskApplicationService =
+      TaskApplicationService();
 
   TaskApplicationsPage({super.key, required this.task});
 
   @override
   Widget build(BuildContext context) {
-    final appealsStream = _taskAppealService.streamAppeals(task.taskId);
+    final applicationsStream = _taskApplicationService.streamApplications(
+      task.taskId,
+    );
 
     return Scaffold(
       appBar: AppTopBar(
@@ -26,7 +29,7 @@ class TaskApplicationsPage extends StatelessWidget {
         showNotificationButton: false,
       ),
       body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: appealsStream,
+        stream: applicationsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -36,7 +39,7 @@ class TaskApplicationsPage extends StatelessWidget {
             return _buildEmptyState(context);
           }
 
-          final appeals = snapshot.data!.docs;
+          final applications = snapshot.data!.docs;
 
           return ListView(
             padding: const EdgeInsets.all(16),
@@ -52,24 +55,26 @@ class TaskApplicationsPage extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                '${appeals.length} member(s) interested',
+                '${applications.length} member(s) applied',
                 style: TextStyle(fontSize: 14, color: Colors.grey[600]),
               ),
               const SizedBox(height: 20),
 
-              ...appeals.map((doc) {
+              ...applications.map((doc) {
                 final data = doc.data();
                 final userId = data['userId'] as String?;
-                final appealText = data['appealText'] ?? '';
+                final applicationText =
+                    (data['applicationText'] ?? data['appealText'] ?? '')
+                        .toString();
                 final createdAt = data['createdAt'];
 
                 if (userId == null) return const SizedBox();
 
                 return _ApplicationCard(
                   task: task,
-                  appealDocId: doc.id,
+                  applicationDocId: doc.id,
                   userId: userId,
-                  appealText: appealText,
+                  applicationText: applicationText,
                   createdAt: createdAt,
                 );
               }),
@@ -96,7 +101,7 @@ class TaskApplicationsPage extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Members will appear here when they express interest',
+            'Members will appear here when they apply',
             style: TextStyle(color: Colors.grey[600]),
           ),
         ],
@@ -107,16 +112,16 @@ class TaskApplicationsPage extends StatelessWidget {
 
 class _ApplicationCard extends StatefulWidget {
   final Task task;
-  final String appealDocId;
+  final String applicationDocId;
   final String userId;
-  final String appealText;
+  final String applicationText;
   final dynamic createdAt;
 
   const _ApplicationCard({
     required this.task,
-    required this.appealDocId,
+    required this.applicationDocId,
     required this.userId,
-    required this.appealText,
+    required this.applicationText,
     required this.createdAt,
   });
 
@@ -163,7 +168,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     // Show snackbar AFTER pop using root messenger
     messenger.showSnackBar(
       SnackBar(
-        content: Text('✅ Task assigned to ${user!.userName}'),
+        content: Text('Task assigned to ${user!.userName}'),
         backgroundColor: Colors.green,
       ),
     );
@@ -171,9 +176,9 @@ class _ApplicationCardState extends State<_ApplicationCard> {
 
 
   Future<void> _decline() async {
-    await TaskAppealService().deleteAppeal(
+    await TaskApplicationService().deleteApplication(
       taskId: widget.task.taskId,
-      appealDocId: widget.appealDocId,
+      applicationDocId: widget.applicationDocId,
     );
 
     if (mounted) {
@@ -253,7 +258,7 @@ class _ApplicationCardState extends State<_ApplicationCard> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    widget.appealText,
+                    widget.applicationText,
                     style: const TextStyle(fontSize: 14, height: 1.4),
                   ),
                   const SizedBox(height: 12),
@@ -304,3 +309,5 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     );
   }
 }
+
+

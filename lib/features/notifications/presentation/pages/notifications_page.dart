@@ -4,13 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../boards/datasources/providers/board_request_provider.dart';
 import '../../../boards/datasources/models/board_request_model.dart';
 import '../../datasources/providers/in_app_notif_provider.dart';
-import '../../datasources/providers/push_notif_provider.dart';
 import '../../datasources/models/in_app_notif_model.dart';
 import '../../datasources/models/push_notif_model.dart';
 import '../widgets/sections/all_notifs_section.dart';
-import '../widgets/sections/reminders_section.dart';
-import '../widgets/sections/requests_section.dart';
-import '../widgets/sections/assignments_section.dart';
 
 class NotificationsPage extends StatefulWidget {
   const NotificationsPage({super.key});
@@ -20,8 +16,16 @@ class NotificationsPage extends StatefulWidget {
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  String _selectedTab = 'all'; // 'all', 'reminders', 'invites', 'assignments'
+  final Set<String> _selectedFilters = <String>{};
   bool _hasInitializedStreams = false;
+  static const Map<String, String> _filterLabels = {
+    notifFilterPokes: 'Pokes',
+    notifFilterReminders: 'Reminders',
+    notifFilterAssignments: 'Assignments',
+    notifFilterSubmissions: 'Submissions',
+    notifFilterSuggestions: 'Suggestions',
+    notifFilterInvites: 'Invites',
+  };
 
   @override
   void initState() {
@@ -36,16 +40,81 @@ class _NotificationsPageState extends State<NotificationsPage> {
       body: Column(
         children: [
           Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
             color: Theme.of(context).scaffoldBackgroundColor,
             child: Row(
               children: [
-                _buildTabButton(context, 'All', 'all'),
-                _buildTabButton(context, 'Reminders', 'reminders'),
-                _buildTabButton(context, 'Invites', 'invites'),
-                _buildTabButton(context, 'Assignments', 'assignments'),
+                Expanded(
+                  child: Text(
+                    'All Notifications',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Filter notifications',
+                  onSelected: (value) {
+                    setState(() {
+                      if (_selectedFilters.contains(value)) {
+                        _selectedFilters.remove(value);
+                      } else {
+                        _selectedFilters.add(value);
+                      }
+                    });
+                  },
+                  itemBuilder: (context) => _filterLabels.entries
+                      .map(
+                        (entry) => CheckedPopupMenuItem<String>(
+                          value: entry.key,
+                          checked: _selectedFilters.contains(entry.key),
+                          child: Text(entry.value),
+                        ),
+                      )
+                      .toList(),
+                  child: _buildHeaderIcon(
+                    icon: Icons.filter_list,
+                    label: _selectedFilters.isEmpty
+                        ? 'Filter'
+                        : 'Filter (${_selectedFilters.length})',
+                  ),
+                ),
+                if (_selectedFilters.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    onTap: () => setState(_selectedFilters.clear),
+                    borderRadius: BorderRadius.circular(8),
+                    child: _buildHeaderIcon(
+                      icon: Icons.clear_all,
+                      label: 'Clear',
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
+          if (_selectedFilters.isNotEmpty)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: Row(
+                children: _selectedFilters
+                    .map(
+                      (key) => Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: InputChip(
+                          label: Text(_filterLabels[key] ?? key),
+                          onDeleted: () {
+                            setState(() {
+                              _selectedFilters.remove(key);
+                            });
+                          },
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
           Expanded(
             child: RefreshIndicator(
               onRefresh: () => _refreshNotifications(context),
@@ -73,61 +142,32 @@ class _NotificationsPageState extends State<NotificationsPage> {
       // Stream board requests (invitations and join requests)
       print('[NotificationsPage] Streaming board requests...');
       context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
+      context.read<BoardRequestProvider>().streamInvitationsSentByManager(
+        userId,
+      );
       context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
 
       // Stream in-app notifications
       print('[NotificationsPage] Streaming in-app notifications...');
-      context.read<InAppNotificationProvider>().streamNotificationsByUser(userId);
-
-      // Stream push notifications
-      print('[NotificationsPage] Streaming push notifications...');
-      context.read<PushNotificationProvider>().streamNotificationsByUser(userId);
+      context.read<InAppNotificationProvider>().streamNotificationsByUser(
+        userId,
+      );
     });
   }
 
-
   Widget _buildBody(BuildContext context) {
-    if (_selectedTab == 'all') {
-      return buildAllNotificationsSection(
-        context,
-        () => _refreshNotifications(context),
-        _getNotificationDate,
-        _buildEmptyState,
-      );
-    } else if (_selectedTab == 'reminders') {
-      return buildRemindersSection(
-        context,
-        () => _refreshNotifications(context),
-        _getNotificationDate,
-        _buildEmptyState,
-      );
-    } else if (_selectedTab == 'invites') {
-      return buildRequestsSection(
-        context,
-        () => _refreshNotifications(context),
-        _getNotificationDate,
-        _buildEmptyState,
-      );
-    } else if (_selectedTab == 'assignments') {
-      return buildAssignmentsSection(
-        context,
-        () => _refreshNotifications(context),
-        _getNotificationDate,
-        _buildEmptyState,
-      );
-    }
-    return const SizedBox.shrink();
+    return buildAllNotificationsSection(
+      context,
+      () => _refreshNotifications(context),
+      _getNotificationDate,
+      _buildEmptyState,
+      _selectedFilters,
+    );
   }
 
-
   Future<void> _refreshNotifications(BuildContext context) async {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    if (userId == null) return;
-
-    context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
-    context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
-    context.read<InAppNotificationProvider>().streamNotificationsByUser(userId);
-    context.read<PushNotificationProvider>().streamNotificationsByUser(userId);
+    _ensureStreamsStarted();
+    await Future<void>.delayed(const Duration(milliseconds: 350));
   }
 
   DateTime _getNotificationDate(dynamic notification) {
@@ -141,77 +181,54 @@ class _NotificationsPageState extends State<NotificationsPage> {
     return DateTime.now();
   }
 
-  Widget _buildTabButton(BuildContext context, String label, String value) {
-    final isSelected = _selectedTab == value;
-    return Expanded(
-      child: InkWell(
-        onTap: () {
-          setState(() {
-            _selectedTab = value;
-          });
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
-                width: 2,
-              ),
-            ),
-          ),
-          child: Text(
+  Widget _buildHeaderIcon({required IconData icon, required String label}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey[300]!),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: Colors.grey[700]),
+          const SizedBox(width: 6),
+          Text(
             label,
-            textAlign: TextAlign.center,
             style: TextStyle(
-              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              color: isSelected ? Theme.of(context).primaryColor : Colors.grey[600],
+              color: Colors.grey[800],
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
             ),
           ),
-        ),
+        ],
       ),
     );
   }
 
   Widget _buildEmptyState() {
-    String message = 'No notifications';
-    String subtitle = 'You\'re all caught up!';
-
-    if (_selectedTab == 'reminders') {
-      message = 'No reminders';
-      subtitle = 'No task reminders or due date alerts';
-    } else if (_selectedTab == 'invites') {
-      message = 'No invites';
-      subtitle = 'No sent or received board invitations';
-    } else if (_selectedTab == 'assignments') {
-      message = 'No assignments';
-      subtitle = 'No task assignments or reassignments';
-    }
+    final isFiltered = _selectedFilters.isNotEmpty;
+    final selectedNames = _selectedFilters
+        .map((key) => _filterLabels[key] ?? key)
+        .toList();
+    final subtitle = isFiltered
+        ? 'No items for: ${selectedNames.join(', ')}'
+        : 'You\'re all caught up!';
 
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            Icons.notifications_none,
-            size: 80,
-            color: Colors.grey[400],
-          ),
+          Icon(Icons.notifications_none, size: 80, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
-            message,
-            style: TextStyle(
-              fontSize: 18,
-              color: Colors.grey[600],
-            ),
+            isFiltered ? 'No matching notifications' : 'No notifications',
+            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
           ),
           const SizedBox(height: 8),
           Text(
             subtitle,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[500],
-            ),
+            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
           ),
         ],
       ),
