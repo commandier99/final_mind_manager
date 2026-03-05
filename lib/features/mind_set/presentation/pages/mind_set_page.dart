@@ -17,7 +17,7 @@ class MindSetPage extends StatefulWidget {
 
 class _MindSetPageState extends State<MindSetPage> {
   final MindSetSessionService _sessionService = MindSetSessionService();
-  bool _showTimer = false;
+  bool _showTimer = true;
   String _taskCountMode = 'progress';
 
   @override

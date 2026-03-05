@@ -95,15 +95,14 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
 
     return Column(
       children: [
-        ListView.separated(
+        ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: displayCount,
-          separatorBuilder: (context, index) =>
-              Divider(height: 1, color: Colors.grey.shade200),
           itemBuilder: (context, index) {
             final activity = activities[index];
-            return _buildActivityCard(activity);
+            final isLast = index == displayCount - 1;
+            return _buildActivityTimelineItem(activity, isLast: isLast);
           },
         ),
         if (hasMore)
@@ -133,55 +132,245 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
     );
   }
 
-  Widget _buildActivityCard(ActivityEvent activity) {
+  Widget _buildActivityTimelineItem(
+    ActivityEvent activity, {
+    required bool isLast,
+  }) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final isCurrentUser = currentUser?.uid == activity.ActEvUserId;
     final displayName = isCurrentUser ? 'You' : activity.ActEvUserName;
+    final visual = _activityVisual(activity);
+    final message = _buildReadableMessage(displayName, activity);
 
-    return Card(
-      elevation: 1,
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          radius: 20,
-          backgroundColor: Colors.blue.shade100,
-          child:
-              activity.ActEvUserProfilePicture != null &&
-                  activity.ActEvUserProfilePicture!.isNotEmpty
-              ? ClipOval(
-                  child: Image.network(
-                    activity.ActEvUserProfilePicture!,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(Icons.person, size: 18);
-                    },
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 40,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: visual.color.withValues(alpha: 0.16),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: visual.color.withValues(alpha: 0.55),
+                      width: 1.2,
+                    ),
                   ),
-                )
-              : const Icon(Icons.person, size: 18),
-        ),
-        title: RichText(
-          text: TextSpan(
-            style: const TextStyle(color: Colors.black87, fontSize: 14),
-            children: [
-              TextSpan(
-                text: displayName,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              if (activity.ActEvDescription != null &&
-                  activity.ActEvDescription!.isNotEmpty)
-                TextSpan(text: ' ${activity.ActEvDescription}'),
-            ],
+                  child: Icon(visual.icon, size: 15, color: visual.color),
+                ),
+                if (!isLast)
+                  Container(
+                    width: 2,
+                    height: 44,
+                    margin: const EdgeInsets.symmetric(vertical: 4),
+                    color: Colors.grey.shade300,
+                  ),
+              ],
+            ),
           ),
-        ),
-        subtitle: Text(
-          _getTimeAgo(activity.ActEvTimestamp),
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-        ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 14,
+                      ),
+                      children: [TextSpan(text: message)],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _getTimeAgo(activity.ActEvTimestamp),
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
+  }
+
+  _ActivityVisual _activityVisual(ActivityEvent activity) {
+    final type = (activity.ActEvType ?? '').toLowerCase();
+    if (type == 'task_assignment_accepted') {
+      return const _ActivityVisual(
+        Icons.check_circle_outline,
+        Color(0xFF2E7D32),
+      );
+    }
+    if (type == 'task_assignment_declined') {
+      return const _ActivityVisual(Icons.cancel_outlined, Color(0xFFC62828));
+    }
+    if (type == 'task_in_progress') {
+      return const _ActivityVisual(
+        Icons.play_circle_outline,
+        Color(0xFFFB8C00),
+      );
+    }
+    if (type == 'task_status_changed') {
+      return const _ActivityVisual(Icons.sync_alt_outlined, Color(0xFF6D4C41));
+    }
+    if (type == 'file_submitted' || type == 'task_submitted') {
+      return const _ActivityVisual(
+        Icons.upload_file_outlined,
+        Color(0xFF00897B),
+      );
+    }
+    if (type.contains('invitation')) {
+      return const _ActivityVisual(Icons.mail_outline, Color(0xFF3949AB));
+    }
+    if (type.contains('suggestion')) {
+      return const _ActivityVisual(Icons.lightbulb_outline, Color(0xFFFFA000));
+    }
+    if (type.contains('task') && type.contains('assigned')) {
+      return const _ActivityVisual(
+        Icons.assignment_ind_outlined,
+        Color(0xFF1E88E5),
+      );
+    }
+    if (type.contains('task') && type.contains('submitted')) {
+      return const _ActivityVisual(
+        Icons.upload_file_outlined,
+        Color(0xFF00897B),
+      );
+    }
+    if (type.contains('task') &&
+        (type.contains('approved') || type.contains('review'))) {
+      return const _ActivityVisual(
+        Icons.fact_check_outlined,
+        Color(0xFF2E7D32),
+      );
+    }
+    if (type.contains('board') && type.contains('created')) {
+      return const _ActivityVisual(
+        Icons.dashboard_customize_outlined,
+        Color(0xFF5E35B1),
+      );
+    }
+    return const _ActivityVisual(Icons.bolt_outlined, Color(0xFF546E7A));
+  }
+
+  String _buildReadableMessage(String actorName, ActivityEvent event) {
+    final type = (event.ActEvType ?? '').toLowerCase();
+    final metadata = event.ActEvMetadata ?? const <String, dynamic>{};
+    final taskTitle = _metadataString(metadata, const [
+      'taskTitle',
+      'stepTitle',
+    ]);
+    final suggestionTitle = _metadataString(metadata, const [
+      'suggestionTitle',
+    ]);
+    final assigneeName = _metadataString(metadata, const ['assigneeName']);
+    final fromStatus = _metadataString(metadata, const ['fromStatus']);
+    final toStatus = _metadataString(metadata, const ['toStatus']);
+
+    if (type == 'task_created') {
+      return taskTitle != null
+          ? '$actorName created task "$taskTitle"'
+          : '$actorName created a task';
+    }
+    if (type == 'task_completed') {
+      return taskTitle != null
+          ? '$actorName completed task "$taskTitle"'
+          : '$actorName completed a task';
+    }
+    if (type == 'task_assigned') {
+      if (taskTitle != null && assigneeName != null) {
+        return '$actorName assigned "$taskTitle" to $assigneeName';
+      }
+      return taskTitle != null
+          ? '$actorName assigned task "$taskTitle"'
+          : '$actorName assigned a task';
+    }
+    if (type == 'task_assignment_accepted') {
+      return taskTitle != null
+          ? '$actorName accepted task "$taskTitle"'
+          : '$actorName accepted a task assignment';
+    }
+    if (type == 'task_assignment_declined') {
+      return taskTitle != null
+          ? '$actorName declined task "$taskTitle"'
+          : '$actorName declined a task assignment';
+    }
+    if (type == 'task_status_changed') {
+      if (taskTitle != null && fromStatus != null && toStatus != null) {
+        return '$actorName changed "$taskTitle" from $fromStatus to $toStatus';
+      }
+      return taskTitle != null
+          ? '$actorName changed status of "$taskTitle"'
+          : '$actorName changed a task status';
+    }
+    if (type == 'task_in_progress') {
+      return taskTitle != null
+          ? '$actorName started "$taskTitle"'
+          : '$actorName started working on a task';
+    }
+    if (type == 'file_submitted' || type == 'task_submitted') {
+      return taskTitle != null
+          ? '$actorName submitted work for "$taskTitle"'
+          : '$actorName submitted task work';
+    }
+    if (type == 'task_deleted') {
+      return taskTitle != null
+          ? '$actorName deleted task "$taskTitle"'
+          : '$actorName deleted a task';
+    }
+    if (type == 'step_created') {
+      return taskTitle != null
+          ? '$actorName created step "$taskTitle"'
+          : '$actorName created a step';
+    }
+    if (type == 'step_completed') {
+      return taskTitle != null
+          ? '$actorName completed step "$taskTitle"'
+          : '$actorName completed a step';
+    }
+    if (type == 'suggestion_created') {
+      return suggestionTitle != null
+          ? '$actorName created suggestion "$suggestionTitle"'
+          : '$actorName created a suggestion';
+    }
+
+    final desc = (event.ActEvDescription ?? '').trim();
+    if (desc.isNotEmpty) {
+      if (taskTitle != null &&
+          !desc.toLowerCase().contains(taskTitle.toLowerCase())) {
+        return '$actorName $desc ($taskTitle)';
+      }
+      return '$actorName $desc';
+    }
+    return '$actorName did an activity';
+  }
+
+  String? _metadataString(Map<String, dynamic> metadata, List<String> keys) {
+    for (final key in keys) {
+      final value = metadata[key];
+      if (value is String && value.trim().isNotEmpty) {
+        return value.trim();
+      }
+    }
+    return null;
   }
 
   String _getTimeAgo(DateTime timestamp) {
@@ -199,4 +388,11 @@ class _BoardActivitySectionState extends State<BoardActivitySection> {
       return '${(difference.inDays / 7).floor()}w ago';
     }
   }
+}
+
+class _ActivityVisual {
+  final IconData icon;
+  final Color color;
+
+  const _ActivityVisual(this.icon, this.color);
 }

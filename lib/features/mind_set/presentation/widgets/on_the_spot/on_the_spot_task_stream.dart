@@ -8,7 +8,7 @@ import '../dialogs/add_task_to_session_dialog.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/widgets/cards/task_card.dart';
-import '../../../../subtasks/datasources/providers/subtask_provider.dart';
+import '../../../../steps/datasources/providers/step_provider.dart';
 import '../../../../../shared/modes/mind_set_modes.dart';
 import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../datasources/services/mind_set_session_runtime_service.dart';
@@ -44,7 +44,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   final MindSetSessionRuntimeService _runtimeService =
       MindSetSessionRuntimeService();
   final TaskQueryController _taskQueryController = TaskQueryController();
-  final SubtaskProvider _subtaskProvider = SubtaskProvider();
+  final StepProvider _stepProvider = StepProvider();
   final Map<String, DateTime> _focusStartedAtByTaskId = <String, DateTime>{};
   String _sortBy = 'created_desc'; // format: 'field_direction'
   late Set<String> _selectedFilters;
@@ -209,7 +209,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
         if (shouldPause != true) return;
       }
       await taskProvider.updateTask(activeTask.copyWith(taskStatus: 'Paused'));
-      await _maybeCreateSessionCheckpointSubtask(
+      await _maybeCreateSessionCheckpointStep(
         activeTask,
         reason: 'Worked in session and switched tasks.',
         elapsedDuration: _consumeElapsedForTask(activeTask.taskId),
@@ -237,7 +237,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
     final taskProvider = context.read<TaskProvider>();
     await taskProvider.updateTask(task.copyWith(taskStatus: 'Paused'));
-    await _maybeCreateSessionCheckpointSubtask(
+    await _maybeCreateSessionCheckpointStep(
       task,
       reason: 'Worked in session but paused before completion.',
       elapsedDuration: _consumeElapsedForTask(task.taskId),
@@ -245,26 +245,26 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     await _logSessionAction(type: 'pause', task: task);
   }
 
-  Future<void> _maybeCreateSessionCheckpointSubtask(
+  Future<void> _maybeCreateSessionCheckpointStep(
     Task task, {
     required String reason,
     required Duration elapsedDuration,
   }) async {
     if (task.taskIsDone) return;
 
-    final latestActiveSubtask = await _subtaskProvider
-        .getLatestActiveSubtaskForTask(task.taskId);
-    if (latestActiveSubtask != null) {
-      await _subtaskProvider.toggleSubtaskDoneStatus(latestActiveSubtask);
+    final latestActiveStep = await _stepProvider
+        .getLatestActiveStepForTask(task.taskId);
+    if (latestActiveStep != null) {
+      await _stepProvider.toggleStepDoneStatus(latestActiveStep);
       return;
     }
 
     final elapsedLabel = _formatElapsedDuration(elapsedDuration);
-    await _subtaskProvider.addSubtask(
-      subtaskTaskId: task.taskId,
-      subtaskBoardId: task.taskBoardId,
-      subtaskTitle: 'Session checkpoint ($elapsedLabel)',
-      subtaskDescription: '$reason Elapsed focus time: $elapsedLabel.',
+    await _stepProvider.addStep(
+      stepTaskId: task.taskId,
+      stepBoardId: task.taskBoardId,
+      stepTitle: 'Session checkpoint ($elapsedLabel)',
+      stepDescription: '$reason Elapsed focus time: $elapsedLabel.',
       initialDone: true,
     );
   }
@@ -805,8 +805,11 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
   void _showAddTaskDialog() {
     if (_personalBoard == null) return;
-    showDialog(
+    showModalBottomSheet<void>(
       context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       builder: (context) => AddTaskToSessionDialog(
         userId: _currentUserId,
         board: _personalBoard!,
@@ -960,3 +963,4 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     });
   }
 }
+

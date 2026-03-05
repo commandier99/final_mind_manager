@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../datasources/models/task_model.dart';
 import '../../../../shared/presentation/widgets/app_top_bar.dart';
 import '../../../../shared/presentation/widgets/app_bottom_navigation.dart';
@@ -7,10 +8,10 @@ import '../../../../shared/datasources/providers/navigation_provider.dart';
 import 'package:provider/provider.dart';
 import '../widgets/sections/task_details_section.dart';
 import '../widgets/sections/task_applications_section.dart';
-import '../widgets/sections/task_subtasks_list.dart';
+import '../widgets/sections/task_steps_list.dart';
 import '../widgets/sections/task_file_submissions_section.dart';
 import '../widgets/sections/task_stats_section.dart';
-import '../../../subtasks/datasources/providers/subtask_provider.dart';
+import '../../../steps/datasources/providers/step_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../widgets/dialogs/edit_task_dialog.dart';
 import '../../datasources/providers/task_provider.dart';
@@ -26,19 +27,45 @@ class TaskDetailsPage extends StatefulWidget {
 }
 
 class _TaskDetailsPageState extends State<TaskDetailsPage> {
-  static const String _tabSubtasks = 'subtasks';
+  static const String _lastVisitedTaskIdKey = 'home_last_visited_task_id';
+  static const String _lastVisitedTaskTitleKey = 'home_last_visited_task_title';
+  static const String _lastVisitedTaskBoardTitleKey =
+      'home_last_visited_task_board_title';
+  static const String _lastVisitedTaskAtKey = 'home_last_visited_task_at';
+
+  static const String _tabSteps = 'steps';
   static const String _tabSubmissions = 'submissions';
   static const String _tabStats = 'stats';
   static const String _tabApplications = 'applications';
 
   bool _isDetailsPanelExpanded = true;
   bool _isSearchExpanded = false;
-  String _selectedTab = _tabSubtasks;
+  String _selectedTab = _tabSteps;
   final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _persistLastVisitedTask();
+  }
+
+  Future<void> _persistLastVisitedTask() async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null || userId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('${_lastVisitedTaskIdKey}_$userId', widget.task.taskId);
+    await prefs.setString(
+      '${_lastVisitedTaskTitleKey}_$userId',
+      widget.task.taskTitle,
+    );
+    await prefs.setString(
+      '${_lastVisitedTaskBoardTitleKey}_$userId',
+      (widget.task.taskBoardTitle ?? '').trim(),
+    );
+    await prefs.setInt(
+      '${_lastVisitedTaskAtKey}_$userId',
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   @override
@@ -179,10 +206,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
               _selectedTab = _tabApplications;
             }
             if (!showApplicationsTab && _selectedTab == _tabApplications) {
-              _selectedTab = _tabSubtasks;
+              _selectedTab = _tabSteps;
             }
             if (!showSubmissionsTab && _selectedTab == _tabSubmissions) {
-              _selectedTab = _tabSubtasks;
+              _selectedTab = _tabSteps;
             }
 
             return Column(
@@ -252,10 +279,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                         if (showWorkTabs)
                           Expanded(
                             child: _buildViewTab(
-                              label: 'Subtasks',
-                              selected: _selectedTab == _tabSubtasks,
+                              label: 'Steps',
+                              selected: _selectedTab == _tabSteps,
                               onTap: () =>
-                                  setState(() => _selectedTab = _tabSubtasks),
+                                  setState(() => _selectedTab = _tabSteps),
                             ),
                           ),
                         if (showWorkTabs && showSubmissionsTab) ...[
@@ -264,8 +291,9 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                             child: _buildViewTab(
                               label: 'Uploads',
                               selected: _selectedTab == _tabSubmissions,
-                              onTap: () =>
-                                  setState(() => _selectedTab = _tabSubmissions),
+                              onTap: () => setState(
+                                () => _selectedTab = _tabSubmissions,
+                              ),
                             ),
                           ),
                         ],
@@ -285,17 +313,18 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                             child: _buildViewTab(
                               label: 'Applications',
                               selected: _selectedTab == _tabApplications,
-                              onTap: () =>
-                                  setState(() => _selectedTab = _tabApplications),
+                              onTap: () => setState(
+                                () => _selectedTab = _tabApplications,
+                              ),
                             ),
                           ),
                       ],
                     ),
                   ),
-                if (showWorkTabs && _selectedTab == _tabSubtasks)
+                if (showWorkTabs && _selectedTab == _tabSteps)
                   ChangeNotifierProvider(
-                    create: (_) => SubtaskProvider(),
-                    child: TaskSubtasksList(
+                    create: (_) => StepProvider(),
+                    child: TaskStepsList(
                       parentTaskId: currentTask.taskId,
                       boardId: currentTask.taskBoardId.isNotEmpty
                           ? currentTask.taskBoardId
@@ -384,8 +413,8 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
   }
 
   bool _isAcceptedOrNoAcceptanceNeeded(Task task) {
-    return task.taskAcceptanceStatus == null ||
-        task.taskAcceptanceStatus == 'accepted';
+    return task.taskAssignmentStatus == null ||
+        task.taskAssignmentStatus == 'accepted';
   }
 
   Widget _buildViewTab({
@@ -420,3 +449,4 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
     );
   }
 }
+

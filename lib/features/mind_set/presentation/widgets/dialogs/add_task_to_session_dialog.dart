@@ -160,6 +160,7 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
   Future<void> _submit() async {
     setState(() => _isLoading = true);
 
+    var loadingShown = false;
     if (mounted) {
       showDialog(
         context: context,
@@ -184,6 +185,7 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
           ),
         ),
       );
+      loadingShown = true;
     }
 
     try {
@@ -244,9 +246,12 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {
+        if (loadingShown && Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
+        final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
-        Navigator.pop(context);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: Text(
               'Task "${newTask.taskTitle}" added to ${widget.board.boardTitle}',
@@ -256,7 +261,9 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
       }
     } catch (e) {
       if (mounted) {
-        Navigator.pop(context);
+        if (loadingShown && Navigator.of(context, rootNavigator: true).canPop()) {
+          Navigator.of(context, rootNavigator: true).pop();
+        }
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error creating task: $e')),
@@ -267,16 +274,40 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Add Task to Session'),
-      content: SingleChildScrollView(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 650),
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            16,
+            12,
+            16,
+            16 + MediaQuery.of(context).viewInsets.bottom,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade400,
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Add Task to Session',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _titleController,
                 decoration: InputDecoration(
@@ -440,21 +471,26 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
                   ],
                 ),
               ],
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _isLoading ? null : _submit,
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Task'),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton.icon(
-          onPressed: _isLoading ? null : _submit,
-          icon: const Icon(Icons.add),
-          label: const Text('Add Task'),
-        ),
-      ],
     );
   }
 }

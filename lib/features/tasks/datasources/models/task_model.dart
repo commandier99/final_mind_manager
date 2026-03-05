@@ -5,6 +5,7 @@ class Task {
   static const String statusToDo = 'To Do';
   static const String statusInProgress = 'In Progress';
   static const String statusPaused = 'Paused';
+  static const String statusSubmitted = 'Submitted';
   static const String statusCompleted = 'Completed';
   static const String outcomeNone = 'none';
   static const String outcomeSuccessful = 'successful';
@@ -52,6 +53,8 @@ class Task {
   taskAllowsSubmissions; // Whether users can submit files for this task
   final bool taskRequiresSubmission; // Whether a submission is mandatory
   final bool taskRequiresApproval; // Whether this task needs approval
+  final String
+  taskApprovalStatus; // none | pending | approved | rejected | changes_requested
   final String? taskSubmissionId; // Reference to task submission if exists
 
   // Repeating Fields
@@ -64,7 +67,7 @@ class Task {
 
   // Acceptance status for assigned tasks
   final String?
-  taskAcceptanceStatus; // 'pending', 'accepted', 'declined', null for self-assigned
+  taskAssignmentStatus; // pending | accepted | declined | null for self-assigned
   final String? taskProposedAssigneeId;
   final String? taskProposedAssigneeName;
 
@@ -105,16 +108,17 @@ class Task {
     this.taskOutcome = outcomeNone,
     required this.taskStats, // TaskStats passed as a parameter
     this.taskStatus = statusToDo,
-    this.taskAllowsSubmissions = false,
+    this.taskAllowsSubmissions = true,
     this.taskRequiresSubmission = false,
     this.taskRequiresApproval = false,
+    this.taskApprovalStatus = 'none',
     this.taskSubmissionId,
     this.taskIsRepeating = false,
     this.taskRepeatInterval,
     this.taskRepeatEndDate,
     this.taskNextRepeatDate,
     this.taskRepeatTime,
-    this.taskAcceptanceStatus,
+    this.taskAssignmentStatus,
     this.taskProposedAssigneeId,
     this.taskProposedAssigneeName,
     this.taskBoardLane = lanePublished,
@@ -135,6 +139,8 @@ class Task {
       case 'ON_PAUSE':
       case 'PAUSED':
         return statusPaused;
+      case 'SUBMITTED':
+        return statusSubmitted;
       case 'DONE':
       case 'COMPLETED':
         return statusCompleted;
@@ -154,6 +160,23 @@ class Task {
       case lanePublished:
       default:
         return lanePublished;
+    }
+  }
+
+  static String normalizeTaskApprovalStatus(String status) {
+    switch (status.trim().toLowerCase()) {
+      case 'pending':
+        return 'pending';
+      case 'approved':
+        return 'approved';
+      case 'rejected':
+        return 'rejected';
+      case 'changes_requested':
+      case 'revision_requested':
+        return 'changes_requested';
+      case 'none':
+      default:
+        return 'none';
     }
   }
 
@@ -205,10 +228,6 @@ class Task {
     final hasSubmissionId = (data['taskSubmissionId'] as String?) != null;
     final taskIsDone = data['taskIsDone'] as bool? ?? false;
     final taskFailed = data['taskFailed'] as bool? ?? false;
-    final hasLegacySubmissionSignals =
-        requiresApproval ||
-        (data['taskRequiresSubmission'] as bool? ?? false) ||
-        hasSubmissionId;
 
     return Task(
       taskId: documentId,
@@ -247,18 +266,21 @@ class Task {
       taskStatus: normalizeTaskStatus(
         data['taskStatus'] as String? ?? statusToDo,
       ),
-      taskAllowsSubmissions:
-          allowsSubmissions ??
-          (taskBoardId.isNotEmpty || hasLegacySubmissionSignals),
+      taskAllowsSubmissions: allowsSubmissions ?? true,
       taskRequiresSubmission: data['taskRequiresSubmission'] as bool? ?? false,
       taskRequiresApproval: requiresApproval,
+      taskApprovalStatus: normalizeTaskApprovalStatus(
+        data['taskApprovalStatus'] as String? ?? 'none',
+      ),
       taskSubmissionId: data['taskSubmissionId'] as String?,
       taskIsRepeating: data['taskIsRepeating'] as bool? ?? false,
       taskRepeatInterval: data['taskRepeatInterval'] as String?,
       taskRepeatEndDate: (data['taskRepeatEndDate'] as Timestamp?)?.toDate(),
       taskNextRepeatDate: (data['taskNextRepeatDate'] as Timestamp?)?.toDate(),
       taskRepeatTime: data['taskRepeatTime'] as String?,
-      taskAcceptanceStatus: data['taskAcceptanceStatus'] as String?,
+      taskAssignmentStatus:
+          data['taskAssignmentStatus'] as String? ??
+          data['taskAcceptanceStatus'] as String?,
       taskProposedAssigneeId: data['taskProposedAssigneeId'] as String?,
       taskProposedAssigneeName: data['taskProposedAssigneeName'] as String?,
       taskBoardLane: normalizeTaskBoardLane(
@@ -306,6 +328,7 @@ class Task {
       'taskAllowsSubmissions': taskAllowsSubmissions,
       'taskRequiresSubmission': taskRequiresSubmission,
       'taskRequiresApproval': taskRequiresApproval,
+      'taskApprovalStatus': normalizeTaskApprovalStatus(taskApprovalStatus),
       if (taskSubmissionId != null) 'taskSubmissionId': taskSubmissionId,
       'taskIsRepeating': taskIsRepeating,
       if (taskRepeatInterval != null) 'taskRepeatInterval': taskRepeatInterval,
@@ -314,8 +337,8 @@ class Task {
       if (taskNextRepeatDate != null)
         'taskNextRepeatDate': Timestamp.fromDate(taskNextRepeatDate!),
       if (taskRepeatTime != null) 'taskRepeatTime': taskRepeatTime,
-      if (taskAcceptanceStatus != null)
-        'taskAcceptanceStatus': taskAcceptanceStatus,
+      if (taskAssignmentStatus != null)
+        'taskAssignmentStatus': taskAssignmentStatus,
       if (taskProposedAssigneeId != null)
         'taskProposedAssigneeId': taskProposedAssigneeId,
       if (taskProposedAssigneeName != null)
@@ -357,13 +380,14 @@ class Task {
     bool? taskAllowsSubmissions,
     bool? taskRequiresSubmission,
     bool? taskRequiresApproval,
+    String? taskApprovalStatus,
     String? taskSubmissionId,
     bool? taskIsRepeating,
     String? taskRepeatInterval,
     DateTime? taskRepeatEndDate,
     DateTime? taskNextRepeatDate,
     String? taskRepeatTime,
-    String? taskAcceptanceStatus,
+    String? taskAssignmentStatus,
     String? taskProposedAssigneeId,
     String? taskProposedAssigneeName,
     String? taskBoardLane,
@@ -402,13 +426,16 @@ class Task {
       taskRequiresSubmission:
           taskRequiresSubmission ?? this.taskRequiresSubmission,
       taskRequiresApproval: taskRequiresApproval ?? this.taskRequiresApproval,
+      taskApprovalStatus: normalizeTaskApprovalStatus(
+        taskApprovalStatus ?? this.taskApprovalStatus,
+      ),
       taskSubmissionId: taskSubmissionId ?? this.taskSubmissionId,
       taskIsRepeating: taskIsRepeating ?? this.taskIsRepeating,
       taskRepeatInterval: taskRepeatInterval ?? this.taskRepeatInterval,
       taskRepeatEndDate: taskRepeatEndDate ?? this.taskRepeatEndDate,
       taskNextRepeatDate: taskNextRepeatDate ?? this.taskNextRepeatDate,
       taskRepeatTime: taskRepeatTime ?? this.taskRepeatTime,
-      taskAcceptanceStatus: taskAcceptanceStatus ?? this.taskAcceptanceStatus,
+      taskAssignmentStatus: taskAssignmentStatus ?? this.taskAssignmentStatus,
       taskProposedAssigneeId:
           taskProposedAssigneeId ?? this.taskProposedAssigneeId,
       taskProposedAssigneeName:

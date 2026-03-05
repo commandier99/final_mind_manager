@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../datasources/models/board_model.dart';
 import '../../../../shared/presentation/widgets/app_top_bar.dart';
 import '../../../../shared/presentation/widgets/app_bottom_navigation.dart';
@@ -25,6 +26,11 @@ class BoardDetailsPage extends StatefulWidget {
 }
 
 class _BoardDetailsPageState extends State<BoardDetailsPage> {
+  static const String _lastVisitedBoardIdKey = 'home_last_visited_board_id';
+  static const String _lastVisitedBoardTitleKey =
+      'home_last_visited_board_title';
+  static const String _lastVisitedBoardAtKey = 'home_last_visited_board_at';
+
   static const String _tabDrafts = 'drafts';
   static const String _tabPublished = 'published';
   static const String _tabStats = 'stats';
@@ -38,12 +44,31 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
   @override
   void initState() {
     super.initState();
+    _persistLastVisitedBoard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().streamTasksByBoard(widget.board.boardId);
       context.read<BoardStatsProvider>().streamStatsForBoard(
         widget.board.boardId,
       );
     });
+  }
+
+  Future<void> _persistLastVisitedBoard() async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null || userId.isEmpty) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      '${_lastVisitedBoardIdKey}_$userId',
+      widget.board.boardId,
+    );
+    await prefs.setString(
+      '${_lastVisitedBoardTitleKey}_$userId',
+      widget.board.boardTitle,
+    );
+    await prefs.setInt(
+      '${_lastVisitedBoardAtKey}_$userId',
+      DateTime.now().millisecondsSinceEpoch,
+    );
   }
 
   @override

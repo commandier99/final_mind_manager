@@ -57,8 +57,8 @@ class _TaskCardState extends State<TaskCard> {
     _currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
   }
 
-  bool _hasSubtasks() {
-    return (widget.task.taskStats.taskSubtasksCount ?? 0) > 0;
+  bool _hasSteps() {
+    return (widget.task.taskStats.taskStepsCount ?? 0) > 0;
   }
 
   bool _isTaskUnassigned() {
@@ -239,6 +239,8 @@ class _TaskCardState extends State<TaskCard> {
       case 'PAUSED':
       case 'ON_PAUSE':
         return Colors.orange;
+      case 'SUBMITTED':
+        return Colors.purple;
       case 'COMPLETED':
         return Colors.green;
       default:
@@ -297,6 +299,8 @@ class _TaskCardState extends State<TaskCard> {
       case 'PAUSED':
       case 'ON_PAUSE':
         return Icons.pause_circle;
+      case 'SUBMITTED':
+        return Icons.upload_file;
       case 'COMPLETED':
         return Icons.check_circle;
       default:
@@ -332,8 +336,8 @@ class _TaskCardState extends State<TaskCard> {
 
   @override
   Widget build(BuildContext context) {
-    final done = widget.task.taskStats.taskSubtasksDoneCount ?? 0;
-    final total = widget.task.taskStats.taskSubtasksCount ?? 0;
+    final done = widget.task.taskStats.taskStepsDoneCount ?? 0;
+    final total = widget.task.taskStats.taskStepsCount ?? 0;
     final progress = widget.task.taskIsDone
         ? 1.0
         : (total > 0 ? done / total : 0.0);
@@ -345,6 +349,9 @@ class _TaskCardState extends State<TaskCard> {
         widget.task.taskIsDone ||
         _normalizeStatus(widget.task.taskStatus) == 'COMPLETED';
     final showFocusAction = widget.showFocusAction && !isCompleted;
+    final missingRequiredSubmission =
+        widget.task.taskRequiresSubmission &&
+        (widget.task.taskSubmissionId ?? '').trim().isEmpty;
 
     final showCheckbox =
         !widget.showCheckboxWhenFocusedOnly || (isFocused && !isCompleted);
@@ -627,10 +634,19 @@ class _TaskCardState extends State<TaskCard> {
                         Row(
                           children: [
                             if (showCheckbox) ...[
-                              Checkbox(
-                                value: widget.task.taskIsDone,
-                                onChanged: (bool? newValue) =>
-                                    widget.onToggleDone?.call(newValue),
+                              Tooltip(
+                                message: missingRequiredSubmission
+                                    ? 'Upload is required before completing this task.'
+                                    : '',
+                                child: Checkbox(
+                                  value: widget.task.taskIsDone,
+                                  onChanged:
+                                      missingRequiredSubmission &&
+                                          !widget.task.taskIsDone
+                                      ? null
+                                      : (bool? newValue) =>
+                                            widget.onToggleDone?.call(newValue),
+                                ),
                               ),
                               const SizedBox(width: 8),
                             ],
@@ -684,7 +700,7 @@ class _TaskCardState extends State<TaskCard> {
                                   const SizedBox(height: 3),
                                   // Compact badges row
                                   if (widget.task.taskRequiresApproval ||
-                                      widget.task.taskAcceptanceStatus !=
+                                      widget.task.taskAssignmentStatus !=
                                           null ||
                                       widget.task.taskDependencyIds.isNotEmpty)
                                     SingleChildScrollView(
@@ -758,7 +774,7 @@ class _TaskCardState extends State<TaskCard> {
                                             ),
                                           if (widget
                                                   .task
-                                                  .taskAcceptanceStatus !=
+                                                  .taskAssignmentStatus !=
                                               null)
                                             Padding(
                                               padding: const EdgeInsets.only(
@@ -769,7 +785,7 @@ class _TaskCardState extends State<TaskCard> {
                                                     _getAcceptanceStatusLabel(
                                                       widget
                                                           .task
-                                                          .taskAcceptanceStatus,
+                                                          .taskAssignmentStatus,
                                                     ),
                                                 child: Container(
                                                   padding:
@@ -781,7 +797,7 @@ class _TaskCardState extends State<TaskCard> {
                                                     color: _getAcceptanceStatusColor(
                                                       widget
                                                           .task
-                                                          .taskAcceptanceStatus,
+                                                          .taskAssignmentStatus,
                                                     ).withValues(alpha: 0.2),
                                                     borderRadius:
                                                         BorderRadius.circular(
@@ -794,7 +810,7 @@ class _TaskCardState extends State<TaskCard> {
                                                     color: _getAcceptanceStatusColor(
                                                       widget
                                                           .task
-                                                          .taskAcceptanceStatus,
+                                                          .taskAssignmentStatus,
                                                     ),
                                                   ),
                                                 ),
@@ -884,7 +900,7 @@ class _TaskCardState extends State<TaskCard> {
                                     );
                                   },
                                 )
-                              else if (_hasSubtasks())
+                              else if (_hasSteps())
                                 SizedBox(
                                   width: 40,
                                   height: 40,
@@ -970,3 +986,4 @@ class _TaskCardState extends State<TaskCard> {
     );
   }
 }
+

@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../shared/datasources/providers/navigation_provider.dart';
@@ -12,13 +12,20 @@ import '../widgets/feature_card_widget.dart';
 import '../widgets/greeting_section.dart';
 import '../../../mind_set/presentation/pages/mind_set_page.dart';
 import '../../../mind_set/presentation/widgets/mind_set_create_form.dart';
+import '../../../mind_set/datasources/models/mind_set_session_model.dart';
 import '../../../mind_set/datasources/services/mind_set_session_service.dart';
 import '../widgets/motivational_quote_card.dart';
 import '../../../boards/presentation/widgets/dialogs/add_board_dialog.dart';
+import '../../../boards/presentation/pages/board_details_page.dart';
+import '../../../boards/datasources/models/board_model.dart';
+import '../../../boards/datasources/providers/board_provider.dart';
+import '../../../boards/datasources/services/board_services.dart';
 import '../../../plans/presentation/pages/create_plan_page.dart';
-import '../../../subtasks/datasources/providers/subtask_provider.dart';
-import '../../../subtasks/presentation/widgets/dialogs/add_subtask_dialog.dart';
+import '../../../steps/datasources/providers/step_provider.dart';
+import '../../../steps/presentation/widgets/dialogs/add_step_dialog.dart';
 import '../../../../shared/features/poke/presentation/pages/poke_page.dart';
+import '../../../tasks/presentation/pages/task_details_page.dart';
+import '../../../tasks/datasources/models/task_model.dart';
 
 class HomePage extends StatefulWidget {
   final void Function(VoidCallback)? onSettingsPressedReady;
@@ -34,10 +41,19 @@ class _HomePageState extends State<HomePage> {
   static const String _showQuoteKey = 'home_show_motivational_quote';
   static const String _showQuickLaunchKey = 'home_show_quick_launch';
   static const String _quickActionsKey = 'home_quick_launch_actions';
+  static const String _lastVisitedBoardIdKey = 'home_last_visited_board_id';
+  static const String _lastVisitedBoardTitleKey =
+      'home_last_visited_board_title';
+  static const String _lastVisitedBoardAtKey = 'home_last_visited_board_at';
+  static const String _lastVisitedTaskIdKey = 'home_last_visited_task_id';
+  static const String _lastVisitedTaskTitleKey = 'home_last_visited_task_title';
+  static const String _lastVisitedTaskBoardTitleKey =
+      'home_last_visited_task_board_title';
+  static const String _lastVisitedTaskAtKey = 'home_last_visited_task_at';
 
   static const String _actionCreateBoard = 'boards_create_board';
   static const String _actionCreateTask = 'boards_create_task';
-  static const String _actionCreateSubtask = 'boards_create_subtask';
+  static const String _actionCreateStep = 'boards_create_step';
   static const String _actionCreatePlan = 'plans_create_plan';
   static const String _actionMindSet = 'mindset_home';
   static const String _actionOnTheSpot = 'mindset_on_the_spot';
@@ -75,9 +91,9 @@ class _HomePageState extends State<HomePage> {
       icon: Icons.playlist_add_outlined,
     ),
     _QuickLaunchAction(
-      id: _actionCreateSubtask,
+      id: _actionCreateStep,
       feature: 'Boards',
-      label: 'Create Subtask',
+      label: 'Create Step',
       icon: Icons.subdirectory_arrow_right,
     ),
     _QuickLaunchAction(
@@ -96,7 +112,7 @@ class _HomePageState extends State<HomePage> {
       id: _actionGoWithFlow,
       feature: 'Mind:Set',
       label: 'Go with the Flow',
-      icon: Icons.auto_awesome_rounded,
+      icon: Icons.waves_rounded,
     ),
     _QuickLaunchAction(
       id: _actionFollowThrough,
@@ -108,8 +124,9 @@ class _HomePageState extends State<HomePage> {
 
   final MindSetSessionService _mindSetSessionService = MindSetSessionService();
   final TaskService _taskService = TaskService();
+  final BoardService _boardService = BoardService();
   final PlanService _planService = PlanService();
-  final SubtaskProvider _subtaskProvider = SubtaskProvider();
+  final StepProvider _stepProvider = StepProvider();
 
   String? _lastStreamedUserId;
   final PageController _featurePageController = PageController();
@@ -167,6 +184,8 @@ class _HomePageState extends State<HomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const GreetingSection(),
+              const SizedBox(height: 20),
+              _ongoingSessionSection(context),
               if (_showFeatureCarousel) ...[
                 const SizedBox(height: 20),
                 _featureCarouselSection(context),
@@ -175,6 +194,8 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 20),
                 _quickLaunchSection(context),
               ],
+              const SizedBox(height: 20),
+              _lastVisitedSection(context),
               if (_showMotivationalQuote) ...[
                 const SizedBox(height: 24),
                 const MotivationalQuoteSection(),
@@ -426,8 +447,8 @@ class _HomePageState extends State<HomePage> {
           builder: (_) => AddTaskDialog(userId: userId),
         );
         return;
-      case _actionCreateSubtask:
-        await _openCreateSubtaskPicker();
+      case _actionCreateStep:
+        await _openCreateStepPicker();
         return;
       case _actionCreatePlan:
         await Navigator.of(context).push(
@@ -461,7 +482,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Future<void> _openCreateSubtaskPicker() async {
+  Future<void> _openCreateStepPicker() async {
     final userId = context.read<UserProvider>().userId;
     if (userId == null) {
       _showSnack('User not found. Please sign in again.');
@@ -515,10 +536,10 @@ class _HomePageState extends State<HomePage> {
 
     await showDialog(
       context: context,
-      builder: (_) => AddSubtaskDialog(
+      builder: (_) => AddStepDialog(
         parentTaskId: selectedTask.taskId,
-        subtaskBoardId: selectedTask.taskBoardId,
-        subtaskProvider: _subtaskProvider,
+        stepBoardId: selectedTask.taskBoardId,
+        stepProvider: _stepProvider,
       ),
     );
   }
@@ -561,6 +582,456 @@ class _HomePageState extends State<HomePage> {
         );
       },
     );
+  }
+
+  Widget _ongoingSessionSection(BuildContext context) {
+    final userId = context.watch<UserProvider>().userId;
+    final taskProvider = context.watch<TaskProvider>();
+    final planProvider = context.watch<PlanProvider>();
+    if (userId == null) return const SizedBox.shrink();
+
+    return StreamBuilder<MindSetSession?>(
+      stream: _mindSetSessionService.streamActiveSession(userId),
+      builder: (context, snapshot) {
+        final session = snapshot.data;
+        if (session == null) {
+          return const SizedBox.shrink();
+        }
+
+        final statsDone = session.sessionStats.tasksDoneCount ?? 0;
+        final statsTotal = session.sessionStats.tasksTotalCount ?? 0;
+        final fallbackTotal = session.sessionTaskIds.length;
+        final workedCount = session.sessionWorkedTaskIds.length;
+        final completedTaskIds = session.sessionActions
+            .where((action) => action.type == 'complete')
+            .map((action) => action.taskId)
+            .where((taskId) => taskId.isNotEmpty)
+            .toSet();
+        final completedCount = completedTaskIds.length;
+        final plannedTaskIds = <String>{};
+        for (final plan in planProvider.userPlans) {
+          plannedTaskIds.addAll(plan.taskIds);
+        }
+        final goWithFlowUnplannedCount = taskProvider.tasks
+            .where(
+              (task) =>
+                  !task.taskIsDone &&
+                  !task.taskIsDeleted &&
+                  !plannedTaskIds.contains(task.taskId),
+            )
+            .length;
+
+        final tasksTotalCandidates = [
+          statsTotal,
+          fallbackTotal,
+          workedCount,
+          completedCount,
+          if (session.sessionType == 'go_with_flow') goWithFlowUnplannedCount,
+        ];
+        final tasksTotal = tasksTotalCandidates.reduce(
+          (a, b) => a > b ? a : b,
+        );
+        final rawDone = statsDone > 0 ? statsDone : completedCount;
+        final tasksDone = tasksTotal > 0
+            ? rawDone.clamp(0, tasksTotal).toInt()
+            : 0;
+        final sessionTypeLabel = _sessionTypeLabel(session.sessionType);
+        final sessionTypeIcon = _sessionTypeIcon(session.sessionType);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Ongoing Session',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(width: 12),
+                Container(width: 1, height: 22, color: Colors.grey.shade400),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Resume your current focus.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Builder(
+              builder: (context) {
+                final accent = _sessionTypeAccentColor(session.sessionType);
+                final startedAt =
+                    session.sessionStartedAt ?? session.sessionCreatedAt;
+                return InkWell(
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const MindSetPage()),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(14),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: accent.withValues(alpha: 0.25)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.16),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(
+                                sessionTypeIcon,
+                                color: accent,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    session.sessionTitle.isEmpty
+                                        ? 'Mind:Set Session'
+                                        : session.sessionTitle,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '$sessionTypeLabel Session',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Active',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Started ${_formatRelative(startedAt)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade700,
+                                ),
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                '$tasksDone/$tasksTotal done',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: accent,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton.tonal(
+                              onPressed: () {
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => const MindSetPage(),
+                                  ),
+                                );
+                              },
+                              style: FilledButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                              ),
+                              child: const Text('Resume'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  String _sessionTypeLabel(String sessionType) {
+    switch (sessionType) {
+      case 'on_the_spot':
+        return 'On the Spot';
+      case 'go_with_flow':
+        return 'Go with the Flow';
+      case 'follow_through':
+        return 'Follow Through';
+      default:
+        return 'Mind:Set';
+    }
+  }
+
+  IconData _sessionTypeIcon(String sessionType) {
+    switch (sessionType) {
+      case 'on_the_spot':
+        return Icons.flash_on_rounded;
+      case 'go_with_flow':
+        return Icons.waves_rounded;
+      case 'follow_through':
+        return Icons.track_changes_rounded;
+      default:
+        return Icons.psychology;
+    }
+  }
+
+  Color _sessionTypeAccentColor(String sessionType) {
+    switch (sessionType) {
+      case 'on_the_spot':
+        return const Color(0xFF2563EB);
+      case 'go_with_flow':
+        return const Color(0xFF0F766E);
+      case 'follow_through':
+        return const Color(0xFF7C3AED);
+      default:
+        return const Color(0xFF4F46E5);
+    }
+  }
+
+  Widget _lastVisitedSection(BuildContext context) {
+    return FutureBuilder<List<_LastVisitedShortcut>>(
+      future: _loadLastVisitedShortcuts(),
+      builder: (context, snapshot) {
+        final shortcuts = snapshot.data ?? const <_LastVisitedShortcut>[];
+        if (shortcuts.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Last Visited',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(width: 12),
+                Container(width: 1, height: 22, color: Colors.grey.shade400),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Return to what you opened recently.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ...shortcuts.map((shortcut) => _lastVisitedTile(context, shortcut)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _lastVisitedTile(BuildContext context, _LastVisitedShortcut shortcut) {
+    final iconColor = shortcut.type == _LastVisitedType.board
+        ? Colors.teal.shade700
+        : Colors.deepPurple.shade700;
+    final surfaceColor = shortcut.type == _LastVisitedType.board
+        ? Colors.teal.shade50
+        : Colors.deepPurple.shade50;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: InkWell(
+        onTap: () => _openLastVisited(shortcut),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: surfaceColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: iconColor.withValues(alpha: 0.22)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(shortcut.icon, color: iconColor, size: 18),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      shortcut.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      shortcut.subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                _formatRelative(shortcut.visitedAt),
+                style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<List<_LastVisitedShortcut>> _loadLastVisitedShortcuts() async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null) return const <_LastVisitedShortcut>[];
+
+    final prefs = await SharedPreferences.getInstance();
+    final boardId = prefs.getString('${_lastVisitedBoardIdKey}_$userId');
+    final boardTitle = prefs.getString('${_lastVisitedBoardTitleKey}_$userId');
+    final boardAt = prefs.getInt('${_lastVisitedBoardAtKey}_$userId');
+
+    final taskId = prefs.getString('${_lastVisitedTaskIdKey}_$userId');
+    final taskTitle = prefs.getString('${_lastVisitedTaskTitleKey}_$userId');
+    final taskBoardTitle = prefs.getString(
+      '${_lastVisitedTaskBoardTitleKey}_$userId',
+    );
+    final taskAt = prefs.getInt('${_lastVisitedTaskAtKey}_$userId');
+
+    final shortcuts = <_LastVisitedShortcut>[];
+    if (boardId != null && boardTitle != null && boardAt != null) {
+      shortcuts.add(
+        _LastVisitedShortcut(
+          type: _LastVisitedType.board,
+          id: boardId,
+          title: boardTitle,
+          subtitle: 'Board',
+          icon: Icons.dashboard_outlined,
+          visitedAt: DateTime.fromMillisecondsSinceEpoch(boardAt),
+        ),
+      );
+    }
+
+    if (taskId != null && taskTitle != null && taskAt != null) {
+      final boardLabel = (taskBoardTitle ?? '').trim().isEmpty
+          ? 'Task'
+          : 'Task • $taskBoardTitle';
+      shortcuts.add(
+        _LastVisitedShortcut(
+          type: _LastVisitedType.task,
+          id: taskId,
+          title: taskTitle,
+          subtitle: boardLabel,
+          icon: Icons.task_alt_outlined,
+          visitedAt: DateTime.fromMillisecondsSinceEpoch(taskAt),
+        ),
+      );
+    }
+
+    shortcuts.sort((a, b) => b.visitedAt.compareTo(a.visitedAt));
+    return shortcuts;
+  }
+
+  Future<void> _openLastVisited(_LastVisitedShortcut shortcut) async {
+    if (shortcut.type == _LastVisitedType.board) {
+      Board? board = context.read<BoardProvider>().getBoardById(shortcut.id);
+      board ??= await _boardService.getBoardById(shortcut.id);
+      if (!mounted) return;
+      if (board == null) {
+        _showSnack('Board is unavailable.');
+        return;
+      }
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => BoardDetailsPage(board: board!)));
+      return;
+    }
+
+    Task? task;
+    for (final candidate in context.read<TaskProvider>().tasks) {
+      if (candidate.taskId == shortcut.id) {
+        task = candidate;
+        break;
+      }
+    }
+    task ??= await _taskService.getTaskById(shortcut.id);
+    if (!mounted) return;
+    if (task == null) {
+      _showSnack('Task is unavailable.');
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => TaskDetailsPage(task: task!)));
+  }
+
+  String _formatRelative(DateTime value) {
+    final now = DateTime.now();
+    final diff = now.difference(value);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inHours < 1) return '${diff.inMinutes}m ago';
+    if (diff.inDays < 1) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
   }
 
   Future<bool> _hasUnplannedTasks(String userId) async {
@@ -910,3 +1381,24 @@ class _QuickLaunchAction {
     required this.icon,
   });
 }
+
+enum _LastVisitedType { board, task }
+
+class _LastVisitedShortcut {
+  final _LastVisitedType type;
+  final String id;
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final DateTime visitedAt;
+
+  const _LastVisitedShortcut({
+    required this.type,
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.visitedAt,
+  });
+}
+

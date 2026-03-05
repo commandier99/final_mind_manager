@@ -12,9 +12,7 @@ void _log(String message) {
 class UserService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   CollectionReference get _users => _firestore.collection('users');
-  CollectionReference get _userStats => _firestore.collection('userStats');
-  CollectionReference get _legacyUserStats =>
-      _firestore.collection('user_stats');
+  CollectionReference get _userStats => _firestore.collection('user_stats');
 
   Future<UserModel?> getUserById(String uid) async {
     _log('[DEBUG] UserService.getUserById: Fetching user with uid = $uid');
@@ -52,23 +50,11 @@ class UserService {
     }
   }
 
-  /// Initialize canonical userStats doc, with legacy fallback migration.
+  /// Initialize user stats doc.
   Future<void> _initializeUserStats(String userId) async {
     try {
       final statsDoc = await _userStats.doc(userId).get();
       if (statsDoc.exists && statsDoc.data() != null) return;
-
-      final legacyStatsDoc = await _legacyUserStats.doc(userId).get();
-      if (legacyStatsDoc.exists && legacyStatsDoc.data() != null) {
-        await _userStats
-            .doc(userId)
-            .set(
-              legacyStatsDoc.data() as Map<String, dynamic>,
-              SetOptions(merge: true),
-            );
-        _log('[UserService] Legacy user_stats migrated for user $userId');
-        return;
-      }
 
       final defaultStats = UserStatsModel(userId: userId);
       await _userStats.doc(userId).set(defaultStats.toMap());
@@ -153,19 +139,6 @@ class UserService {
         batch.delete(doc.reference);
       }
 
-      // Delete board stats.
-      final boardStatsSnapshot = await _firestore
-          .collection('boardStats')
-          .where('boardManagerId', isEqualTo: userId)
-          .get();
-
-      _log(
-        '[DEBUG] UserService: Found ${boardStatsSnapshot.docs.length} board stats to delete',
-      );
-      for (var doc in boardStatsSnapshot.docs) {
-        batch.delete(doc.reference);
-      }
-
       // Delete activity events.
       final activityEventsSnapshot = await _firestore
           .collection('activity_events')
@@ -196,8 +169,7 @@ class UserService {
       // Delete user daily activity parent document.
       batch.delete(_firestore.collection('user_daily_activity').doc(userId));
 
-      // Delete user stats (canonical and legacy collections).
-      batch.delete(_firestore.collection('userStats').doc(userId));
+      // Delete user stats.
       batch.delete(_firestore.collection('user_stats').doc(userId));
       _log('[DEBUG] UserService: Marked user stats for deletion');
 

@@ -61,6 +61,93 @@ class NotificationCard extends StatelessWidget {
     );
   }
 
+  _NotifVisual _inAppVisual(InAppNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    final title = notif.title.toLowerCase();
+
+    if (kind == 'poke' || kind == 'poke_reminder') {
+      return const _NotifVisual(
+        icon: Icons.markunread_mailbox_outlined,
+        color: Color(0xFF8E24AA),
+      );
+    }
+    if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+      return const _NotifVisual(
+        icon: Icons.lightbulb_outline,
+        color: Color(0xFFFFA000),
+      );
+    }
+    if (category == 'task_assigned') {
+      return const _NotifVisual(
+        icon: Icons.assignment_ind_outlined,
+        color: Color(0xFF1E88E5),
+      );
+    }
+    if (category == 'approval') {
+      return const _NotifVisual(
+        icon: Icons.fact_check_outlined,
+        color: Color(0xFF00897B),
+      );
+    }
+    if (category == 'invitation') {
+      return const _NotifVisual(
+        icon: Icons.mail_outline,
+        color: Color(0xFF3949AB),
+      );
+    }
+    if (category == 'task_deadline') {
+      return const _NotifVisual(
+        icon: Icons.schedule_outlined,
+        color: Color(0xFFE53935),
+      );
+    }
+    if (category == 'reminder') {
+      return const _NotifVisual(
+        icon: Icons.notifications_active_outlined,
+        color: Color(0xFFF4511E),
+      );
+    }
+    return const _NotifVisual(
+      icon: Icons.notifications_none_outlined,
+      color: Color(0xFF546E7A),
+    );
+  }
+
+  _NotifVisual _pushVisual(PushNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    if (category == 'invitation') {
+      return const _NotifVisual(
+        icon: Icons.campaign_outlined,
+        color: Color(0xFF3949AB),
+      );
+    }
+    if (category == 'approval') {
+      return const _NotifVisual(
+        icon: Icons.verified_outlined,
+        color: Color(0xFF00897B),
+      );
+    }
+    if (category == 'task_assigned') {
+      return const _NotifVisual(
+        icon: Icons.assignment_late_outlined,
+        color: Color(0xFF1E88E5),
+      );
+    }
+    if (category == 'task_deadline') {
+      return const _NotifVisual(
+        icon: Icons.alarm_outlined,
+        color: Color(0xFFE53935),
+      );
+    }
+    return const _NotifVisual(
+      icon: Icons.notifications_outlined,
+      color: Color(0xFF546E7A),
+    );
+  }
+
   // Board Request Card - Basic version
   Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
     final isRecruitment =
@@ -77,6 +164,12 @@ class NotificationCard extends StatelessWidget {
               ? 'To ${request.userName}'
               : 'From ${request.boardManagerName}')
         : (isSender ? 'From ${request.userName}' : 'To ${request.boardTitle}');
+    final icon = isRecruitment
+        ? (isSender ? Icons.outgoing_mail : Icons.mark_email_unread_outlined)
+        : (isSender ? Icons.person_add_alt_1 : Icons.inbox_outlined);
+    final iconColor = isRecruitment
+        ? (isSender ? const Color(0xFF5E35B1) : const Color(0xFF3949AB))
+        : (isSender ? const Color(0xFF00897B) : const Color(0xFF1E88E5));
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -86,10 +179,17 @@ class NotificationCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(
-                isRecruitment ? Icons.mail : Icons.send,
-                color: isRecruitment ? Colors.blue : Colors.green,
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: iconColor,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -129,6 +229,10 @@ class NotificationCard extends StatelessWidget {
 
   // In-App Notification Card - Basic version
   Widget _buildInAppNotifCard(BuildContext context, InAppNotification notif) {
+    final visual = _inAppVisual(notif);
+    final iconColor = notif.isRead
+        ? Colors.grey.shade500
+        : visual.color;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -137,10 +241,19 @@ class NotificationCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(
-                Icons.notifications_active,
-                color: notif.isRead ? Colors.grey : Colors.blue,
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (notif.isRead
+                          ? Colors.grey.shade300
+                          : visual.color.withValues(alpha: 0.12)),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  visual.icon,
+                  color: iconColor,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -196,6 +309,8 @@ class NotificationCard extends StatelessWidget {
 
   // Push Notification Card - Basic version
   Widget _buildPushNotifCard(BuildContext context, PushNotification notif) {
+    final visual = _pushVisual(notif);
+    final iconColor = notif.isSent ? visual.color : Colors.orange.shade700;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: InkWell(
@@ -204,10 +319,19 @@ class NotificationCard extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(
-                Icons.notifications,
-                color: notif.isSent ? Colors.green : Colors.orange,
-                size: 24,
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: notif.isSent
+                      ? visual.color.withValues(alpha: 0.12)
+                      : Colors.orange.withValues(alpha: 0.16),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  visual.icon,
+                  color: iconColor,
+                  size: 20,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -298,4 +422,14 @@ class NotificationCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class _NotifVisual {
+  final IconData icon;
+  final Color color;
+
+  const _NotifVisual({
+    required this.icon,
+    required this.color,
+  });
 }

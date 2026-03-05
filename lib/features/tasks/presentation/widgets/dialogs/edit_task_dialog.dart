@@ -94,7 +94,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     _taskRequiresSubmission = widget.task.taskRequiresSubmission;
     _taskRequiresApproval = widget.task.taskRequiresApproval;
     // Pending external assignments are tracked in proposed assignee fields.
-    if (widget.task.taskAcceptanceStatus == 'pending' &&
+    if (widget.task.taskAssignmentStatus == 'pending' &&
         widget.task.taskProposedAssigneeId != null &&
         widget.task.taskProposedAssigneeId!.isNotEmpty) {
       _assignedToUserId = widget.task.taskProposedAssigneeId;
@@ -183,7 +183,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
       final taskProvider = context.read<TaskProvider>();
 
       final currentAssigneeForComparison =
-          (widget.task.taskAcceptanceStatus == 'pending' &&
+          (widget.task.taskAssignmentStatus == 'pending' &&
               (widget.task.taskProposedAssigneeId ?? '').isNotEmpty)
           ? widget.task.taskProposedAssigneeId
           : ((widget.task.taskAssignedTo == 'None' ||
@@ -257,14 +257,14 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
             ? _lanePublished
             : _taskBoardLane,
         // Reset acceptance status to 'pending' if task is reassigned to a different person
-        taskAcceptanceStatus: _boardType == 'personal'
+        taskAssignmentStatus: _boardType == 'personal'
             ? null
             : (assigneeChanged
-            ? (_assignedToUserId != null &&
-                      _assignedToUserId != widget.task.taskOwnerId
-                  ? 'pending'
-                  : null)
-            : widget.task.taskAcceptanceStatus),
+                  ? (_assignedToUserId != null &&
+                            _assignedToUserId != widget.task.taskOwnerId
+                        ? 'pending'
+                        : null)
+                  : widget.task.taskAssignmentStatus),
         taskProposedAssigneeId: _boardType == 'personal'
             ? null
             : (hasPendingExternalAssignment ? _assignedToUserId : null),

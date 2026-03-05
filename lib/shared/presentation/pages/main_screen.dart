@@ -12,6 +12,7 @@ import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../datasources/providers/navigation_provider.dart';
 import '../../features/users/datasources/providers/user_provider.dart';
 import '../../../features/notifications/presentation/pages/notifications_page.dart';
+import '../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 import '../pages/profile_page.dart';
 import '../pages/search_and_discover_page.dart';
 import '../pages/settings_page.dart';
@@ -36,6 +37,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   VoidCallback? _boardsSortPressed;
   VoidCallback? _plansFilterPressed;
   VoidCallback? _plansSortPressed;
+  VoidCallback? _notificationsFilterPressed;
+  String? _lastNotificationsUserId;
 
   // Search state
   bool _boardsSearchExpanded = false;
@@ -89,7 +92,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     ),
     const DashboardPage(),
     const ProfilePage(),
-    const NotificationsPage(),
+    NotificationsPage(
+      key: const ValueKey('notifications_page'),
+      onFilterPressedReady: (handler) {
+        if (!mounted) return;
+        if (_notificationsFilterPressed == handler) return;
+        setState(() {
+          _notificationsFilterPressed = handler;
+        });
+      },
+    ),
     const SearchAndDiscoverPage(),
     const SettingsPage(),
     const HelpPage(),
@@ -113,6 +125,16 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       if (!mounted) return;
       context.read<UserProvider>().markUserActive(force: true);
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null || userId.isEmpty) return;
+    if (_lastNotificationsUserId == userId) return;
+    _lastNotificationsUserId = userId;
+    context.read<InAppNotificationProvider>().streamNotificationsByUser(userId);
   }
 
   @override
@@ -163,15 +185,19 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     // Custom actions for notifications page (3-dot menu)
     List<Widget>? customActions;
     if (isNotificationsPage) {
-      // No custom actions for notifications page
-    } else if (selectedIndex == 0) {
       customActions = [
         IconButton(
-          icon: const Icon(Icons.notifications_outlined),
+          icon: const Icon(Icons.filter_list),
+          onPressed: _notificationsFilterPressed,
+          tooltip: 'Filter',
+        ),
+      ];
+    } else if (selectedIndex == 0) {
+      customActions = [
+        _buildNotificationAction(
           onPressed: () {
             navigation.selectFromSideMenu(5);
           },
-          tooltip: 'Notifications',
         ),
         IconButton(
           icon: const Icon(Icons.more_vert),
@@ -258,6 +284,38 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           navigation.selectFromBottomNav(index);
         },
       ),
+    );
+  }
+
+  Widget _buildNotificationAction({required VoidCallback onPressed}) {
+    return Consumer<InAppNotificationProvider>(
+      builder: (context, inAppProvider, _) {
+        final unreadCount = inAppProvider.unreadCount;
+        return IconButton(
+          onPressed: onPressed,
+          tooltip: 'Notifications',
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(Icons.notifications_outlined),
+              if (unreadCount > 0)
+                Positioned(
+                  right: -1,
+                  top: -1,
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(99),
+                      border: Border.all(color: Colors.white, width: 1.2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

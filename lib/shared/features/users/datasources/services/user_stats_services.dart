@@ -10,8 +10,7 @@ void _log(String message) {
 
 class UserStatsService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  CollectionReference get _stats => _firestore.collection('userStats');
-  CollectionReference get _legacyStats => _firestore.collection('user_stats');
+  CollectionReference get _stats => _firestore.collection('user_stats');
 
   Future<UserStatsModel?> getStats(String userId) async {
     _log(
@@ -23,28 +22,15 @@ class UserStatsService {
       if (primaryDoc.exists && primaryDoc.data() != null) {
         final data = primaryDoc.data() as Map<String, dynamic>;
         _log(
-          '[DEBUG] UserStatsService.getStats: Stats found (primary) - tasks: ${data['userTasksCreatedCount'] ?? 0}, subtasks: ${data['userSubtasksCreatedCount'] ?? 0}',
+          '[DEBUG] UserStatsService.getStats: Stats found (primary) - tasks: ${data['userTasksCreatedCount'] ?? 0}, steps: ${data['userStepsCreatedCount'] ?? 0}',
         );
         return UserStatsModel.fromMap(data, userId);
       }
 
-      // Backward-compatible fallback for older deployments.
-      final legacyDoc = await _legacyStats.doc(userId).get();
-      if (!legacyDoc.exists || legacyDoc.data() == null) {
-        _log(
-          '[DEBUG] UserStatsService.getStats: No stats document found for userId: $userId',
-        );
-        return null;
-      }
-
-      final legacyData = legacyDoc.data() as Map<String, dynamic>;
       _log(
-        '[DEBUG] UserStatsService.getStats: Stats found (legacy) - tasks: ${legacyData['userTasksCreatedCount'] ?? 0}, subtasks: ${legacyData['userSubtasksCreatedCount'] ?? 0}',
+        '[DEBUG] UserStatsService.getStats: No stats document found for userId: $userId',
       );
-
-      // Write-through migration so future reads use canonical collection.
-      await _stats.doc(userId).set(legacyData, SetOptions(merge: true));
-      return UserStatsModel.fromMap(legacyData, userId);
+      return null;
     } catch (e) {
       _log('[ERROR] UserStatsService.getStats: Failed to fetch stats - $e');
       rethrow;
@@ -92,3 +78,4 @@ class UserStatsService {
     }
   }
 }
+

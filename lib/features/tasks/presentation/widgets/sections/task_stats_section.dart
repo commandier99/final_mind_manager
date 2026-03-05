@@ -8,16 +8,16 @@ class TaskStatsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final totalSubtasks = task.taskStats.taskSubtasksCount ?? 0;
-    final doneSubtasks = task.taskStats.taskSubtasksDoneCount ?? 0;
-    final deletedSubtasks = task.taskStats.taskSubtasksDeletedCount ?? 0;
+    final totalSteps = task.taskStats.taskStepsCount ?? 0;
+    final doneSteps = task.taskStats.taskStepsDoneCount ?? 0;
+    final deletedSteps = task.taskStats.taskStepsDeletedCount ?? 0;
     final edits = task.taskStats.taskEditsCount ?? 0;
     final deadlinesMissed = task.taskStats.deadlinesMissedCount ?? 0;
     final deadlinesExtended = task.taskStats.deadlinesExtendedCount ?? 0;
     final taskFailed = task.taskStats.tasksFailedCount ?? 0;
 
-    final completionRate = totalSubtasks > 0
-        ? doneSubtasks / totalSubtasks
+    final completionRate = totalSteps > 0
+        ? doneSteps / totalSteps
         : 0.0;
     final completionLabel = '${(completionRate * 100).toStringAsFixed(0)}%';
 
@@ -42,8 +42,8 @@ class TaskStatsSection extends StatelessWidget {
             context: context,
             completionRate: completionRate,
             completionLabel: completionLabel,
-            doneSubtasks: doneSubtasks,
-            totalSubtasks: totalSubtasks,
+            doneSteps: doneSteps,
+            totalSteps: totalSteps,
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -51,20 +51,20 @@ class TaskStatsSection extends StatelessWidget {
             runSpacing: 10,
             children: [
               _buildMetricTile(
-                label: 'Subtasks',
-                value: '$totalSubtasks',
+                label: 'Steps',
+                value: '$totalSteps',
                 icon: Icons.format_list_bulleted,
                 color: Colors.indigo,
               ),
               _buildMetricTile(
-                label: 'Subtasks Done',
-                value: '$doneSubtasks',
+                label: 'Steps Done',
+                value: '$doneSteps',
                 icon: Icons.done_all,
                 color: Colors.teal,
               ),
               _buildMetricTile(
-                label: 'Subtasks Deleted',
-                value: '$deletedSubtasks',
+                label: 'Steps Deleted',
+                value: '$deletedSteps',
                 icon: Icons.remove_done,
                 color: Colors.deepOrange,
               ),
@@ -103,8 +103,8 @@ class TaskStatsSection extends StatelessWidget {
     required BuildContext context,
     required double completionRate,
     required String completionLabel,
-    required int doneSubtasks,
-    required int totalSubtasks,
+    required int doneSteps,
+    required int totalSteps,
   }) {
     return Container(
       width: double.infinity,
@@ -150,18 +150,18 @@ class TaskStatsSection extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Subtask Completion',
+                  'Step Completion',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$doneSubtasks of $totalSubtasks subtasks completed',
+                  '$doneSteps of $totalSteps steps completed',
                   style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  totalSubtasks == 0
-                      ? 'No subtasks created yet'
+                  totalSteps == 0
+                      ? 'No steps created yet'
                       : 'Keep this moving to 100%',
                   style: TextStyle(fontSize: 12, color: Colors.grey[700]),
                 ),
@@ -229,3 +229,4 @@ class TaskStatsSection extends StatelessWidget {
     );
   }
 }
+

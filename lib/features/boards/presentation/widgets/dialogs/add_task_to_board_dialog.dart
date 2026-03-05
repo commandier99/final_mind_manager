@@ -40,7 +40,6 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   DateTime? _deadline;
   TimeOfDay? _deadlineTime;
   bool _isRepeating = false;
-  bool _taskAllowsSubmissions = true;
   bool _taskRequiresSubmission = false;
   bool _taskRequiresApproval = false;
   final List<String> _repeatDays = [];
@@ -249,27 +248,23 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskAssignedBy: widget.userId,
         taskProposedAssigneeId: widget.board.boardType == 'personal'
             ? null
-            : (_assignedToUserId != null &&
-                      _assignedToUserId != widget.userId
+            : (_assignedToUserId != null && _assignedToUserId != widget.userId
                   ? _assignedToUserId
                   : null),
         taskProposedAssigneeName: widget.board.boardType == 'personal'
             ? null
-            : (_assignedToUserId != null &&
-                      _assignedToUserId != widget.userId
+            : (_assignedToUserId != null && _assignedToUserId != widget.userId
                   ? _assignedToUserName
                   : null),
         // Personal boards always assign to board manager.
         taskAssignedTo: widget.board.boardType == 'personal'
             ? widget.board.boardManagerId
-            : ((_assignedToUserId != null &&
-                      _assignedToUserId != widget.userId)
+            : ((_assignedToUserId != null && _assignedToUserId != widget.userId)
                   ? 'None'
                   : (_assignedToUserId ?? 'None')),
         taskAssignedToName: widget.board.boardType == 'personal'
             ? (_boardMembers[widget.board.boardManagerId] ?? _currentUserName)
-            : ((_assignedToUserId != null &&
-                      _assignedToUserId != widget.userId)
+            : ((_assignedToUserId != null && _assignedToUserId != widget.userId)
                   ? 'Unassigned'
                   : (_assignedToUserName ?? 'Unassigned')),
         taskCreatedAt: DateTime.now(),
@@ -283,13 +278,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskStats: TaskStats(),
         taskPriorityLevel: _priorityLevel,
         taskStatus: 'To Do',
-        taskAllowsSubmissions: _taskAllowsSubmissions,
-        taskRequiresSubmission: _taskAllowsSubmissions
-            ? _taskRequiresSubmission
-            : false,
-        taskRequiresApproval: _taskAllowsSubmissions
-            ? _taskRequiresApproval
-            : false,
+        taskAllowsSubmissions: true,
+        taskRequiresSubmission: _taskRequiresSubmission,
+        taskRequiresApproval: _taskRequiresApproval,
         taskIsRepeating: _isRepeating,
         taskRepeatInterval: _repeatDays.isNotEmpty
             ? _repeatDays.join(',')
@@ -301,7 +292,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             ? _lanePublished
             : (_isCurrentUserSupervisor ? _laneDrafts : _taskBoardLane),
         // Set acceptance status to null if self-assigned (single member boards), pending otherwise
-        taskAcceptanceStatus: widget.board.boardType == 'personal'
+        taskAssignmentStatus: widget.board.boardType == 'personal'
             ? null
             : (_assignedToUserId == widget.userId
                   ? null
@@ -867,36 +858,20 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Allow Submissions'),
-            value: _taskAllowsSubmissions,
+            title: const Text('Submission Required'),
+            value: _taskRequiresSubmission,
             onChanged: (value) {
-              setState(() {
-                _taskAllowsSubmissions = value;
-                if (!value) {
-                  _taskRequiresSubmission = false;
-                  _taskRequiresApproval = false;
-                }
-              });
+              setState(() => _taskRequiresSubmission = value);
             },
           ),
-          if (_taskAllowsSubmissions) ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Submission Required'),
-              value: _taskRequiresSubmission,
-              onChanged: (value) {
-                setState(() => _taskRequiresSubmission = value);
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Reviewer Approval Required'),
-              value: _taskRequiresApproval,
-              onChanged: (value) {
-                setState(() => _taskRequiresApproval = value);
-              },
-            ),
-          ],
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Reviewer Approval Required'),
+            value: _taskRequiresApproval,
+            onChanged: (value) {
+              setState(() => _taskRequiresApproval = value);
+            },
+          ),
         ],
       ),
     );

@@ -44,15 +44,15 @@ class TaskStatsProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Increment subtask counts (completed or deleted)
-  Future<void> incrementSubtaskCount(String taskId, {int completed = 0, int deleted = 0}) async {
-    await _service.incrementSubtaskCount(taskId, completed: completed, deleted: deleted);
+  /// Increment step counts (completed or deleted)
+  Future<void> incrementStepCount(String taskId, {int completed = 0, int deleted = 0}) async {
+    await _service.incrementStepCount(taskId, completed: completed, deleted: deleted);
 
     final current = _taskStats[taskId] ?? TaskStats();
     _taskStats[taskId] = current.copyWith(
-      taskSubtasksCount: (current.taskSubtasksCount ?? 0) + 1,
-      taskSubtasksDoneCount: (current.taskSubtasksDoneCount ?? 0) + completed,
-      taskSubtasksDeletedCount: (current.taskSubtasksDeletedCount ?? 0) + deleted,
+      taskStepsCount: (current.taskStepsCount ?? 0) + 1,
+      taskStepsDoneCount: (current.taskStepsDoneCount ?? 0) + completed,
+      taskStepsDeletedCount: (current.taskStepsDeletedCount ?? 0) + deleted,
     );
     notifyListeners();
   }

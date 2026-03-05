@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
-import '../../../datasources/providers/subtask_provider.dart';
+import '../../../datasources/providers/step_provider.dart';
 
-class AddSubtaskDialog extends StatefulWidget {
+class AddStepDialog extends StatefulWidget {
   final String parentTaskId;
-  final String? subtaskBoardId;
-  final SubtaskProvider subtaskProvider;
+  final String? stepBoardId;
+  final StepProvider stepProvider;
 
-  const AddSubtaskDialog({
+  const AddStepDialog({
     super.key,
     required this.parentTaskId,
-    this.subtaskBoardId,
-    required this.subtaskProvider,
+    this.stepBoardId,
+    required this.stepProvider,
   });
 
   @override
-  State<AddSubtaskDialog> createState() => _AddSubtaskDialogState();
+  State<AddStepDialog> createState() => _AddStepDialogState();
 }
 
-class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
+class _AddStepDialogState extends State<AddStepDialog> {
   late TextEditingController _stepController;
   bool _isLoading = false;
 
@@ -33,7 +33,7 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
     super.dispose();
   }
 
-  void _handleAddSubtask() async {
+  void _handleAddStep() async {
     if (_stepController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter a step')),
@@ -43,11 +43,11 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
 
     setState(() => _isLoading = true);
 
-    await widget.subtaskProvider.addSubtask(
-      subtaskTaskId: widget.parentTaskId,
-      subtaskBoardId: widget.subtaskBoardId ?? '',
-      subtaskTitle: _stepController.text.trim(),
-      subtaskDescription: null,
+    await widget.stepProvider.addStep(
+      stepTaskId: widget.parentTaskId,
+      stepBoardId: widget.stepBoardId ?? '',
+      stepTitle: _stepController.text.trim(),
+      stepDescription: null,
     );
 
     setState(() => _isLoading = false);
@@ -102,7 +102,7 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _handleAddSubtask,
+                  onPressed: _isLoading ? null : _handleAddStep,
                   child: _isLoading
                       ? const SizedBox(
                           height: 20,
@@ -119,3 +119,4 @@ class _AddSubtaskDialogState extends State<AddSubtaskDialog> {
     );
   }
 }
+

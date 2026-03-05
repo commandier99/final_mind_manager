@@ -35,7 +35,6 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   final List<String> _repeatDays = []; // Track selected days
   DateTime? _repeatEndDate;
   TimeOfDay? _repeatTime;
-  bool _taskAllowsSubmissions = true;
   bool _taskRequiresSubmission = false;
   bool _taskRequiresApproval = false;
   String _currentUserName = 'Unknown'; // Store current user's name
@@ -126,7 +125,6 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         _boardMembers = {};
         _assignedToUserId = null;
         _assignedToUserName = null;
-        _taskAllowsSubmissions = false;
         _taskRequiresSubmission = false;
         _taskRequiresApproval = false;
       }
@@ -304,14 +302,17 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       final isTeamBoard = selectedBoard.boardType == 'team';
       final proposedAssigneeId = isTeamBoard ? _assignedToUserId : null;
       final proposedAssigneeName = isTeamBoard ? _assignedToUserName : null;
-      final isPendingExternalAssignment = isTeamBoard &&
+      final isPendingExternalAssignment =
+          isTeamBoard &&
           proposedAssigneeId != null &&
           proposedAssigneeId.isNotEmpty &&
           proposedAssigneeId != 'None' &&
           proposedAssigneeId != widget.userId;
 
       String assignedToId = isTeamBoard
-          ? (isPendingExternalAssignment ? 'None' : (_assignedToUserId ?? 'None'))
+          ? (isPendingExternalAssignment
+                ? 'None'
+                : (_assignedToUserId ?? 'None'))
           : widget.userId;
       String assignedToName = isTeamBoard
           ? (isPendingExternalAssignment
@@ -389,13 +390,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskStats: TaskStats(), // Always initialize as empty
         taskPriorityLevel: _priorityLevel,
         taskStatus: Task.statusToDo,
-        taskAllowsSubmissions: _taskAllowsSubmissions,
-        taskRequiresSubmission: _taskAllowsSubmissions
-            ? _taskRequiresSubmission
-            : false,
-        taskRequiresApproval: _taskAllowsSubmissions
-            ? _taskRequiresApproval
-            : false,
+        taskAllowsSubmissions: true,
+        taskRequiresSubmission: _taskRequiresSubmission,
+        taskRequiresApproval: _taskRequiresApproval,
         taskIsRepeating: isRepeating,
         taskRepeatInterval: isRepeating && _repeatDays.isNotEmpty
             ? _repeatDays.join(',')
@@ -404,11 +401,13 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskNextRepeatDate: null,
         taskRepeatTime: isRepeating ? repeatTimeStr : null,
         // Set acceptance status to 'pending' if assigning to someone else
-        taskAcceptanceStatus: isPendingExternalAssignment ? 'pending' : null,
-        taskProposedAssigneeId:
-            isPendingExternalAssignment ? proposedAssigneeId : null,
-        taskProposedAssigneeName:
-            isPendingExternalAssignment ? proposedAssigneeName : null,
+        taskAssignmentStatus: isPendingExternalAssignment ? 'pending' : null,
+        taskProposedAssigneeId: isPendingExternalAssignment
+            ? proposedAssigneeId
+            : null,
+        taskProposedAssigneeName: isPendingExternalAssignment
+            ? proposedAssigneeName
+            : null,
         taskBoardLane: selectedBoard.boardType == 'personal'
             ? _lanePublished
             : _laneDrafts,
@@ -553,7 +552,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         ? 'Unassigned'
         : assignedTo;
     final description = (task?.taskDescription ?? '').trim();
-    final descriptionLabel = description.isEmpty ? 'No description' : description;
+    final descriptionLabel = description.isEmpty
+        ? 'No description'
+        : description;
     final deadlineLabel = _formatTaskDeadline(task?.taskDeadline);
 
     return Container(
@@ -772,7 +773,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         children: [
           Row(
             children: [
-              Icon(Icons.assignment_turned_in, size: 16, color: Colors.grey[700]),
+              Icon(
+                Icons.assignment_turned_in,
+                size: 16,
+                color: Colors.grey[700],
+              ),
               const SizedBox(width: 6),
               Text(
                 'Submission Settings',
@@ -792,36 +797,20 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Allow Submissions'),
-            value: _taskAllowsSubmissions,
+            title: const Text('Submission Required'),
+            value: _taskRequiresSubmission,
             onChanged: (value) {
-              setState(() {
-                _taskAllowsSubmissions = value;
-                if (!value) {
-                  _taskRequiresSubmission = false;
-                  _taskRequiresApproval = false;
-                }
-              });
+              setState(() => _taskRequiresSubmission = value);
             },
           ),
-          if (_taskAllowsSubmissions) ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Submission Required'),
-              value: _taskRequiresSubmission,
-              onChanged: (value) {
-                setState(() => _taskRequiresSubmission = value);
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Reviewer Approval Required'),
-              value: _taskRequiresApproval,
-              onChanged: (value) {
-                setState(() => _taskRequiresApproval = value);
-              },
-            ),
-          ],
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Reviewer Approval Required'),
+            value: _taskRequiresApproval,
+            onChanged: (value) {
+              setState(() => _taskRequiresApproval = value);
+            },
+          ),
         ],
       ),
     );
@@ -848,29 +837,236 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-              const SizedBox(height: 6),
-              TextField(
-                controller: _titleController,
-                decoration: InputDecoration(
-                  labelText: 'Task Title',
-                  border: const OutlineInputBorder(),
-                  counterText: '${_titleController.text.length}/50',
+          const SizedBox(height: 6),
+          TextField(
+            controller: _titleController,
+            decoration: InputDecoration(
+              labelText: 'Task Title',
+              border: const OutlineInputBorder(),
+              counterText: '${_titleController.text.length}/50',
+            ),
+            maxLength: 50,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _descriptionController,
+            decoration: InputDecoration(
+              labelText: 'Description',
+              border: const OutlineInputBorder(),
+              counterText: '${_descriptionController.text.length}/500',
+            ),
+            maxLines: 3,
+            maxLength: 500,
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: _deadline ?? DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime(2100),
+                    );
+                    if (picked != null) {
+                      setState(() {
+                        _deadline = picked;
+                        _deadlineTime ??= _defaultDeadlineTime;
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.calendar_today),
+                  label: Text(
+                    _deadline == null
+                        ? 'Set Deadline'
+                        : 'Deadline: ${_deadline!.toLocal().toString().split(' ')[0]}',
+                  ),
                 ),
-                maxLength: 50,
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _descriptionController,
-                decoration: InputDecoration(
-                  labelText: 'Description',
-                  border: const OutlineInputBorder(),
-                  counterText: '${_descriptionController.text.length}/500',
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                onPressed: _deadline == null
+                    ? null
+                    : () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: _deadlineTime ?? TimeOfDay.now(),
+                        );
+                        if (picked != null) {
+                          setState(() => _deadlineTime = picked);
+                        }
+                      },
+                icon: const Icon(Icons.access_time),
+                label: Text(
+                  _deadlineTime == null
+                      ? 'Time'
+                      : _deadlineTime!.format(context),
                 ),
-                maxLines: 3,
-                maxLength: 500,
-                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          _buildPrioritySelector(),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<Board>(
+            initialValue: _selectedBoard,
+            items: _boards
+                .map(
+                  (board) => DropdownMenuItem<Board>(
+                    value: board,
+                    child: Text(
+                      board.boardTitle,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                )
+                .toList(),
+            onChanged: _boards.isEmpty
+                ? null
+                : (board) async {
+                    if (board == null) return;
+                    setState(() {
+                      _selectedBoard = board;
+                      _selectedDependencyIds.clear();
+                    });
+                    if (board.boardType == 'team') {
+                      await _loadBoardMembers();
+                      return;
+                    }
+                    setState(() {
+                      _boardMembers = {};
+                      _assignedToUserId = null;
+                      _assignedToUserName = null;
+                      _taskRequiresSubmission = false;
+                      _taskRequiresApproval = false;
+                    });
+                  },
+            decoration: const InputDecoration(
+              labelText: 'Select Board',
+              hintText: 'Required',
+            ),
+          ),
+          if (_boards.isEmpty)
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text(
+                'No available boards found.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ),
+          const SizedBox(height: 12),
+          // Assignment dropdown (Team boards only)
+          if (_selectedBoard?.boardType == 'team') ...[
+            if (_loadingMembers)
+              const Center(child: CircularProgressIndicator())
+            else if (_boardMembers.isNotEmpty)
+              DropdownButtonFormField<String?>(
+                initialValue: _assignedToUserId,
+                decoration: const InputDecoration(
+                  labelText: 'Assign To',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.person),
+                ),
+                items: [
+                  // "None" option for unassigned tasks
+                  const DropdownMenuItem<String?>(
+                    value: null,
+                    child: Text('None'),
+                  ),
+                  // All board members
+                  ..._boardMembers.entries.map((entry) {
+                    final selectedBoard = _selectedBoard;
+                    final active = _activeTasksForMember(
+                      boardTasks: boardTasks,
+                      memberId: entry.key,
+                    );
+                    final limit = selectedBoard == null
+                        ? 0
+                        : _taskLimitForMember(selectedBoard, entry.key);
+                    final atCapacity =
+                        selectedBoard != null &&
+                        entry.key != widget.userId &&
+                        _isAtCapacity(
+                          board: selectedBoard,
+                          memberId: entry.key,
+                          boardTasks: boardTasks,
+                        );
+                    final loadSuffix = limit > 0
+                        ? ' ($active/$limit active)'
+                        : ' ($active active)';
+                    return DropdownMenuItem<String?>(
+                      value: entry.key,
+                      enabled: !atCapacity,
+                      child: Text(
+                        '${_assigneeOptionLabel(entry.key, entry.value)}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
+                      ),
+                    );
+                  }),
+                ],
+                onChanged: (val) {
+                  setState(() {
+                    _assignedToUserId = val;
+                    _assignedToUserName = val != null
+                        ? _boardMembers[val]
+                        : null;
+                  });
+                },
+              ),
+            const SizedBox(height: 8),
+          ],
+          const SizedBox(height: 12),
+          _buildSubmissionOptionsSection(),
+          const SizedBox(height: 12),
+          _buildDependenciesSection(context),
+          if (canRepeat) ...[
+            SwitchListTile(
+              title: const Text('Repeating Task'),
+              value: effectiveRepeat,
+              onChanged: (val) => setState(() => _isRepeating = val),
+              contentPadding: EdgeInsets.zero,
+            ),
+            if (effectiveRepeat) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Repeat on days:',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _daysOfWeek
+                      .map(
+                        (day) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: FilterChip(
+                            label: Text(day.substring(0, 3)),
+                            selected: _repeatDays.contains(day),
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _repeatDays.add(day);
+                                  // Sort days by week order
+                                  _repeatDays.sort(
+                                    (a, b) =>
+                                        _daysOfWeek.indexOf(a) -
+                                        _daysOfWeek.indexOf(b),
+                                  );
+                                } else {
+                                  _repeatDays.remove(day);
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
               const SizedBox(height: 12),
               Row(
@@ -880,255 +1076,44 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                       onPressed: () async {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: _deadline ?? DateTime.now(),
+                          initialDate: _repeatEndDate ?? DateTime.now(),
                           firstDate: DateTime.now(),
                           lastDate: DateTime(2100),
                         );
                         if (picked != null) {
-                          setState(() {
-                            _deadline = picked;
-                            _deadlineTime ??= _defaultDeadlineTime;
-                          });
+                          setState(() => _repeatEndDate = picked);
                         }
                       },
-                      icon: const Icon(Icons.calendar_today),
+                      icon: const Icon(Icons.event),
                       label: Text(
-                        _deadline == null
-                            ? 'Set Deadline'
-                            : 'Deadline: ${_deadline!.toLocal().toString().split(' ')[0]}',
+                        _repeatEndDate == null
+                            ? 'Set Repeat End Date'
+                            : 'Ends: ${_repeatEndDate!.toLocal().toString().split(' ')[0]}',
                       ),
                     ),
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
-                    onPressed: _deadline == null
-                        ? null
-                        : () async {
-                            final picked = await showTimePicker(
-                              context: context,
-                              initialTime: _deadlineTime ?? TimeOfDay.now(),
-                            );
-                            if (picked != null) {
-                              setState(() => _deadlineTime = picked);
-                            }
-                          },
-                    icon: const Icon(Icons.access_time),
-                    label: Text(
-                      _deadlineTime == null
-                          ? 'Time'
-                          : _deadlineTime!.format(context),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildPrioritySelector(),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<Board>(
-                initialValue: _selectedBoard,
-                items: _boards
-                    .map(
-                      (board) => DropdownMenuItem<Board>(
-                        value: board,
-                        child: Text(
-                          board.boardTitle,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    )
-                    .toList(),
-                onChanged: _boards.isEmpty
-                    ? null
-                    : (board) async {
-                        if (board == null) return;
-                        setState(() {
-                          _selectedBoard = board;
-                          _selectedDependencyIds.clear();
-                        });
-                        if (board.boardType == 'team') {
-                          setState(() {
-                            _taskAllowsSubmissions = true;
-                          });
-                          await _loadBoardMembers();
-                          return;
-                        }
-                        setState(() {
-                          _boardMembers = {};
-                          _assignedToUserId = null;
-                          _assignedToUserName = null;
-                          _taskAllowsSubmissions = false;
-                          _taskRequiresSubmission = false;
-                          _taskRequiresApproval = false;
-                        });
-                      },
-                decoration: const InputDecoration(
-                  labelText: 'Select Board',
-                  hintText: 'Required',
-                ),
-              ),
-              if (_boards.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: Text(
-                    'No available boards found.',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ),
-              const SizedBox(height: 12),
-              // Assignment dropdown (Team boards only)
-              if (_selectedBoard?.boardType == 'team') ...[
-                if (_loadingMembers)
-                  const Center(child: CircularProgressIndicator())
-                else if (_boardMembers.isNotEmpty)
-                  DropdownButtonFormField<String?>(
-                    initialValue: _assignedToUserId,
-                    decoration: const InputDecoration(
-                      labelText: 'Assign To',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    items: [
-                      // "None" option for unassigned tasks
-                      const DropdownMenuItem<String?>(
-                        value: null,
-                        child: Text('None'),
-                      ),
-                      // All board members
-                      ..._boardMembers.entries.map((entry) {
-                        final selectedBoard = _selectedBoard;
-                        final active = _activeTasksForMember(
-                          boardTasks: boardTasks,
-                          memberId: entry.key,
-                        );
-                        final limit = selectedBoard == null
-                            ? 0
-                            : _taskLimitForMember(selectedBoard, entry.key);
-                        final atCapacity =
-                            selectedBoard != null &&
-                            entry.key != widget.userId &&
-                            _isAtCapacity(
-                              board: selectedBoard,
-                              memberId: entry.key,
-                              boardTasks: boardTasks,
-                            );
-                        final loadSuffix = limit > 0
-                            ? ' ($active/$limit active)'
-                            : ' ($active active)';
-                        return DropdownMenuItem<String?>(
-                          value: entry.key,
-                          enabled: !atCapacity,
-                          child: Text(
-                            '${_assigneeOptionLabel(entry.key, entry.value)}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) {
-                      setState(() {
-                        _assignedToUserId = val;
-                        _assignedToUserName = val != null
-                            ? _boardMembers[val]
-                            : null;
-                      });
+                    onPressed: () async {
+                      final picked = await showTimePicker(
+                        context: context,
+                        initialTime: _repeatTime ?? TimeOfDay.now(),
+                      );
+                      if (picked != null) {
+                        setState(() => _repeatTime = picked);
+                      }
                     },
-                  ),
-                const SizedBox(height: 8),
-              ],
-              const SizedBox(height: 12),
-              _buildSubmissionOptionsSection(),
-              const SizedBox(height: 12),
-              _buildDependenciesSection(context),
-              if (canRepeat) ...[
-                SwitchListTile(
-                  title: const Text('Repeating Task'),
-                  value: effectiveRepeat,
-                  onChanged: (val) => setState(() => _isRepeating = val),
-                  contentPadding: EdgeInsets.zero,
-                ),
-                if (effectiveRepeat) ...[
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Repeat on days:',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: _daysOfWeek
-                          .map(
-                            (day) => Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: FilterChip(
-                                label: Text(day.substring(0, 3)),
-                                selected: _repeatDays.contains(day),
-                                onSelected: (selected) {
-                                  setState(() {
-                                    if (selected) {
-                                      _repeatDays.add(day);
-                                      // Sort days by week order
-                                      _repeatDays.sort(
-                                        (a, b) =>
-                                            _daysOfWeek.indexOf(a) -
-                                            _daysOfWeek.indexOf(b),
-                                      );
-                                    } else {
-                                      _repeatDays.remove(day);
-                                    }
-                                  });
-                                },
-                              ),
-                            ),
-                          )
-                          .toList(),
+                    icon: const Icon(Icons.schedule),
+                    label: Text(
+                      _repeatTime == null
+                          ? 'Time'
+                          : _repeatTime!.format(context),
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: _repeatEndDate ?? DateTime.now(),
-                              firstDate: DateTime.now(),
-                              lastDate: DateTime(2100),
-                            );
-                            if (picked != null) {
-                              setState(() => _repeatEndDate = picked);
-                            }
-                          },
-                          icon: const Icon(Icons.event),
-                          label: Text(
-                            _repeatEndDate == null
-                                ? 'Set Repeat End Date'
-                                : 'Ends: ${_repeatEndDate!.toLocal().toString().split(' ')[0]}',
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        onPressed: () async {
-                          final picked = await showTimePicker(
-                            context: context,
-                            initialTime: _repeatTime ?? TimeOfDay.now(),
-                          );
-                          if (picked != null) {
-                            setState(() => _repeatTime = picked);
-                          }
-                        },
-                        icon: const Icon(Icons.schedule),
-                        label: Text(
-                          _repeatTime == null
-                              ? 'Time'
-                              : _repeatTime!.format(context),
-                        ),
-                      ),
-                    ],
-                  ),
                 ],
-              ],
+              ),
+            ],
+          ],
         ],
       ),
     );
@@ -1163,7 +1148,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                       ),
                     ),
                     IconButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.pop(context),
                       icon: const Icon(Icons.close),
                     ),
                   ],
@@ -1183,7 +1170,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                      onPressed: _isLoading ? null : () => Navigator.pop(context),
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.pop(context),
                       child: const Text('Cancel'),
                     ),
                     const SizedBox(width: 10),

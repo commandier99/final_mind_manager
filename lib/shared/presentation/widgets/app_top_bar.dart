@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../datasources/providers/navigation_provider.dart';
+import '../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onMenuPressed;
@@ -101,12 +102,36 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
     return [
       if (showNotificationButton)
-        IconButton(
-          icon: const Icon(Icons.notifications_outlined),
-          onPressed: () {
-            context.read<NavigationProvider>().selectFromSideMenu(5);
+        Consumer<InAppNotificationProvider>(
+          builder: (context, inAppProvider, _) {
+            final unreadCount = inAppProvider.unreadCount;
+            return IconButton(
+              onPressed: () {
+                context.read<NavigationProvider>().selectFromSideMenu(5);
+              },
+              tooltip: 'Notifications',
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.notifications_outlined),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: -1,
+                      top: -1,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(99),
+                          border: Border.all(color: Colors.white, width: 1.2),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
           },
-          tooltip: 'Notifications',
         )
       else
         IconButton(

@@ -14,7 +14,7 @@ class BoardRequestService {
   final ActivityEventService _activityEventService = ActivityEventService();
 
   CollectionReference get _requestsCollection =>
-      _firestore.collection('board_join_requests');
+      _firestore.collection('board_requests');
 
   // ========================
   // CREATE REQUEST

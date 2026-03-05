@@ -57,20 +57,28 @@ service cloud.firestore {
 
     // Allow authenticated users to create activity events for themselves or for others (notifications)
     match /activity_events/{eventId} {
+      function canReadBoardActivity() {
+        return request.auth != null &&
+          resource.data.boardId is string &&
+          resource.data.boardId != '' &&
+          exists(/databases/$(database)/documents/boards/$(resource.data.boardId)) &&
+          (
+            request.auth.uid ==
+              get(/databases/$(database)/documents/boards/$(resource.data.boardId)).data.boardManagerId ||
+            request.auth.uid in
+              get(/databases/$(database)/documents/boards/$(resource.data.boardId)).data.memberIds
+          );
+      }
+
       allow create: if request.auth != null;
-      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null &&
+        (resource.data.userId == request.auth.uid || canReadBoardActivity());
       allow update: if request.auth != null && resource.data.userId == request.auth.uid;
       allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
     // Allow authenticated users to read/write their own stats
     match /user_stats/{userId} {
-      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
-      allow create: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // Canonical user stats collection (current app version)
-    match /userStats/{userId} {
       allow read, write, delete: if request.auth != null && request.auth.uid == userId;
       allow create: if request.auth != null && request.auth.uid == userId;
     }
@@ -90,11 +98,11 @@ service cloud.firestore {
       function isInviteNotificationCreate() {
         return request.resource.data.category == 'invitation' &&
           request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)) &&
-          get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)).data.userId == request.resource.data.userId &&
+          exists(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)) &&
+          get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId == request.resource.data.userId &&
           (
-            request.auth.uid == get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)).data.boardManagerId ||
-            request.auth.uid == get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)).data.userId
+            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.boardManagerId ||
+            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId
           );
       }
 
@@ -197,11 +205,11 @@ service cloud.firestore {
       function isInviteNotificationCreate() {
         return request.resource.data.category == 'invitation' &&
           request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)) &&
-          get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)).data.userId == request.resource.data.userId &&
+          exists(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)) &&
+          get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId == request.resource.data.userId &&
           (
-            request.auth.uid == get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)).data.boardManagerId ||
-            request.auth.uid == get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.relatedId)).data.userId
+            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.boardManagerId ||
+            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId
           );
       }
 
@@ -308,17 +316,17 @@ service cloud.firestore {
         return request.auth != null &&
           request.resource.data.boardLastJoinRequestId is string &&
           request.resource.data.boardLastJoinRequestId != '' &&
-          exists(/databases/$(database)/documents/board_join_requests/$(request.resource.data.boardLastJoinRequestId)) &&
-          get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.boardLastJoinRequestId)).data.userId == request.auth.uid &&
-          get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardId == boardId &&
-          get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardReqStatus == 'approved' &&
-          isRecruitmentType(get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.boardLastJoinRequestId)).data) &&
+          exists(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)) &&
+          get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.userId == request.auth.uid &&
+          get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardId == boardId &&
+          get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardReqStatus == 'approved' &&
+          isRecruitmentType(get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data) &&
           !(request.auth.uid in resource.data.memberIds) &&
           request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
           request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
           request.auth.uid in request.resource.data.memberIds &&
           request.resource.data.memberRoles[request.auth.uid] ==
-            get(/databases/$(database)/documents/board_join_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardReqRequestedRole &&
+            get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardReqRequestedRole &&
           request.resource.data.memberRoles.diff(resource.data.memberRoles).affectedKeys().hasOnly([request.auth.uid]) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'memberIds',
@@ -363,20 +371,8 @@ service cloud.firestore {
       }
     }
 
-    // Board stats collection
-    match /boardStats/{statsId} {
-      allow read, delete: if request.auth != null &&
-        request.auth.uid == resource.data.boardManagerId;
-
-      allow create: if request.auth != null &&
-        request.auth.uid == request.resource.data.boardManagerId;
-
-      allow update: if request.auth != null &&
-        request.auth.uid == resource.data.boardManagerId;
-    }
-
     // Board join requests collection
-    match /board_join_requests/{requestId} {
+    match /board_requests/{requestId} {
       function isRequestTargetUser() {
         return request.auth != null &&
           request.auth.uid == resource.data.userId;
@@ -665,8 +661,8 @@ service cloud.firestore {
       allow delete: if hasTaskAccess();
     }
 
-    // Subtasks collection
-    match /subtasks/{subtaskId} {
+    // Steps collection
+    match /steps/{stepId} {
       function parentTask(taskId) {
         return get(/databases/$(database)/documents/tasks/$(taskId)).data;
       }
@@ -691,10 +687,10 @@ service cloud.firestore {
       }
 
       allow read: if request.auth != null &&
-        (resource.data.subtaskOwnerId == request.auth.uid ||
-         resource.data.subtaskAssignedTo == request.auth.uid ||
+        (resource.data.stepOwnerId == request.auth.uid ||
+         resource.data.stepAssignedTo == request.auth.uid ||
          isParentTaskAccessible(resource.data.parentTaskId)) &&
-        resource.data.subtaskIsDeleted == false;
+        resource.data.stepIsDeleted == false;
 
       allow create: if request.auth != null &&
         isParentTaskAssignee(request.resource.data.parentTaskId) &&

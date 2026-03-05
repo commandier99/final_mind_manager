@@ -59,7 +59,7 @@ class TaskProvider extends ChangeNotifier {
     }
 
     final proposedId = (task.taskProposedAssigneeId ?? '').trim();
-    if (task.taskAcceptanceStatus == 'pending' &&
+    if (task.taskAssignmentStatus == 'pending' &&
         proposedId.isNotEmpty &&
         proposedId != task.taskOwnerId) {
       return proposedId;
@@ -261,7 +261,8 @@ class TaskProvider extends ChangeNotifier {
       final shouldNotifyAssignment =
           newTask.taskBoardLane == Task.lanePublished &&
           _notificationTargetAssigneeId(newTask) != null;
-      final assigneeId = (selectedAssigneeId == null ||
+      final assigneeId =
+          (selectedAssigneeId == null ||
               selectedAssigneeId.isEmpty ||
               selectedAssigneeId == 'None')
           ? _notificationTargetAssigneeId(newTask)
@@ -343,7 +344,9 @@ class TaskProvider extends ChangeNotifier {
       // Notify assignee only when task becomes published, or reassigned while published.
       if (previousTask != null &&
           _notificationTargetAssigneeId(updatedTask) != null) {
-        final previousNotifyTarget = _notificationTargetAssigneeId(previousTask);
+        final previousNotifyTarget = _notificationTargetAssigneeId(
+          previousTask,
+        );
         final currentNotifyTarget = _notificationTargetAssigneeId(updatedTask);
         final becamePublished =
             previousTask.taskBoardLane != Task.lanePublished &&
@@ -471,6 +474,9 @@ class TaskProvider extends ChangeNotifier {
       // we determine what the old value was by inverting the current value
       final isNowDone = task.taskIsDone;
       final wasAlreadyDone = !isNowDone; // The opposite of the new value
+      final submitsForReview =
+          isNowDone && task.taskRequiresApproval && !wasAlreadyDone;
+      final effectiveNowDone = submitsForReview ? false : isNowDone;
 
       if (isNowDone) {
         final blocker = await getFirstIncompleteDependency(task);
@@ -489,7 +495,7 @@ class TaskProvider extends ChangeNotifier {
       await _taskService.toggleTaskDone(task);
 
       // If task is repeating and was marked as done, schedule the next repeat
-      if (task.taskIsRepeating && isNowDone) {
+      if (task.taskIsRepeating && effectiveNowDone) {
         // Task was just marked as done, schedule next repeat
         final nextRepeatTask = task.resetForNextRepeat();
         // Update the task with the next repeat date
@@ -497,12 +503,12 @@ class TaskProvider extends ChangeNotifier {
       }
 
       // Track activity - if task was not done and is now done, increment completed count
-      if (!wasAlreadyDone && isNowDone) {
+      if (!wasAlreadyDone && effectiveNowDone) {
         // Task just became done
         await _userDailyActivityService.incrementToday(task.taskOwnerId, {
           'tasksCompletedCount': 1,
         });
-      } else if (wasAlreadyDone && !isNowDone) {
+      } else if (wasAlreadyDone && !effectiveNowDone) {
         // Task was undone
         await _userDailyActivityService.incrementToday(task.taskOwnerId, {
           'tasksCompletedCount': -1,
@@ -511,13 +517,13 @@ class TaskProvider extends ChangeNotifier {
 
       // Update board stats
       if (task.taskBoardId.isNotEmpty) {
-        if (!wasAlreadyDone && isNowDone) {
+        if (!wasAlreadyDone && effectiveNowDone) {
           // Task was just marked as done
           await _boardStatsService.incrementStats(
             task.taskBoardId,
             tasksDone: 1,
           );
-        } else if (wasAlreadyDone && !isNowDone) {
+        } else if (wasAlreadyDone && !effectiveNowDone) {
           // Task was just unmarked as done
           await _boardStatsService.incrementStats(
             task.taskBoardId,
@@ -530,7 +536,13 @@ class TaskProvider extends ChangeNotifier {
       final taskIndex = _tasks.indexWhere((t) => t.taskId == task.taskId);
       if (taskIndex != -1) {
         // Update the task with the exact state passed in (already has correct isDone value)
-        _tasks[taskIndex] = task;
+        _tasks[taskIndex] = submitsForReview
+            ? task.copyWith(
+                taskIsDone: false,
+                taskStatus: Task.statusSubmitted,
+                taskApprovalStatus: 'pending',
+              )
+            : task;
         notifyListeners();
       }
 

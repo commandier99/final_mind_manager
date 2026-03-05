@@ -76,7 +76,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final last7 = recent.length <= 7 ? recent : recent.sublist(recent.length - 7);
 
     int scoreFor(dynamic day) =>
-        day.tasksCompletedCount + day.subtasksCompletedCount + day.subtasksCreatedCount;
+        day.tasksCompletedCount + day.stepsCompletedCount + day.stepsCreatedCount;
 
     final todayScore = recent.isEmpty ? 0 : scoreFor(recent.last);
     final weeklyTotal = last7.fold<int>(0, (sum, day) => sum + scoreFor(day));
@@ -191,3 +191,4 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 }
+

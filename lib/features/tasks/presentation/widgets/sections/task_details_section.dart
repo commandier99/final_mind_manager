@@ -206,20 +206,23 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                       icon: Icons.person_outline,
                       label: currentTask.taskAssignedToName,
                     ),
-                    if (currentTask.taskAcceptanceStatus != null)
+                    if (currentTask.taskAssignmentStatus != null)
                       _buildInfoChip(
                         icon: Icons.how_to_reg_outlined,
                         label:
-                            'Acceptance ${_getAcceptanceStatusLabel(currentTask.taskAcceptanceStatus)}',
-                        textColor: _getAcceptanceStatusColor(
-                          currentTask.taskAcceptanceStatus,
+                            'Assignment ${_getAssignmentStatusLabel(currentTask.taskAssignmentStatus)}',
+                        textColor: _getAssignmentStatusColor(
+                          currentTask.taskAssignmentStatus,
                         ),
                       ),
                     if (currentTask.taskRequiresApproval)
                       _buildInfoChip(
                         icon: Icons.verified_outlined,
-                        label: 'Requires approval',
-                        textColor: Colors.amber.shade800,
+                        label:
+                            'Approval ${_getApprovalStatusLabel(currentTask.taskApprovalStatus)}',
+                        textColor: _getApprovalStatusColor(
+                          currentTask.taskApprovalStatus,
+                        ),
                       ),
                   ],
                 ),
@@ -261,7 +264,7 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                   ],
                 ),
               ],
-              if ((currentTask.taskStats.taskSubtasksCount ?? 0) > 0) ...[
+              if ((currentTask.taskStats.taskStepsCount ?? 0) > 0) ...[
                 const SizedBox(height: 14),
                 Divider(color: Colors.grey.shade300, height: 1),
                 const SizedBox(height: 12),
@@ -367,6 +370,8 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
         return Colors.blue.shade700;
       case 'paused':
         return Colors.orange.shade700;
+      case 'submitted':
+        return Colors.purple.shade700;
       case 'to do':
       default:
         return Colors.blueGrey.shade700;
@@ -381,6 +386,8 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
         return Icons.play_circle_outline;
       case 'paused':
         return Icons.pause_circle_outline;
+      case 'submitted':
+        return Icons.upload_file_outlined;
       case 'to do':
       default:
         return Icons.radio_button_unchecked;
@@ -392,7 +399,7 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  String _getAcceptanceStatusLabel(String? status) {
+  String _getAssignmentStatusLabel(String? status) {
     switch (status) {
       case 'pending':
         return 'Pending';
@@ -405,7 +412,7 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     }
   }
 
-  Color _getAcceptanceStatusColor(String? status) {
+  Color _getAssignmentStatusColor(String? status) {
     switch (status) {
       case 'pending':
         return Colors.orange;
@@ -418,9 +425,39 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     }
   }
 
+  String _getApprovalStatusLabel(String status) {
+    switch (status) {
+      case 'pending':
+        return 'Pending';
+      case 'approved':
+        return 'Approved';
+      case 'rejected':
+        return 'Rejected';
+      case 'changes_requested':
+        return 'Changes Requested';
+      default:
+        return 'None';
+    }
+  }
+
+  Color _getApprovalStatusColor(String status) {
+    switch (status) {
+      case 'pending':
+        return Colors.orange;
+      case 'approved':
+        return Colors.green;
+      case 'rejected':
+        return Colors.red;
+      case 'changes_requested':
+        return Colors.deepOrange;
+      default:
+        return Colors.blueGrey;
+    }
+  }
+
   double _getProgress(Task task) {
-    final done = task.taskStats.taskSubtasksDoneCount ?? 0;
-    final total = task.taskStats.taskSubtasksCount ?? 0;
+    final done = task.taskStats.taskStepsDoneCount ?? 0;
+    final total = task.taskStats.taskStepsCount ?? 0;
 
     if (task.taskIsDone) return 1.0;
     if (total == 0) return 0.0;
@@ -429,8 +466,8 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
   }
 
   String _getProgressText(Task task) {
-    final done = task.taskStats.taskSubtasksDoneCount ?? 0;
-    final total = task.taskStats.taskSubtasksCount ?? 0;
+    final done = task.taskStats.taskStepsDoneCount ?? 0;
+    final total = task.taskStats.taskStepsCount ?? 0;
     final percent = (_getProgress(task) * 100).round();
 
     if (task.taskIsDone) {
@@ -438,10 +475,10 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     }
 
     if (total == 0) {
-      return 'No subtasks - 0% complete';
+      return 'No steps - 0% complete';
     }
 
-    return '$done of $total subtasks completed ($percent%)';
+    return '$done of $total steps completed ($percent%)';
   }
 
   String _formatRepeatDays(String? repeatInterval) {
@@ -450,3 +487,4 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     return days.map((day) => day.substring(0, 3)).join(', ');
   }
 }
+

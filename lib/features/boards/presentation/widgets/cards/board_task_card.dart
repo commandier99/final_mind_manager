@@ -312,7 +312,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                   children: [
                     const Text(
                       'Poke Assignee',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -471,6 +474,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       case 'PAUSED':
       case 'ON_PAUSE':
         return Colors.orange;
+      case 'SUBMITTED':
+        return Colors.purple;
       case 'COMPLETED':
       case 'DONE':
         return Colors.green;
@@ -497,6 +502,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       case 'PAUSED':
       case 'ON_PAUSE':
         return 'Paused';
+      case 'SUBMITTED':
+        return 'Submitted';
       case 'COMPLETED':
       case 'DONE':
         return 'Completed';
@@ -519,6 +526,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       case 'PAUSED':
       case 'ON_PAUSE':
         return Icons.pause_circle;
+      case 'SUBMITTED':
+        return Icons.upload_file;
       case 'COMPLETED':
       case 'DONE':
         return Icons.check_circle;
@@ -548,6 +557,9 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         !widget.showPublishButton;
     final canPoke = _canPokeMember() && !isDependencyLocked;
     final isSupervisorDraft = _isSupervisorDraft();
+    final missingRequiredSubmission =
+        widget.task.taskRequiresSubmission &&
+        (widget.task.taskSubmissionId ?? '').trim().isEmpty;
 
     // Only allow delete for board manager or task owner
     final canDelete =
@@ -865,12 +877,20 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                             Row(
                               children: [
                                 if (widget.showCheckbox) ...[
-                                  Checkbox(
-                                    value: widget.task.taskIsDone,
-                                    onChanged: isLocked
-                                        ? null
-                                        : (value) =>
-                                              widget.onToggleDone?.call(value),
+                                  Tooltip(
+                                    message: missingRequiredSubmission
+                                        ? 'Upload is required before completing this task.'
+                                        : '',
+                                    child: Checkbox(
+                                      value: widget.task.taskIsDone,
+                                      onChanged:
+                                          isLocked ||
+                                              (missingRequiredSubmission &&
+                                                  !widget.task.taskIsDone)
+                                          ? null
+                                          : (value) => widget.onToggleDone
+                                                ?.call(value),
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                 ],
@@ -1048,10 +1068,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                       ),
                                     ),
                                   )
-                                else if (_hasSubtasks())
+                                else if (_hasSteps())
                                   const SizedBox(width: 8),
                                 // Circular progress indicator
-                                if (_hasSubtasks())
+                                if (_hasSteps())
                                   SizedBox(
                                     width: 40,
                                     height: 40,
@@ -1120,17 +1140,17 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
   }
 
   double _getProgress() {
-    final done = widget.task.taskStats.taskSubtasksDoneCount ?? 0;
-    final total = widget.task.taskStats.taskSubtasksCount ?? 0;
+    final done = widget.task.taskStats.taskStepsDoneCount ?? 0;
+    final total = widget.task.taskStats.taskStepsCount ?? 0;
     return total > 0 ? done / total : 0.0;
   }
 
-  bool _hasSubtasks() {
-    return (widget.task.taskStats.taskSubtasksCount ?? 0) > 0;
+  bool _hasSteps() {
+    return (widget.task.taskStats.taskStepsCount ?? 0) > 0;
   }
 
   String _getProgressPercent() {
-    final total = widget.task.taskStats.taskSubtasksCount ?? 0;
+    final total = widget.task.taskStats.taskStepsCount ?? 0;
     if (total == 0) return "0%";
     final percent = ((_getProgress()) * 100).round();
     return "$percent%";
@@ -1203,3 +1223,4 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     }
   }
 }
+

@@ -1,16 +1,16 @@
 class TaskStats {
-  final int? taskSubtasksCount; // Total number of subtasks
-  final int? taskSubtasksDoneCount; // Number of subtasks completed
-  final int? taskSubtasksDeletedCount; // Number of deleted subtasks
+  final int? taskStepsCount; // Total number of steps
+  final int? taskStepsDoneCount; // Number of steps completed
+  final int? taskStepsDeletedCount; // Number of deleted steps
   final int? taskEditsCount; // Number of times the task has been edited
   final int? deadlinesMissedCount; // Total times deadline was missed
   final int? deadlinesExtendedCount; // Total times deadline was extended
   final int? tasksFailedCount; // Total times task was marked as failed
 
   TaskStats({
-    this.taskSubtasksCount,
-    this.taskSubtasksDoneCount,
-    this.taskSubtasksDeletedCount,
+    this.taskStepsCount,
+    this.taskStepsDoneCount,
+    this.taskStepsDeletedCount,
     this.taskEditsCount,
     this.deadlinesMissedCount,
     this.deadlinesExtendedCount,
@@ -20,9 +20,9 @@ class TaskStats {
   // Factory method to create TaskStats from Firestore data
   factory TaskStats.fromMap(Map<String, dynamic> data) {
     return TaskStats(
-      taskSubtasksCount: data['taskSubtasksCount'] as int?,
-      taskSubtasksDoneCount: data['taskSubtasksDoneCount'] as int?,
-      taskSubtasksDeletedCount: data['taskSubtasksDeletedCount'] as int?,
+      taskStepsCount: data['taskStepsCount'] as int?,
+      taskStepsDoneCount: data['taskStepsDoneCount'] as int?,
+      taskStepsDeletedCount: data['taskStepsDeletedCount'] as int?,
       taskEditsCount: data['taskEditsCount'] as int?,
       deadlinesMissedCount: data['deadlinesMissedCount'] as int?,
       deadlinesExtendedCount: data['deadlinesExtendedCount'] as int?,
@@ -33,9 +33,9 @@ class TaskStats {
   // Convert TaskStats object to Firestore-compatible map
   Map<String, dynamic> toMap() {
     return {
-      'taskSubtasksCount': taskSubtasksCount,
-      'taskSubtasksDoneCount': taskSubtasksDoneCount,
-      'taskSubtasksDeletedCount': taskSubtasksDeletedCount,
+      'taskStepsCount': taskStepsCount,
+      'taskStepsDoneCount': taskStepsDoneCount,
+      'taskStepsDeletedCount': taskStepsDeletedCount,
       'taskEditsCount': taskEditsCount,
       'deadlinesMissedCount': deadlinesMissedCount,
       'deadlinesExtendedCount': deadlinesExtendedCount,
@@ -45,20 +45,20 @@ class TaskStats {
 
   // Helper method to create a copy of TaskStats with updated values
   TaskStats copyWith({
-    int? taskSubtasksCount,
-    int? taskSubtasksDoneCount,
-    int? taskSubtasksDeletedCount,
+    int? taskStepsCount,
+    int? taskStepsDoneCount,
+    int? taskStepsDeletedCount,
     int? taskEditsCount,
     int? deadlinesMissedCount,
     int? deadlinesExtendedCount,
     int? tasksFailedCount,
   }) {
     return TaskStats(
-      taskSubtasksCount: taskSubtasksCount ?? this.taskSubtasksCount,
-      taskSubtasksDoneCount:
-          taskSubtasksDoneCount ?? this.taskSubtasksDoneCount,
-      taskSubtasksDeletedCount:
-          taskSubtasksDeletedCount ?? this.taskSubtasksDeletedCount,
+      taskStepsCount: taskStepsCount ?? this.taskStepsCount,
+      taskStepsDoneCount:
+          taskStepsDoneCount ?? this.taskStepsDoneCount,
+      taskStepsDeletedCount:
+          taskStepsDeletedCount ?? this.taskStepsDeletedCount,
       taskEditsCount: taskEditsCount ?? this.taskEditsCount,
       deadlinesMissedCount: deadlinesMissedCount ?? this.deadlinesMissedCount,
       deadlinesExtendedCount:
@@ -69,8 +69,9 @@ class TaskStats {
 
   // Helper method to check if stats are initialized
   bool get isInitialized =>
-      taskSubtasksCount != null ||
-      taskSubtasksDoneCount != null ||
-      taskSubtasksDeletedCount != null ||
+      taskStepsCount != null ||
+      taskStepsDoneCount != null ||
+      taskStepsDeletedCount != null ||
       taskEditsCount != null;
 }
+

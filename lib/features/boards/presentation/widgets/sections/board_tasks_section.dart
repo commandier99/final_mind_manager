@@ -49,10 +49,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     return status.trim().toLowerCase() == 'pending';
   }
 
-  void _showSnackBarSafe(
-    ScaffoldMessengerState? messenger,
-    SnackBar snackBar,
-  ) {
+  void _showSnackBarSafe(ScaffoldMessengerState? messenger, SnackBar snackBar) {
     if (!mounted) return;
     if (messenger == null || !messenger.mounted) return;
     messenger.showSnackBar(snackBar);
@@ -503,7 +500,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         taskStats: TaskStats(),
         taskStatus: 'To Do',
         taskRequiresApproval: false,
-        taskAcceptanceStatus: null,
+        taskAssignmentStatus: null,
         taskBoardLane: laneDrafts,
       );
 
@@ -548,7 +545,9 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       _showSnackBarSafe(
         ScaffoldMessenger.maybeOf(context),
         const SnackBar(
-          content: Text('Only the board manager or suggestion author can delete this suggestion.'),
+          content: Text(
+            'Only the board manager or suggestion author can delete this suggestion.',
+          ),
           backgroundColor: Colors.red,
         ),
       );

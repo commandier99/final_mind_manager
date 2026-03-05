@@ -91,6 +91,17 @@ Widget buildAllNotificationsSection(
         return dateB.compareTo(dateA);
       });
 
+      final groupedItems = <dynamic>[];
+      String? lastDayLabel;
+      for (final item in displayList) {
+        final currentDayLabel = _relativeDayLabel(getNotificationDate(item));
+        if (currentDayLabel != lastDayLabel) {
+          groupedItems.add(_NotificationDayHeader(currentDayLabel));
+          lastDayLabel = currentDayLabel;
+        }
+        groupedItems.add(item);
+      }
+
       if (displayList.isEmpty) {
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -105,9 +116,23 @@ Widget buildAllNotificationsSection(
 
       return ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: displayList.length,
+        itemCount: groupedItems.length,
         itemBuilder: (context, index) {
-          final item = displayList[index];
+          final item = groupedItems[index];
+
+          if (item is _NotificationDayHeader) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(4, 8, 4, 10),
+              child: Text(
+                item.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey[700],
+                ),
+              ),
+            );
+          }
 
           if (item is BoardRequest) {
             return NotificationCard(notification: item);
@@ -123,4 +148,20 @@ Widget buildAllNotificationsSection(
       );
     },
   );
+}
+
+String _relativeDayLabel(DateTime date) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final target = DateTime(date.year, date.month, date.day);
+  final diff = today.difference(target).inDays;
+
+  if (diff <= 0) return 'Today';
+  if (diff == 1) return 'Yesterday';
+  return '$diff Days Ago';
+}
+
+class _NotificationDayHeader {
+  final String label;
+  const _NotificationDayHeader(this.label);
 }

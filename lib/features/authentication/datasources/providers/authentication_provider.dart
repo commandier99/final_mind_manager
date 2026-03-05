@@ -219,7 +219,7 @@ class AuthenticationProvider extends ChangeNotifier {
             );
             await _userService.saveUser(newUser);
             print(
-              '✅ [AuthenticationProvider] New user document and userStats created',
+              '✅ [AuthenticationProvider] New user document and user_stats created',
             );
           } else {
             // Update only specific fields for EXISTING users to preserve their data

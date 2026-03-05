@@ -74,9 +74,9 @@ class BoardStatsProvider extends ChangeNotifier {
     int? boardTasksCount,
     int? boardTasksDoneCount,
     int? boardTasksDeletedCount,
-    int? boardSubtasksCount,
-    int? boardSubtasksDoneCount,
-    int? boardSubtasksDeletedCount,
+    int? boardStepsCount,
+    int? boardStepsDoneCount,
+    int? boardStepsDeletedCount,
     int? boardMessageCount,
   }) async {
     _setLoading(true);
@@ -88,9 +88,9 @@ class BoardStatsProvider extends ChangeNotifier {
         boardTasksCount: boardTasksCount,
         boardTasksDoneCount: boardTasksDoneCount,
         boardTasksDeletedCount: boardTasksDeletedCount,
-        boardSubtasksCount: boardSubtasksCount,
-        boardSubtasksDoneCount: boardSubtasksDoneCount,
-        boardSubtasksDeletedCount: boardSubtasksDeletedCount,
+        boardStepsCount: boardStepsCount,
+        boardStepsDoneCount: boardStepsDoneCount,
+        boardStepsDeletedCount: boardStepsDeletedCount,
         boardMessageCount: boardMessageCount,
       );
 
@@ -108,9 +108,9 @@ class BoardStatsProvider extends ChangeNotifier {
     int tasksAdded = 0,
     int tasksDone = 0,
     int tasksDeleted = 0,
-    int subtasksAdded = 0,
-    int subtasksDone = 0,
-    int subtasksDeleted = 0,
+    int stepsAdded = 0,
+    int stepsDone = 0,
+    int stepsDeleted = 0,
     int messagesSent = 0,
   }) async {
     _setLoading(true);
@@ -121,9 +121,9 @@ class BoardStatsProvider extends ChangeNotifier {
         tasksAdded: tasksAdded,
         tasksDone: tasksDone,
         tasksDeleted: tasksDeleted,
-        subtasksAdded: subtasksAdded,
-        subtasksDone: subtasksDone,
-        subtasksDeleted: subtasksDeleted,
+        stepsAdded: stepsAdded,
+        stepsDone: stepsDone,
+        stepsDeleted: stepsDeleted,
         messagesSent: messagesSent,
       );
     } finally {
@@ -152,3 +152,4 @@ class BoardStatsProvider extends ChangeNotifier {
     return _stats[boardId];
   }
 }
+

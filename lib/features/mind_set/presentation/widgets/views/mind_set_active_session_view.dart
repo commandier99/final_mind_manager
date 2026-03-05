@@ -13,8 +13,8 @@ import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/presentation/widgets/cards/focused_task_card.dart';
-import '../../../../tasks/presentation/widgets/sections/task_subtasks_list.dart';
-import '../../../../subtasks/datasources/providers/subtask_provider.dart';
+import '../../../../tasks/presentation/widgets/sections/task_steps_list.dart';
+import '../../../../steps/datasources/providers/step_provider.dart';
 
 class MindSetActiveSessionView extends StatefulWidget {
   final MindSetSession session;
@@ -47,7 +47,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   int _modeDropdownEpoch = 0;
   bool _followThroughAutoSummaryPrompted = false;
   String? _followThroughAutoSummarySessionId;
-  final SubtaskProvider _focusedTaskSubtaskProvider = SubtaskProvider();
+  final StepProvider _focusedTaskStepProvider = StepProvider();
   final Map<String, DateTime> _focusedTaskStartedAtById = <String, DateTime>{};
 
   @override
@@ -60,14 +60,24 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     _sheetAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _sheetController, curve: Curves.easeInOut),
     );
-    _elapsedTimeNotifier = ValueNotifier<Duration>(Duration.zero);
+    _elapsedTimeNotifier = ValueNotifier<Duration>(_sessionElapsedNow(widget.session));
+  }
+
+  @override
+  void didUpdateWidget(covariant MindSetActiveSessionView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.session.sessionId != widget.session.sessionId ||
+        oldWidget.session.sessionStartedAt != widget.session.sessionStartedAt ||
+        oldWidget.session.sessionCreatedAt != widget.session.sessionCreatedAt) {
+      _elapsedTimeNotifier.value = _sessionElapsedNow(widget.session);
+    }
   }
 
   @override
   void dispose() {
     _sheetController.dispose();
     _elapsedTimeNotifier.dispose();
-    _focusedTaskSubtaskProvider.dispose();
+    _focusedTaskStepProvider.dispose();
     super.dispose();
   }
 
@@ -199,9 +209,9 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                         isDone ?? false,
                       )
                     : null,
-                subtasksContent: ChangeNotifierProvider<SubtaskProvider>.value(
-                  value: _focusedTaskSubtaskProvider,
-                  child: TaskSubtasksList(
+                stepsContent: ChangeNotifierProvider<StepProvider>.value(
+                  value: _focusedTaskStepProvider,
+                  child: TaskStepsList(
                     parentTaskId: activeTask.taskId,
                     boardId: activeTask.taskBoardId,
                     task: activeTask,
@@ -397,6 +407,15 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
         sessionModeHistory: updatedHistory,
       ),
     );
+
+    final newModePolicy = MindSetModePolicy.fromMode(newMode);
+    widget.onTimerToggle(!newModePolicy.hidesSessionTimer);
+  }
+
+  Duration _sessionElapsedNow(MindSetSession session) {
+    final base = session.sessionStartedAt ?? session.sessionCreatedAt;
+    final elapsed = DateTime.now().difference(base);
+    return elapsed.isNegative ? Duration.zero : elapsed;
   }
 
   Future<void> _endSession(
@@ -541,7 +560,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   Future<void> _pauseTask(TaskProvider taskProvider, Task focusedTask) async {
     final updatedTask = focusedTask.copyWith(taskStatus: 'Paused');
     await taskProvider.updateTask(updatedTask);
-    await _maybeCreateSessionCheckpointSubtask(
+    await _maybeCreateSessionCheckpointStep(
       focusedTask,
       reason: 'Worked in session but paused before completion.',
       elapsedDuration: _consumeElapsedForTask(focusedTask.taskId),
@@ -644,28 +663,28 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     await _showPomodoroFocusDecision(session);
   }
 
-  Future<void> _maybeCreateSessionCheckpointSubtask(
+  Future<void> _maybeCreateSessionCheckpointStep(
     Task task, {
     required String reason,
     required Duration elapsedDuration,
   }) async {
     if (task.taskIsDone) return;
 
-    final latestActiveSubtask = await _focusedTaskSubtaskProvider
-        .getLatestActiveSubtaskForTask(task.taskId);
-    if (latestActiveSubtask != null) {
-      await _focusedTaskSubtaskProvider.toggleSubtaskDoneStatus(
-        latestActiveSubtask,
+    final latestActiveStep = await _focusedTaskStepProvider
+        .getLatestActiveStepForTask(task.taskId);
+    if (latestActiveStep != null) {
+      await _focusedTaskStepProvider.toggleStepDoneStatus(
+        latestActiveStep,
       );
       return;
     }
 
     final elapsedLabel = _formatElapsedDuration(elapsedDuration);
-    await _focusedTaskSubtaskProvider.addSubtask(
-      subtaskTaskId: task.taskId,
-      subtaskBoardId: task.taskBoardId,
-      subtaskTitle: 'Session checkpoint ($elapsedLabel)',
-      subtaskDescription: '$reason Elapsed focus time: $elapsedLabel.',
+    await _focusedTaskStepProvider.addStep(
+      stepTaskId: task.taskId,
+      stepBoardId: task.taskBoardId,
+      stepTitle: 'Session checkpoint ($elapsedLabel)',
+      stepDescription: '$reason Elapsed focus time: $elapsedLabel.',
       initialDone: true,
     );
   }
@@ -862,3 +881,4 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     await _runtimeService.startBreakNow(session);
   }
 }
+

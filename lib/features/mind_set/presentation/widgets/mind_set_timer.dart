@@ -27,15 +27,18 @@ class MindSetTimer extends StatefulWidget {
   State<MindSetTimer> createState() => _MindSetTimerState();
 }
 
-class _MindSetTimerState extends State<MindSetTimer> {
+class _MindSetTimerState extends State<MindSetTimer>
+    with WidgetsBindingObserver {
   Timer? _timer;
   Duration _elapsed = Duration.zero;
   bool _isRunning = false;
   int _lastPersistSecond = 0;
+  DateTime? _runningAnchor;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _elapsed = widget.initialElapsed;
     _lastPersistSecond = _elapsed.inSeconds;
     if (widget.isEnabled && widget.autoStart) {
@@ -46,6 +49,22 @@ class _MindSetTimerState extends State<MindSetTimer> {
   @override
   void didUpdateWidget(covariant MindSetTimer oldWidget) {
     super.didUpdateWidget(oldWidget);
+
+    final oldInitial = oldWidget.initialElapsed.inSeconds;
+    final nextInitial = widget.initialElapsed.inSeconds;
+    final elapsedSeconds = _elapsed.inSeconds;
+
+    if (!_isRunning && nextInitial != oldInitial && nextInitial != elapsedSeconds) {
+      setState(() {
+        _elapsed = widget.initialElapsed;
+        _lastPersistSecond = _elapsed.inSeconds;
+      });
+    } else if (_isRunning && nextInitial > elapsedSeconds + 1) {
+      _elapsed = widget.initialElapsed;
+      _runningAnchor = DateTime.now().subtract(_elapsed);
+      _lastPersistSecond = _elapsed.inSeconds;
+    }
+
     if (!widget.isEnabled && _isRunning) {
       _stopTimer();
       return;
@@ -56,7 +75,17 @@ class _MindSetTimerState extends State<MindSetTimer> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!_isRunning) return;
+    if (state == AppLifecycleState.resumed) {
+      _refreshElapsedFromAnchor();
+      _persistElapsed();
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
   }
@@ -73,10 +102,9 @@ class _MindSetTimerState extends State<MindSetTimer> {
 
   void _startTimer() {
     _timer?.cancel();
+    _runningAnchor = DateTime.now().subtract(_elapsed);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      setState(() {
-        _elapsed += const Duration(seconds: 1);
-      });
+      _refreshElapsedFromAnchor();
       _maybePersist();
     });
 
@@ -91,12 +119,31 @@ class _MindSetTimerState extends State<MindSetTimer> {
 
   void _stopTimer() {
     _timer?.cancel();
+    _runningAnchor = null;
     if (mounted) {
       setState(() {
         _isRunning = false;
       });
     } else {
       _isRunning = false;
+    }
+  }
+
+  void _refreshElapsedFromAnchor() {
+    final anchor = _runningAnchor;
+    if (anchor == null) return;
+    final nextElapsed = DateTime.now().difference(anchor);
+    final safeElapsed = nextElapsed.isNegative ? Duration.zero : nextElapsed;
+
+    if (!mounted) {
+      _elapsed = safeElapsed;
+      return;
+    }
+
+    if (safeElapsed.inSeconds != _elapsed.inSeconds) {
+      setState(() {
+        _elapsed = safeElapsed;
+      });
     }
   }
 

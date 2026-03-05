@@ -40,41 +40,74 @@ class BoardService {
     }
   }
 
-  Future<Board?> _findPersonalBoardForUser(String userId) async {
-    final personalByTypeSnapshot = await _boardCollection
+  Future<List<Board>> _findAllPersonalBoardsForUser(String userId) async {
+    final byTypeSnapshot = await _boardCollection
         .where('boardManagerId', isEqualTo: userId)
         .where('boardIsDeleted', isEqualTo: false)
         .where('boardType', isEqualTo: 'personal')
-        .limit(1)
         .get();
 
-    if (personalByTypeSnapshot.docs.isNotEmpty) {
-      final doc = personalByTypeSnapshot.docs.first;
-      return Board.fromMap(doc.data() as Map<String, dynamic>, doc.id);
-    }
-
-    // Legacy fallback for older records that may not have boardType set.
-    final legacyPersonalSnapshot = await _boardCollection
+    final byTitleSnapshot = await _boardCollection
         .where('boardManagerId', isEqualTo: userId)
         .where('boardIsDeleted', isEqualTo: false)
         .where('boardTitle', isEqualTo: 'Personal')
-        .limit(1)
         .get();
 
-    if (legacyPersonalSnapshot.docs.isNotEmpty) {
-      final doc = legacyPersonalSnapshot.docs.first;
-      return Board.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+    final unique = <String, Board>{};
+    for (final doc in [...byTypeSnapshot.docs, ...byTitleSnapshot.docs]) {
+      unique[doc.id] = Board.fromMap(doc.data() as Map<String, dynamic>, doc.id);
     }
 
-    return null;
+    final boards = unique.values.toList()
+      ..sort((a, b) => a.boardCreatedAt.compareTo(b.boardCreatedAt));
+    return boards;
+  }
+
+  Future<void> _archiveDuplicatePersonalBoards({
+    required String keepBoardId,
+    required List<Board> personalBoards,
+    required String userId,
+  }) async {
+    final duplicateIds = personalBoards
+        .where((b) => b.boardId != keepBoardId)
+        .map((b) => b.boardId)
+        .toList();
+    if (duplicateIds.isEmpty) return;
+
+    final batch = FirebaseFirestore.instance.batch();
+    final now = DateTime.now();
+    for (final boardId in duplicateIds) {
+      batch.update(_boardCollection.doc(boardId), {
+        'boardIsDeleted': true,
+        'boardDeletedAt': Timestamp.fromDate(now),
+        'boardLastModifiedAt': Timestamp.fromDate(now),
+        'boardLastModifiedBy': userId,
+      });
+    }
+    await batch.commit();
+    debugPrint(
+      '[BoardService] Archived duplicate Personal boards for $userId: $duplicateIds (kept $keepBoardId)',
+    );
   }
 
   Future<Board> ensurePersonalBoardForCurrentUser() async {
     final user = _auth.currentUser;
     if (user == null) throw Exception("User not signed in");
 
-    final existing = await _findPersonalBoardForUser(user.uid);
-    if (existing != null) return existing;
+    final allExisting = await _findAllPersonalBoardsForUser(user.uid);
+    if (allExisting.isNotEmpty) {
+      final canonicalId = _personalBoardDocId(user.uid);
+      final canonical = allExisting.firstWhere(
+        (b) => b.boardId == canonicalId,
+        orElse: () => allExisting.first,
+      );
+      await _archiveDuplicatePersonalBoards(
+        keepBoardId: canonical.boardId,
+        personalBoards: allExisting,
+        userId: user.uid,
+      );
+      return canonical;
+    }
     final now = DateTime.now();
     final personalRef = _boardCollection.doc(_personalBoardDocId(user.uid));
 
@@ -107,8 +140,19 @@ class BoardService {
     // Deterministic ID prevents duplicate Personal boards during concurrent calls.
     await personalRef.set(personalBoard.toMap(), SetOptions(merge: true));
 
-    final created = await _findPersonalBoardForUser(user.uid);
-    if (created != null) return created;
+    final createdAll = await _findAllPersonalBoardsForUser(user.uid);
+    if (createdAll.isNotEmpty) {
+      final canonical = createdAll.firstWhere(
+        (b) => b.boardId == personalRef.id,
+        orElse: () => createdAll.first,
+      );
+      await _archiveDuplicatePersonalBoards(
+        keepBoardId: canonical.boardId,
+        personalBoards: createdAll,
+        userId: user.uid,
+      );
+      return canonical;
+    }
     throw Exception('Failed to provision Personal board for user ${user.uid}');
   }
 

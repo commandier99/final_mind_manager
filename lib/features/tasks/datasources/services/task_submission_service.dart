@@ -137,10 +137,6 @@ class TaskSubmissionService {
 
       print('📤 [Upload] Submission saved to Firestore');
 
-      // Link latest submission to task without mutating execution state.
-      final taskRef = _firestore.collection('tasks').doc(taskId);
-      await taskRef.update({'taskSubmissionId': submissionId});
-
       // Load task metadata once for activity logging + reviewer notifications.
       String? boardId;
       Map<String, dynamic>? taskData;
@@ -151,6 +147,14 @@ class TaskSubmissionService {
       } catch (_) {
         // Non-critical: keep submission creation successful.
       }
+
+      // Link latest submission to task without mutating execution state.
+      final taskRef = _firestore.collection('tasks').doc(taskId);
+      await taskRef.update({
+        'taskSubmissionId': submissionId,
+        if ((taskData?['taskRequiresApproval'] as bool? ?? false) == true)
+          'taskApprovalStatus': 'pending',
+      });
 
       // Log activity if task is part of a board
       try {
@@ -486,6 +490,15 @@ class TaskSubmissionService {
         if (revisionTaskId != null) 'revisionTaskId': revisionTaskId,
         'reviewedAt': Timestamp.fromDate(DateTime.now()),
         'reviewedBy': currentUser.uid,
+      });
+
+      await _firestore.collection('tasks').doc(submission.taskId).update({
+        'taskApprovalStatus': switch (normalizedStatus) {
+          TaskSubmission.statusApproved => 'approved',
+          TaskSubmission.statusRejected => 'rejected',
+          TaskSubmission.statusRevisionRequested => 'changes_requested',
+          _ => 'pending',
+        },
       });
 
       try {

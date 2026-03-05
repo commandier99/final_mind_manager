@@ -52,21 +52,21 @@ class TaskStatsService {
     }
   }
 
-  /// Increment subtask counts (completed or deleted)
-  Future<void> incrementSubtaskCount(String taskId, {int completed = 0, int deleted = 0}) async {
+  /// Increment step counts (completed or deleted)
+  Future<void> incrementStepCount(String taskId, {int completed = 0, int deleted = 0}) async {
     try {
       final taskStats = await getTaskStatsById(taskId);
       if (taskStats != null) {
         final updatedStats = taskStats.copyWith(
-          taskSubtasksCount: (taskStats.taskSubtasksCount ?? 0) + 1,
-          taskSubtasksDoneCount: (taskStats.taskSubtasksDoneCount ?? 0) + completed,
-          taskSubtasksDeletedCount: (taskStats.taskSubtasksDeletedCount ?? 0) + deleted,
+          taskStepsCount: (taskStats.taskStepsCount ?? 0) + 1,
+          taskStepsDoneCount: (taskStats.taskStepsDoneCount ?? 0) + completed,
+          taskStepsDeletedCount: (taskStats.taskStepsDeletedCount ?? 0) + deleted,
         );
         await updateTaskStats(taskId, updatedStats);
-        print('✅ Task stats for $taskId subtask count incremented');
+        print('✅ Task stats for $taskId step count incremented');
       }
     } catch (e) {
-      print('⚠️ Error incrementing subtask count for $taskId: $e');
+      print('⚠️ Error incrementing step count for $taskId: $e');
     }
   }
 
@@ -130,3 +130,4 @@ class TaskStatsService {
   }
 }
   
+

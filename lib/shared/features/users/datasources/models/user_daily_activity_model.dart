@@ -9,10 +9,10 @@ class UserDailyActivityModel {
   final int tasksCompletedCount;
   final int tasksDeletedCount;
 
-  // Subtasks
-  final int subtasksCreatedCount;
-  final int subtasksCompletedCount;
-  final int subtasksDeletedCount;
+  // Steps
+  final int stepsCreatedCount;
+  final int stepsCompletedCount;
+  final int stepsDeletedCount;
 
   // Time / focus
   final int focusMinutes;
@@ -28,12 +28,13 @@ class UserDailyActivityModel {
     this.tasksCreatedCount = 0,
     this.tasksCompletedCount = 0,
     this.tasksDeletedCount = 0,
-    this.subtasksCreatedCount = 0,
-    this.subtasksCompletedCount = 0,
-    this.subtasksDeletedCount = 0,
+    this.stepsCreatedCount = 0,
+    this.stepsCompletedCount = 0,
+    this.stepsDeletedCount = 0,
     this.focusMinutes = 0,
     this.focusSessionsCount = 0,
     this.firstActivityAt,
     this.lastActivityAt,
   });
 }
+

@@ -51,9 +51,9 @@ class BoardStatsService {
     int tasksAdded = 0,
     int tasksDone = 0,
     int tasksDeleted = 0,
-    int subtasksAdded = 0,
-    int subtasksDone = 0,
-    int subtasksDeleted = 0,
+    int stepsAdded = 0,
+    int stepsDone = 0,
+    int stepsDeleted = 0,
     int messagesSent = 0,
   }) async {
     debugPrint(
@@ -67,9 +67,9 @@ class BoardStatsService {
       'stats.boardTasksCount': FieldValue.increment(tasksAdded),
       'stats.boardTasksDoneCount': FieldValue.increment(tasksDone),
       'stats.boardTasksDeletedCount': FieldValue.increment(tasksDeleted),
-      'stats.boardSubtasksCount': FieldValue.increment(subtasksAdded),
-      'stats.boardSubtasksDoneCount': FieldValue.increment(subtasksDone),
-      'stats.boardSubtasksDeletedCount': FieldValue.increment(subtasksDeleted),
+      'stats.boardStepsCount': FieldValue.increment(stepsAdded),
+      'stats.boardStepsDoneCount': FieldValue.increment(stepsDone),
+      'stats.boardStepsDeletedCount': FieldValue.increment(stepsDeleted),
       'stats.boardMessageCount': FieldValue.increment(messagesSent),
     };
 
@@ -87,3 +87,4 @@ class BoardStatsService {
     await resetStats(boardId);
   }
 }
+

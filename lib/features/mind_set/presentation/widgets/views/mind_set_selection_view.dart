@@ -49,7 +49,7 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
 
         /// GO WITH THE FLOW
         _buildOptionCard(
-          icon: Icons.auto_awesome_rounded,
+          icon: Icons.waves_rounded,
           iconColor: Colors.deepPurple,
           title: 'Go with the Flow',
           subtitle: 'Work on existing unplanned tasks.',

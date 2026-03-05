@@ -37,7 +37,7 @@ class UserDailyActivityService {
 
       final data = doc.data() as Map<String, dynamic>;
       _log(
-        "[DEBUG] UserDailyActivityService.getToday: Today's activity found - tasks: ${data['tasksCreatedCount'] ?? 0}, subtasks: ${data['subtasksCreatedCount'] ?? 0}",
+        "[DEBUG] UserDailyActivityService.getToday: Today's activity found - tasks: ${data['tasksCreatedCount'] ?? 0}, steps: ${data['stepsCreatedCount'] ?? 0}",
       );
       return UserDailyActivityModel(
         userId: userId,
@@ -45,9 +45,9 @@ class UserDailyActivityService {
         tasksCreatedCount: data['tasksCreatedCount'] ?? 0,
         tasksCompletedCount: data['tasksCompletedCount'] ?? 0,
         tasksDeletedCount: data['tasksDeletedCount'] ?? 0,
-        subtasksCreatedCount: data['subtasksCreatedCount'] ?? 0,
-        subtasksCompletedCount: data['subtasksCompletedCount'] ?? 0,
-        subtasksDeletedCount: data['subtasksDeletedCount'] ?? 0,
+        stepsCreatedCount: data['stepsCreatedCount'] ?? 0,
+        stepsCompletedCount: data['stepsCompletedCount'] ?? 0,
+        stepsDeletedCount: data['stepsDeletedCount'] ?? 0,
         focusMinutes: data['focusMinutes'] ?? 0,
         focusSessionsCount: data['focusSessionsCount'] ?? 0,
         firstActivityAt: data['firstActivityAt'],
@@ -79,9 +79,9 @@ class UserDailyActivityService {
           'tasksCreatedCount': 0,
           'tasksCompletedCount': 0,
           'tasksDeletedCount': 0,
-          'subtasksCreatedCount': 0,
-          'subtasksCompletedCount': 0,
-          'subtasksDeletedCount': 0,
+          'stepsCreatedCount': 0,
+          'stepsCompletedCount': 0,
+          'stepsDeletedCount': 0,
           'focusMinutes': 0,
           'focusSessionsCount': 0,
           'firstActivityAt': Timestamp.now(),
@@ -145,9 +145,9 @@ class UserDailyActivityService {
           tasksCreatedCount: data['tasksCreatedCount'] ?? 0,
           tasksCompletedCount: data['tasksCompletedCount'] ?? 0,
           tasksDeletedCount: data['tasksDeletedCount'] ?? 0,
-          subtasksCreatedCount: data['subtasksCreatedCount'] ?? 0,
-          subtasksCompletedCount: data['subtasksCompletedCount'] ?? 0,
-          subtasksDeletedCount: data['subtasksDeletedCount'] ?? 0,
+          stepsCreatedCount: data['stepsCreatedCount'] ?? 0,
+          stepsCompletedCount: data['stepsCompletedCount'] ?? 0,
+          stepsDeletedCount: data['stepsDeletedCount'] ?? 0,
           focusMinutes: data['focusMinutes'] ?? 0,
           focusSessionsCount: data['focusSessionsCount'] ?? 0,
           firstActivityAt: data['firstActivityAt'],
@@ -182,3 +182,4 @@ class UserDailyActivityService {
     }
   }
 }
+

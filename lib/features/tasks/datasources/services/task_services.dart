@@ -43,7 +43,7 @@ class TaskService {
       taskAssignedTo: managerId,
       taskAssignedToName: managerName,
       taskBoardLane: Task.lanePublished,
-      taskAcceptanceStatus: null,
+      taskAssignmentStatus: null,
     );
   }
 
@@ -112,12 +112,15 @@ class TaskService {
           userName: user.displayName ?? 'Unknown User',
           activityType: 'task_created',
           userProfilePicture: user.photoURL,
-          boardId: normalizedTask.taskBoardId.isNotEmpty
-              ? normalizedTask.taskBoardId
-              : null,
+          // Keep this in user activity feed but avoid polluting board timeline.
+          boardId: null,
           taskId: normalizedTask.taskId,
           description: 'created a task',
-          metadata: {'taskTitle': normalizedTask.taskTitle},
+          metadata: {
+            'taskTitle': normalizedTask.taskTitle,
+            if ((normalizedTask.taskBoardTitle ?? '').trim().isNotEmpty)
+              'boardTitle': (normalizedTask.taskBoardTitle ?? '').trim(),
+          },
         );
       }
 
@@ -144,6 +147,7 @@ class TaskService {
   /// Update existing task
   Future<void> updateTask(Task task) async {
     try {
+      final previousTask = await getTaskById(task.taskId);
       await _assertTaskNotCompleted(task.taskId);
       final normalizedTask = await _normalizeTaskForBoardRules(task);
       await _assertAssigneeWithinBoardTaskLimit(
@@ -158,11 +162,93 @@ class TaskService {
         normalizedTask.taskId,
         normalizedTask.taskStats,
       );
+      await _logTaskWorkflowEvents(
+        previousTask: previousTask,
+        updatedTask: normalizedTask,
+      );
 
       print('✅ Task ${normalizedTask.taskId} updated successfully');
     } catch (e) {
       print('⚠️ Error updating task: $e');
       rethrow;
+    }
+  }
+
+  Future<void> _logTaskWorkflowEvents({
+    required Task? previousTask,
+    required Task updatedTask,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null || previousTask == null) return;
+
+    final boardId = updatedTask.taskBoardId.trim().isNotEmpty
+        ? updatedTask.taskBoardId.trim()
+        : null;
+    final boardTitle = (updatedTask.taskBoardTitle ?? '').trim();
+    final taskTitle = updatedTask.taskTitle.trim();
+
+    final prevProposedAssigneeId = (previousTask.taskProposedAssigneeId ?? '')
+        .trim();
+    final nextProposedAssigneeId = (updatedTask.taskProposedAssigneeId ?? '')
+        .trim();
+    final prevAcceptance = (previousTask.taskAssignmentStatus ?? '').trim();
+    final nextAcceptance = (updatedTask.taskAssignmentStatus ?? '').trim();
+    final prevStatus = previousTask.taskStatus.trim();
+    final nextStatus = updatedTask.taskStatus.trim();
+
+    final assignmentChanged =
+        prevProposedAssigneeId != nextProposedAssigneeId ||
+        prevAcceptance != nextAcceptance;
+    if (assignmentChanged && nextProposedAssigneeId.isNotEmpty) {
+      await _activityEventService.logEvent(
+        userId: user.uid,
+        userName: user.displayName ?? 'Unknown User',
+        activityType: 'task_assigned',
+        userProfilePicture: user.photoURL,
+        boardId: boardId,
+        taskId: updatedTask.taskId,
+        description: 'assigned a task',
+        metadata: {
+          'taskTitle': taskTitle,
+          if (boardTitle.isNotEmpty) 'boardTitle': boardTitle,
+          if ((updatedTask.taskProposedAssigneeName ?? '').trim().isNotEmpty)
+            'assigneeName': updatedTask.taskProposedAssigneeName!.trim(),
+        },
+      );
+    }
+
+    if (prevStatus != nextStatus) {
+      await _activityEventService.logEvent(
+        userId: user.uid,
+        userName: user.displayName ?? 'Unknown User',
+        activityType: 'task_status_changed',
+        userProfilePicture: user.photoURL,
+        boardId: boardId,
+        taskId: updatedTask.taskId,
+        description: 'changed task status',
+        metadata: {
+          'taskTitle': taskTitle,
+          'fromStatus': prevStatus,
+          'toStatus': nextStatus,
+          if (boardTitle.isNotEmpty) 'boardTitle': boardTitle,
+        },
+      );
+
+      if (nextStatus.toLowerCase() == Task.statusInProgress.toLowerCase()) {
+        await _activityEventService.logEvent(
+          userId: user.uid,
+          userName: user.displayName ?? 'Unknown User',
+          activityType: 'task_in_progress',
+          userProfilePicture: user.photoURL,
+          boardId: boardId,
+          taskId: updatedTask.taskId,
+          description: 'started focusing on a task',
+          metadata: {
+            'taskTitle': taskTitle,
+            if (boardTitle.isNotEmpty) 'boardTitle': boardTitle,
+          },
+        );
+      }
     }
   }
 
@@ -196,7 +282,11 @@ class TaskService {
           boardId: task.taskBoardId.isNotEmpty ? task.taskBoardId : null,
           taskId: task.taskId,
           description: 'deleted a task',
-          metadata: {'taskTitle': task.taskTitle},
+          metadata: {
+            'taskTitle': task.taskTitle,
+            if ((task.taskBoardTitle ?? '').trim().isNotEmpty)
+              'boardTitle': (task.taskBoardTitle ?? '').trim(),
+          },
         );
       }
 
@@ -235,7 +325,11 @@ class TaskService {
                 : null,
             taskId: taskData.taskId,
             description: 'deleted a task',
-            metadata: {'taskTitle': taskData.taskTitle},
+            metadata: {
+              'taskTitle': taskData.taskTitle,
+              if ((taskData.taskBoardTitle ?? '').trim().isNotEmpty)
+                'boardTitle': (taskData.taskBoardTitle ?? '').trim(),
+            },
           );
         }
       }
@@ -252,25 +346,38 @@ class TaskService {
     try {
       await _assertTaskNotCompleted(task.taskId);
       final newIsDone = task.taskIsDone;
+      final hasSubmission = (task.taskSubmissionId ?? '').trim().isNotEmpty;
+      if (newIsDone && task.taskRequiresSubmission && !hasSubmission) {
+        throw StateError(
+          'This task requires an upload before it can be submitted/completed.',
+        );
+      }
+      final requiresApproval = task.taskRequiresApproval;
+      final shouldSubmitForReview = newIsDone && requiresApproval;
+      final effectiveIsDone = shouldSubmitForReview ? false : newIsDone;
+      final effectiveStatus = shouldSubmitForReview
+          ? Task.statusSubmitted
+          : task.taskStatus;
       final taskOutcome = newIsDone
           ? Task.outcomeSuccessful
           : (task.effectiveTaskOutcome == Task.outcomeSuccessful
                 ? Task.outcomeNone
                 : task.effectiveTaskOutcome);
-      var completedSubtasksCount = 0;
-      if (newIsDone) {
-        completedSubtasksCount = await _completeRemainingSubtasksForTask(
+      var completedStepsCount = 0;
+      if (effectiveIsDone) {
+        completedStepsCount = await _completeRemainingStepsForTask(
           task.taskId,
         );
       }
       await _tasks.doc(task.taskId).update({
-        'taskIsDone': newIsDone,
-        'taskIsDoneAt': newIsDone ? Timestamp.now() : null,
-        'taskStatus': task.taskStatus,
+        'taskIsDone': effectiveIsDone,
+        'taskIsDoneAt': effectiveIsDone ? Timestamp.now() : null,
+        'taskStatus': effectiveStatus,
+        if (shouldSubmitForReview) 'taskApprovalStatus': 'pending',
         'taskOutcome': taskOutcome,
-        if (newIsDone && completedSubtasksCount > 0)
-          'taskStats.taskSubtasksDoneCount': FieldValue.increment(
-            completedSubtasksCount,
+        if (effectiveIsDone && completedStepsCount > 0)
+          'taskStats.taskStepsDoneCount': FieldValue.increment(
+            completedStepsCount,
           ),
       });
 
@@ -279,7 +386,22 @@ class TaskService {
 
       // Log activity event
       final user = _auth.currentUser;
-      if (user != null && newIsDone) {
+      if (user != null && shouldSubmitForReview) {
+        await _activityEventService.logEvent(
+          userId: user.uid,
+          userName: user.displayName ?? 'Unknown User',
+          activityType: 'task_submitted',
+          userProfilePicture: user.photoURL,
+          boardId: task.taskBoardId.isNotEmpty ? task.taskBoardId : null,
+          taskId: task.taskId,
+          description: 'submitted a task for review',
+          metadata: {
+            'taskTitle': task.taskTitle,
+            if ((task.taskBoardTitle ?? '').trim().isNotEmpty)
+              'boardTitle': (task.taskBoardTitle ?? '').trim(),
+          },
+        );
+      } else if (user != null && effectiveIsDone) {
         await _activityEventService.logEvent(
           userId: user.uid,
           userName: user.displayName ?? 'Unknown User',
@@ -288,22 +410,26 @@ class TaskService {
           boardId: task.taskBoardId.isNotEmpty ? task.taskBoardId : null,
           taskId: task.taskId,
           description: 'completed a task',
-          metadata: {'taskTitle': task.taskTitle},
+          metadata: {
+            'taskTitle': task.taskTitle,
+            if ((task.taskBoardTitle ?? '').trim().isNotEmpty)
+              'boardTitle': (task.taskBoardTitle ?? '').trim(),
+          },
         );
       }
 
-      print('✅ Task ${task.taskId} done status toggled to $newIsDone');
+      print('✅ Task ${task.taskId} done status toggled to $effectiveIsDone');
     } catch (e) {
       print('⚠️ Error toggling task done status: $e');
     }
   }
 
-  Future<int> _completeRemainingSubtasksForTask(String taskId) async {
+  Future<int> _completeRemainingStepsForTask(String taskId) async {
     final snapshot = await _firestore
-        .collection('subtasks')
+        .collection('steps')
         .where('parentTaskId', isEqualTo: taskId)
-        .where('subtaskIsDeleted', isEqualTo: false)
-        .where('subtaskIsDone', isEqualTo: false)
+        .where('stepIsDeleted', isEqualTo: false)
+        .where('stepIsDone', isEqualTo: false)
         .get();
 
     if (snapshot.docs.isEmpty) return 0;
@@ -319,8 +445,8 @@ class TaskService {
       final batch = _firestore.batch();
       for (var i = start; i < end; i++) {
         batch.update(docs[i].reference, {
-          'subtaskIsDone': true,
-          'subtaskIsDoneAt': Timestamp.now(),
+          'stepIsDone': true,
+          'stepIsDoneAt': Timestamp.now(),
         });
       }
       await batch.commit();
@@ -556,7 +682,8 @@ class TaskService {
               (proposedName != null && proposedName.isNotEmpty)
               ? proposedName
               : userName,
-          'taskAcceptanceStatus': 'accepted',
+          'taskAssignmentStatus': 'accepted',
+          'taskAcceptanceStatus': FieldValue.delete(),
           'taskProposedAssigneeId': FieldValue.delete(),
           'taskProposedAssigneeName': FieldValue.delete(),
         });
@@ -603,7 +730,8 @@ class TaskService {
         transaction.update(taskRef, {
           'taskAssignedTo': 'None',
           'taskAssignedToName': 'Unassigned',
-          'taskAcceptanceStatus': 'declined',
+          'taskAssignmentStatus': 'declined',
+          'taskAcceptanceStatus': FieldValue.delete(),
           'taskProposedAssigneeId': FieldValue.delete(),
           'taskProposedAssigneeName': FieldValue.delete(),
         });
@@ -721,15 +849,17 @@ class TaskService {
             if (boardTitle.isEmpty) {
               boardTitle = (boardData['boardTitle'] as String? ?? '').trim();
             }
-            boardManagerName =
-                (boardData['boardManagerName'] as String? ?? '').trim();
+            boardManagerName = (boardData['boardManagerName'] as String? ?? '')
+                .trim();
           }
         } catch (_) {
           // Best effort enrichment for notification content.
         }
       }
 
-      final resolvedBoardTitle = boardTitle.isNotEmpty ? boardTitle : 'Unknown Board';
+      final resolvedBoardTitle = boardTitle.isNotEmpty
+          ? boardTitle
+          : 'Unknown Board';
       final resolvedManagerName = boardManagerName.isNotEmpty
           ? boardManagerName
           : 'Unknown Manager';
@@ -781,3 +911,4 @@ class TaskService {
     return '${text.substring(0, 177)}...';
   }
 }
+

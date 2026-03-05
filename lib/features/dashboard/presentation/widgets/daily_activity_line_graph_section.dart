@@ -11,8 +11,8 @@ import '../../../../shared/features/users/datasources/providers/user_daily_activ
 enum _ProductivityMetric {
   productivityScore,
   tasksCompleted,
-  subtasksCompleted,
-  subtasksCreated,
+  stepsCompleted,
+  stepsCreated,
   fileSubmissions,
   revisionsRequested,
 }
@@ -74,7 +74,10 @@ class _DailyActivityLineGraphSectionState
                   const Expanded(
                     child: Text(
                       'Daily Productivity',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                   Text(
@@ -120,16 +123,22 @@ class _DailyActivityLineGraphSectionState
                   runSpacing: 8,
                   children: [
                     _metricChip(_ProductivityMetric.productivityScore, 'Score'),
-                    _metricChip(_ProductivityMetric.tasksCompleted, 'Tasks Done'),
                     _metricChip(
-                      _ProductivityMetric.subtasksCompleted,
-                      'Subtasks Done',
+                      _ProductivityMetric.tasksCompleted,
+                      'Tasks Done',
                     ),
                     _metricChip(
-                      _ProductivityMetric.subtasksCreated,
-                      'Subtasks Created',
+                      _ProductivityMetric.stepsCompleted,
+                      'Steps Done',
                     ),
-                    _metricChip(_ProductivityMetric.fileSubmissions, 'Submissions'),
+                    _metricChip(
+                      _ProductivityMetric.stepsCreated,
+                      'Steps Created',
+                    ),
+                    _metricChip(
+                      _ProductivityMetric.fileSubmissions,
+                      'Submissions',
+                    ),
                     _metricChip(
                       _ProductivityMetric.revisionsRequested,
                       'Revisions',
@@ -171,10 +180,7 @@ class _DailyActivityLineGraphSectionState
           clipBehavior: widget.onTap != null ? Clip.antiAlias : Clip.none,
           child: widget.onTap == null
               ? content
-              : InkWell(
-                  onTap: widget.onTap,
-                  child: content,
-                ),
+              : InkWell(onTap: widget.onTap, child: content),
         );
       },
     );
@@ -236,13 +242,13 @@ class _DailyActivityLineGraphSectionState
   String _metricSubtitle(_ProductivityMetric metric) {
     switch (metric) {
       case _ProductivityMetric.productivityScore:
-        return 'Score = tasks done + subtasks done + subtasks created';
+        return 'Score = tasks done + steps done + steps created';
       case _ProductivityMetric.tasksCompleted:
         return 'Tasks completed per day';
-      case _ProductivityMetric.subtasksCompleted:
-        return 'Subtasks completed per day';
-      case _ProductivityMetric.subtasksCreated:
-        return 'Subtasks created per day';
+      case _ProductivityMetric.stepsCompleted:
+        return 'Steps completed per day';
+      case _ProductivityMetric.stepsCreated:
+        return 'Steps created per day';
       case _ProductivityMetric.fileSubmissions:
         return 'File submissions per day';
       case _ProductivityMetric.revisionsRequested:
@@ -277,14 +283,14 @@ class _DailyActivityLineGraphSectionState
       switch (metric) {
         case _ProductivityMetric.productivityScore:
           return d.tasksCompletedCount +
-              d.subtasksCompletedCount +
-              d.subtasksCreatedCount;
+              d.stepsCompletedCount +
+              d.stepsCreatedCount;
         case _ProductivityMetric.tasksCompleted:
           return d.tasksCompletedCount;
-        case _ProductivityMetric.subtasksCompleted:
-          return d.subtasksCompletedCount;
-        case _ProductivityMetric.subtasksCreated:
-          return d.subtasksCreatedCount;
+        case _ProductivityMetric.stepsCompleted:
+          return d.stepsCompletedCount;
+        case _ProductivityMetric.stepsCreated:
+          return d.stepsCreatedCount;
         case _ProductivityMetric.fileSubmissions:
         case _ProductivityMetric.revisionsRequested:
           return 0;
@@ -335,10 +341,10 @@ class _DailyActivityLineGraphSectionState
     switch (metricId) {
       case 'tasks_completed':
         return _ProductivityMetric.tasksCompleted;
-      case 'subtasks_completed':
-        return _ProductivityMetric.subtasksCompleted;
-      case 'subtasks_created':
-        return _ProductivityMetric.subtasksCreated;
+      case 'steps_completed':
+        return _ProductivityMetric.stepsCompleted;
+      case 'steps_created':
+        return _ProductivityMetric.stepsCreated;
       case 'file_submissions':
         return _ProductivityMetric.fileSubmissions;
       case 'revisions_requested':
@@ -353,10 +359,10 @@ class _DailyActivityLineGraphSectionState
     switch (metric) {
       case _ProductivityMetric.tasksCompleted:
         return 'tasks_completed';
-      case _ProductivityMetric.subtasksCompleted:
-        return 'subtasks_completed';
-      case _ProductivityMetric.subtasksCreated:
-        return 'subtasks_created';
+      case _ProductivityMetric.stepsCompleted:
+        return 'steps_completed';
+      case _ProductivityMetric.stepsCreated:
+        return 'steps_created';
       case _ProductivityMetric.fileSubmissions:
         return 'file_submissions';
       case _ProductivityMetric.revisionsRequested:
@@ -467,3 +473,4 @@ class _LineChartPainter extends CustomPainter {
     return oldDelegate.values != values;
   }
 }
+

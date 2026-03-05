@@ -27,7 +27,7 @@ class GreetingSection extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Hello, $userName!',
+                      'Hi, $userName!',
                       style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
@@ -35,7 +35,7 @@ class GreetingSection extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'What do you want to do today?',
+                      'Ready when you are.',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],

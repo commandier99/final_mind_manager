@@ -53,9 +53,9 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
         final deletedTasks = stats.boardTasksDeletedCount;
         final activeTasks = (totalTasks - deletedTasks).clamp(0, totalTasks);
 
-        final totalSubtasks = stats.boardSubtasksCount;
-        final doneSubtasks = stats.boardSubtasksDoneCount;
-        final deletedSubtasks = stats.boardSubtasksDeletedCount;
+        final totalSteps = stats.boardStepsCount;
+        final doneSteps = stats.boardStepsDoneCount;
+        final deletedSteps = stats.boardStepsDeletedCount;
 
         final completionRate = totalTasks > 0 ? doneTasks / totalTasks : 0.0;
         final completionLabel = '${(completionRate * 100).toStringAsFixed(0)}%';
@@ -153,20 +153,20 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                           color: Colors.red,
                         ),
                         _buildMetricTile(
-                          label: 'Subtasks',
-                          value: '$totalSubtasks',
+                          label: 'Steps',
+                          value: '$totalSteps',
                           icon: Icons.format_list_bulleted,
                           color: Colors.indigo,
                         ),
                         _buildMetricTile(
-                          label: 'Subtasks Done',
-                          value: '$doneSubtasks',
+                          label: 'Steps Done',
+                          value: '$doneSteps',
                           icon: Icons.done_all,
                           color: Colors.teal,
                         ),
                         _buildMetricTile(
-                          label: 'Subtasks Deleted',
-                          value: '$deletedSubtasks',
+                          label: 'Steps Deleted',
+                          value: '$deletedSteps',
                           icon: Icons.remove_done,
                           color: Colors.deepOrange,
                         ),
@@ -623,3 +623,4 @@ class _MemberPerformance {
     required this.taskLimit,
   });
 }
+

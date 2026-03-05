@@ -8,7 +8,7 @@ class FocusedTaskCard extends StatefulWidget {
   final VoidCallback? onPause;
   final ValueChanged<bool?>? onToggleDone;
   final bool isPomodoroMode;
-  final Widget? subtasksContent;
+  final Widget? stepsContent;
   final DateTime focusedStartedAt;
 
   const FocusedTaskCard({
@@ -17,7 +17,7 @@ class FocusedTaskCard extends StatefulWidget {
     this.onPause,
     this.onToggleDone,
     this.isPomodoroMode = false,
-    this.subtasksContent,
+    this.stepsContent,
     required this.focusedStartedAt,
   });
 
@@ -26,7 +26,7 @@ class FocusedTaskCard extends StatefulWidget {
 }
 
 class _FocusedTaskCardState extends State<FocusedTaskCard> {
-  bool _showSubtasks = false;
+  bool _showSteps = false;
   Timer? _elapsedTicker;
 
   Color _getPriorityColor() {
@@ -205,12 +205,12 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                         ],
                       ],
                     ),
-                    if (widget.subtasksContent != null) ...[
+                    if (widget.stepsContent != null) ...[
                       InkWell(
                         borderRadius: BorderRadius.circular(10),
                         onTap: () {
                           setState(() {
-                            _showSubtasks = !_showSubtasks;
+                            _showSteps = !_showSteps;
                           });
                         },
                         child: Padding(
@@ -231,7 +231,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                                   horizontal: 8,
                                 ),
                                 child: Icon(
-                                  _showSubtasks
+                                  _showSteps
                                       ? Icons.keyboard_arrow_up
                                       : Icons.keyboard_arrow_down,
                                   size: 18,
@@ -252,7 +252,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                         child: AnimatedSize(
                           duration: const Duration(milliseconds: 180),
                           curve: Curves.easeOut,
-                          child: _showSubtasks
+                          child: _showSteps
                               ? ConstrainedBox(
                                   constraints: const BoxConstraints(
                                     maxHeight: 220,
@@ -261,7 +261,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                                     thumbVisibility: true,
                                     child: SingleChildScrollView(
                                       padding: EdgeInsets.zero,
-                                      child: widget.subtasksContent!,
+                                      child: widget.stepsContent!,
                                     ),
                                   ),
                                 )
@@ -279,3 +279,4 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
     );
   }
 }
+

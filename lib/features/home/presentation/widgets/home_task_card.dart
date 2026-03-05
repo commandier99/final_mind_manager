@@ -60,17 +60,17 @@ class _HomeTaskCardState extends State<HomeTaskCard> {
   }
 
   double _getProgress() {
-    final done = widget.task.taskStats.taskSubtasksDoneCount ?? 0;
-    final total = widget.task.taskStats.taskSubtasksCount ?? 0;
+    final done = widget.task.taskStats.taskStepsDoneCount ?? 0;
+    final total = widget.task.taskStats.taskStepsCount ?? 0;
     return total > 0 ? done / total : 0.0;
   }
 
-  bool _hasSubtasks() {
-    return (widget.task.taskStats.taskSubtasksCount ?? 0) > 0;
+  bool _hasSteps() {
+    return (widget.task.taskStats.taskStepsCount ?? 0) > 0;
   }
 
   String _getProgressPercent() {
-    final total = widget.task.taskStats.taskSubtasksCount ?? 0;
+    final total = widget.task.taskStats.taskStepsCount ?? 0;
     if (total == 0) return "0%";
     final percent = ((_getProgress()) * 100).round();
     return "$percent%";
@@ -164,7 +164,7 @@ class _HomeTaskCardState extends State<HomeTaskCard> {
                   const SizedBox(width: 12),
 
                   // Progress circle
-                  if (_hasSubtasks())
+                  if (_hasSteps())
                     SizedBox(
                       width: 40,
                       height: 40,
@@ -238,3 +238,4 @@ class _HomeTaskCardState extends State<HomeTaskCard> {
         );
   }
 }
+

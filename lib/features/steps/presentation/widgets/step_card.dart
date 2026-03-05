@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_slidable/flutter_slidable.dart';
-import '../../datasources/models/subtask_model.dart';
+import '../../datasources/models/step_model.dart';
 
-class SubtaskCard extends StatelessWidget {
-  final Subtask subtask;
+class StepCard extends StatelessWidget {
+  final TaskStep step;
   final ValueChanged<bool?>? onToggleDone;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
@@ -15,9 +15,9 @@ class SubtaskCard extends StatelessWidget {
   final double elevation;
   final BorderRadiusGeometry borderRadius;
 
-  const SubtaskCard({
+  const StepCard({
     super.key,
-    required this.subtask,
+    required this.step,
     this.onToggleDone,
     this.onDelete,
     this.onEdit,
@@ -36,7 +36,7 @@ class SubtaskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final isDone = subtask.subtaskIsDone;
+    final isDone = step.stepIsDone;
     final colorScheme = theme.colorScheme;
 
     final cardChild = GestureDetector(
@@ -71,7 +71,7 @@ class SubtaskCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      subtask.subtaskTitle,
+                      step.stepTitle,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 14,
@@ -88,7 +88,7 @@ class SubtaskCard extends StatelessWidget {
                           const Icon(Icons.person_outline, size: 16),
                           const SizedBox(width: 4),
                           Text(
-                            subtask.subtaskOwnerName,
+                            step.stepOwnerName,
                             style: const TextStyle(fontSize: 13),
                           ),
                         ],
@@ -126,7 +126,7 @@ class SubtaskCard extends StatelessWidget {
     if (!hasActions) return cardChild;
 
     return Slidable(
-      key: ValueKey(subtask.subtaskId),
+      key: ValueKey(step.stepId),
       endActionPane: ActionPane(
         motion: const DrawerMotion(),
         extentRatio: 0.48,
@@ -216,3 +216,5 @@ class SubtaskCard extends StatelessWidget {
     );
   }
 }
+
+
