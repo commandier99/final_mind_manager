@@ -76,6 +76,21 @@ class BoardProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> duplicateBoard(Board board) async {
+    await addBoard(
+      title: _duplicateTitle(board.boardTitle),
+      goal: board.boardGoal,
+      description: board.boardGoalDescription,
+      boardType: board.boardType,
+      boardPurpose: board.boardPurpose,
+    );
+  }
+
+  String _duplicateTitle(String title) {
+    const copySuffix = ' (Copy)';
+    return title.endsWith(copySuffix) ? title : '$title$copySuffix';
+  }
+
   /// ------------------------
   /// UPDATE
   /// ------------------------

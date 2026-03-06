@@ -7,6 +7,7 @@ class StepCard extends StatelessWidget {
   final ValueChanged<bool?>? onToggleDone;
   final VoidCallback? onDelete;
   final VoidCallback? onEdit;
+  final VoidCallback? onDuplicate;
   final VoidCallback? onTap;
   final bool showCheckbox;
   final bool showOwner;
@@ -21,6 +22,7 @@ class StepCard extends StatelessWidget {
     this.onToggleDone,
     this.onDelete,
     this.onEdit,
+    this.onDuplicate,
     this.onTap,
     this.showCheckbox = true,
     this.showOwner = false,
@@ -122,14 +124,19 @@ class StepCard extends StatelessWidget {
       ),
     );
 
-    final hasActions = onDelete != null || onEdit != null;
+    final hasActions = onDelete != null || onEdit != null || onDuplicate != null;
     if (!hasActions) return cardChild;
+
+    final actionCount =
+        (onEdit != null ? 1 : 0) +
+        (onDuplicate != null ? 1 : 0) +
+        (onDelete != null ? 1 : 0);
 
     return Slidable(
       key: ValueKey(step.stepId),
       endActionPane: ActionPane(
         motion: const DrawerMotion(),
-        extentRatio: 0.48,
+        extentRatio: actionCount * 0.24,
         children: [
           if (onEdit != null)
             Expanded(
@@ -158,6 +165,46 @@ class StepCard extends StatelessWidget {
                           SizedBox(height: 2),
                           Text(
                             'Edit',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          if (onDuplicate != null)
+            Expanded(
+              child: Container(
+                alignment: Alignment.center,
+                child: Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade500,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: onDuplicate,
+                      borderRadius: BorderRadius.circular(8),
+                      child: const Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.copy,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Duplicate',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 10,

@@ -3,6 +3,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../datasources/models/task_model.dart';
+import '../../../datasources/providers/task_provider.dart';
 import '../../../datasources/services/task_application_service.dart';
 import '../../pages/task_details_page.dart';
 import '../dialogs/edit_task_dialog.dart';
@@ -334,6 +335,25 @@ class _TaskCardState extends State<TaskCard> {
     }
   }
 
+  Future<void> _handleDuplicate() async {
+    try {
+      final taskProvider = context.read<TaskProvider>();
+      final duplicatedTask = await taskProvider.duplicateTask(widget.task);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Task duplicated: ${duplicatedTask.taskTitle}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to duplicate task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final done = widget.task.taskStats.taskStepsDoneCount ?? 0;
@@ -376,9 +396,13 @@ class _TaskCardState extends State<TaskCard> {
     if (widget.task.taskIsDone) {
       canEditTask = false;
     }
+    final canDuplicateTask = canEditTask;
     final hasDeleteAction = widget.onDelete != null && !widget.task.taskIsDone;
-    final hasSwipeActions = canEditTask || hasDeleteAction;
-    final actionCount = (canEditTask ? 1 : 0) + (hasDeleteAction ? 1 : 0);
+    final hasSwipeActions = canEditTask || canDuplicateTask || hasDeleteAction;
+    final actionCount =
+        (canEditTask ? 1 : 0) +
+        (canDuplicateTask ? 1 : 0) +
+        (hasDeleteAction ? 1 : 0);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -425,6 +449,46 @@ class _TaskCardState extends State<TaskCard> {
                                     SizedBox(height: 2),
                                     Text(
                                       'Edit',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    if (canDuplicateTask)
+                      Expanded(
+                        child: Container(
+                          alignment: Alignment.center,
+                          child: Container(
+                            width: 60,
+                            height: 60,
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade500,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: _handleDuplicate,
+                                borderRadius: BorderRadius.circular(8),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.copy,
+                                      color: Colors.white,
+                                      size: 20,
+                                    ),
+                                    SizedBox(height: 2),
+                                    Text(
+                                      'Duplicate',
                                       style: TextStyle(
                                         color: Colors.white,
                                         fontSize: 10,

@@ -39,6 +39,21 @@ class StepProvider with ChangeNotifier {
     }
   }
 
+  Future<void> duplicateStep(TaskStep step) async {
+    await addStep(
+      stepTaskId: step.parentTaskId,
+      stepBoardId: step.stepBoardId ?? '',
+      stepTitle: _duplicateTitle(step.stepTitle),
+      stepDescription: step.stepDescription,
+      initialDone: false,
+    );
+  }
+
+  String _duplicateTitle(String title) {
+    const copySuffix = ' (Copy)';
+    return title.endsWith(copySuffix) ? title : '$title$copySuffix';
+  }
+
   Future<void> toggleStepDoneStatus(TaskStep step) async {
     try {
       await _stepService.toggleStepDoneStatus(step);

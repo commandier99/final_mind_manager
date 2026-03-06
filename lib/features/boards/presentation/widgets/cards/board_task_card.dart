@@ -579,8 +579,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
             (widget.board != null &&
                 (widget.board!.isManager(widget.currentUserId) ||
                     widget.board!.isSupervisor(widget.currentUserId))));
-    final hasSwipeActions = canEdit || canDelete;
-    final actionCount = (canEdit ? 1 : 0) + (canDelete ? 1 : 0);
+    final canDuplicate = canEdit;
+    final hasSwipeActions = canEdit || canDuplicate || canDelete;
+    final actionCount =
+        (canEdit ? 1 : 0) + (canDuplicate ? 1 : 0) + (canDelete ? 1 : 0);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
@@ -632,6 +634,46 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                       SizedBox(height: 2),
                                       Text(
                                         'Edit',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (canDuplicate)
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade500,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: _handleDuplicate,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.copy,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Duplicate',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 10,
@@ -1190,6 +1232,29 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         return Colors.blue;
       default:
         return Colors.grey;
+    }
+  }
+
+  Future<void> _handleDuplicate() async {
+    try {
+      final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+      final duplicatedTask = await taskProvider.duplicateTask(widget.task);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Task duplicated: ${duplicatedTask.taskTitle}'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error duplicating task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 

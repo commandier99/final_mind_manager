@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:async';
 import '../models/task_model.dart'; // Import Task model
+import '../models/task_stats_model.dart';
 import '../services/task_services.dart';
 import '../helpers/task_dependency_helper.dart';
 import '../../../boards/datasources/services/board_stats_services.dart';
@@ -315,6 +316,56 @@ class TaskProvider extends ChangeNotifier {
       print('⚠️ Error adding task: $e');
       rethrow;
     }
+  }
+
+  Future<Task> duplicateTask(Task sourceTask) async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    final ownerId = firebaseUser?.uid ?? sourceTask.taskOwnerId;
+    final displayName = firebaseUser?.displayName;
+    final ownerName = (displayName != null && displayName.trim().isNotEmpty)
+        ? displayName.trim()
+        : sourceTask.taskOwnerName;
+
+    final duplicatedTask = sourceTask.copyWith(
+      taskId: const Uuid().v4(),
+      taskTitle: _duplicateTitle(sourceTask.taskTitle),
+      taskCreatedAt: DateTime.now(),
+      taskOwnerId: ownerId,
+      taskOwnerName: ownerName,
+      taskAssignedBy: ownerId,
+      taskDeletedAt: null,
+      taskIsDeleted: false,
+      taskIsDone: false,
+      taskIsDoneAt: null,
+      taskFailed: false,
+      taskOutcome: Task.outcomeNone,
+      taskStats: TaskStats(),
+      taskStatus: Task.statusToDo,
+      taskApprovalStatus: 'none',
+      taskSubmissionId: null,
+      taskAssignmentStatus: _duplicatedAssignmentStatus(sourceTask),
+      taskDeadlineMissed: false,
+      taskExtensionCount: 0,
+      taskRepeatTime: sourceTask.taskRepeatTime,
+      taskRevisionOfTaskId: null,
+      taskRevisionOfSubmissionId: null,
+    );
+
+    await addTask(duplicatedTask);
+    return duplicatedTask;
+  }
+
+  String _duplicateTitle(String title) {
+    const copySuffix = ' (Copy)';
+    return title.endsWith(copySuffix) ? title : '$title$copySuffix';
+  }
+
+  String? _duplicatedAssignmentStatus(Task sourceTask) {
+    final assignedTo = sourceTask.taskAssignedTo.trim();
+    if (assignedTo.isEmpty || assignedTo == 'None') {
+      return null;
+    }
+    return 'pending';
   }
 
   Future<void> updateTask(Task task) async {

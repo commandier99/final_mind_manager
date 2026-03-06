@@ -12,6 +12,7 @@ import '../widgets/sections/board_tasks_section.dart';
 import '../widgets/sections/board_stats_section.dart';
 import '../widgets/sections/board_submissions_section.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
+import '../../datasources/providers/board_provider.dart';
 import '../../datasources/providers/board_stats_provider.dart';
 import '../widgets/dialogs/edit_board_dialog.dart';
 import '../widgets/dialogs/board_delete_flow_dialog.dart';
@@ -92,6 +93,35 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
     });
   }
 
+  Future<void> _duplicateBoard() async {
+    if (widget.board.boardType == 'personal') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Personal boards cannot be duplicated.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await context.read<BoardProvider>().duplicateBoard(widget.board);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Duplicated "${widget.board.boardTitle}"')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to duplicate board: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
@@ -152,6 +182,8 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                     context: context,
                     builder: (_) => EditBoardDialog(board: widget.board),
                   );
+                } else if (value == 'duplicate') {
+                  _duplicateBoard();
                 } else if (value == 'delete') {
                   BoardDeleteFlowDialog.show(context, board: widget.board);
                 }
@@ -161,6 +193,11 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                   const PopupMenuItem<String>(
                     value: 'edit',
                     child: Text('Edit'),
+                  ),
+                if (isManager && widget.board.boardType != 'personal')
+                  const PopupMenuItem<String>(
+                    value: 'duplicate',
+                    child: Text('Duplicate'),
                   ),
                 if (isManager)
                   const PopupMenuItem<String>(

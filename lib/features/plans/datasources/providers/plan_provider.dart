@@ -98,6 +98,28 @@ class PlanProvider extends ChangeNotifier {
     }
   }
 
+  Future<Plan?> duplicatePlan({
+    required Plan sourcePlan,
+    required String userId,
+    required String userName,
+  }) async {
+    return createPlan(
+      userId: userId,
+      userName: userName,
+      title: _duplicateTitle(sourcePlan.planTitle),
+      description: sourcePlan.planDescription,
+      benefit: sourcePlan.planBenefit,
+      deadline: sourcePlan.planDeadline,
+      scheduledFor: sourcePlan.planScheduledFor,
+      taskIds: List<String>.from(sourcePlan.taskIds),
+    );
+  }
+
+  String _duplicateTitle(String title) {
+    const copySuffix = ' (Copy)';
+    return title.endsWith(copySuffix) ? title : '$title$copySuffix';
+  }
+
   // ============ Plan Activation & Execution ============
 
   /// Clear the active plan

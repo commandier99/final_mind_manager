@@ -9,6 +9,7 @@ class BoardCard extends StatefulWidget {
   final Board board;
   final VoidCallback? onTap;
   final VoidCallback? onEdit;
+  final VoidCallback? onDuplicate;
   final VoidCallback? onDelete;
 
   const BoardCard({
@@ -16,6 +17,7 @@ class BoardCard extends StatefulWidget {
     required this.board,
     this.onTap,
     this.onEdit,
+    this.onDuplicate,
     this.onDelete,
   });
 
@@ -60,8 +62,9 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
   @override
   Widget build(BuildContext context) {
     final canEdit = widget.onEdit != null;
+    final canDuplicate = widget.onDuplicate != null;
     final canDelete = widget.onDelete != null;
-    final hasActions = canEdit || canDelete;
+    final hasActions = canEdit || canDuplicate || canDelete;
     final variant = _BoardVariant.fromBoard(widget.board);
     final colors = _variantColors(variant);
 
@@ -83,7 +86,10 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                 ? null
                 : ActionPane(
                     motion: const ScrollMotion(),
-                    extentRatio: (canEdit ? 0.25 : 0) + (canDelete ? 0.25 : 0),
+                    extentRatio:
+                        (canEdit ? 0.25 : 0) +
+                        (canDuplicate ? 0.25 : 0) +
+                        (canDelete ? 0.25 : 0),
                     children: [
                       if (canEdit)
                         Expanded(
@@ -108,6 +114,46 @@ class _BoardCardState extends State<BoardCard> with RouteAware {
                                       SizedBox(height: 2),
                                       Text(
                                         'Edit',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      if (canDuplicate)
+                        Expanded(
+                          child: Container(
+                            alignment: Alignment.center,
+                            child: Container(
+                              width: 60,
+                              height: 60,
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade500,
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: widget.onDuplicate,
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: const Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.copy,
+                                        color: Colors.white,
+                                        size: 20,
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Duplicate',
                                         style: TextStyle(
                                           color: Colors.white,
                                           fontSize: 10,

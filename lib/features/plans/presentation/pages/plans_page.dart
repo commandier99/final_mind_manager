@@ -40,6 +40,60 @@ class _PlansPageState extends State<PlansPage> {
   Set<String> _selectedFilters = {PlansQueryController.allFilter};
   String _sortBy = 'created_desc';
 
+  Future<void> _duplicatePlan(Plan plan) async {
+    final userProvider = context.read<UserProvider>();
+    final userId = userProvider.userId;
+    final userName = (userProvider.currentUser?.userName ?? '').trim();
+    if (userId == null || userId.isEmpty) return;
+
+    try {
+      final duplicated = await context.read<PlanProvider>().duplicatePlan(
+        sourcePlan: plan,
+        userId: userId,
+        userName: userName.isEmpty ? 'Unknown User' : userName,
+      );
+      if (!mounted || duplicated == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Plan duplicated: ${duplicated.planTitle}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to duplicate plan: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deletePlan(Plan plan) async {
+    try {
+      final ok = await context.read<PlanProvider>().deletePlan(plan.planId);
+      if (!mounted) return;
+      if (ok) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "${plan.planTitle}"')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to delete plan'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to delete plan: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -354,6 +408,8 @@ class _PlansPageState extends State<PlansPage> {
                                             ),
                                           );
                                         },
+                                        onDuplicate: () => _duplicatePlan(plan),
+                                        onDelete: () => _deletePlan(plan),
                                       );
                                     },
                                   ),

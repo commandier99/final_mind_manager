@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../datasources/models/board_model.dart';
 import '../../datasources/providers/board_provider.dart';
 import '../../datasources/providers/board_stats_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
@@ -75,6 +76,35 @@ class _BoardsPageState extends State<BoardsPage> {
     await boardProvider.refreshBoards();
     for (final board in boardProvider.boards) {
       statsProvider.streamStatsForBoard(board.boardId);
+    }
+  }
+
+  Future<void> _duplicateBoard(Board board) async {
+    if (board.boardType == 'personal') {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Personal boards cannot be duplicated.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    try {
+      await context.read<BoardProvider>().duplicateBoard(board);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Duplicated "${board.boardTitle}"')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to duplicate board: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -376,6 +406,9 @@ class _BoardsPageState extends State<BoardsPage> {
                                   builder: (_) => EditBoardDialog(board: board),
                                 );
                               }
+                            : null,
+                        onDuplicate: _userId == board.boardManagerId
+                            ? () => _duplicateBoard(board)
                             : null,
                         onDelete: _userId == board.boardManagerId
                             ? () => BoardDeleteFlowDialog.show(

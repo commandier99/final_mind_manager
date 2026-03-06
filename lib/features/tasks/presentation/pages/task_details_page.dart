@@ -89,6 +89,26 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
     });
   }
 
+  Future<void> _duplicateTask() async {
+    try {
+      final duplicatedTask = await context.read<TaskProvider>().duplicateTask(
+        widget.task,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Task duplicated: ${duplicatedTask.taskTitle}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to duplicate task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     print(
@@ -152,6 +172,13 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                               EditTaskDialog(task: widget.task),
                         );
                       });
+                    },
+                  ),
+                if (canEditTaskDetails)
+                  PopupMenuItem(
+                    child: const Text('Duplicate'),
+                    onTap: () {
+                      Future.delayed(Duration.zero, _duplicateTask);
                     },
                   ),
                 PopupMenuItem(

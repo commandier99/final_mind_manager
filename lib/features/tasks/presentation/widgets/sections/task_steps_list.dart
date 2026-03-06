@@ -230,6 +230,18 @@ class _TaskStepsListState extends State<TaskStepsList> {
                             onEdit: canMutateSteps && canAddStep
                                 ? () => _openEditStepDialog(step)
                                 : null,
+                            onDuplicate: canMutateSteps && canAddStep
+                                ? () async {
+                                    await stepProvider.duplicateStep(step);
+                                    if (!mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Step duplicated'),
+                                        duration: Duration(seconds: 1),
+                                      ),
+                                    );
+                                  }
+                                : null,
                           ),
                         ),
                       ],

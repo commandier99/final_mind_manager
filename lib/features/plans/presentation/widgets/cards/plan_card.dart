@@ -6,6 +6,7 @@ class PlanCard extends StatelessWidget {
   final Plan plan;
   final VoidCallback? onTap;
   final VoidCallback? onActivate;
+  final VoidCallback? onDuplicate;
   final VoidCallback? onDelete;
 
   const PlanCard({
@@ -13,6 +14,7 @@ class PlanCard extends StatelessWidget {
     required this.plan,
     this.onTap,
     this.onActivate,
+    this.onDuplicate,
     this.onDelete,
   });
 
@@ -53,47 +55,88 @@ class PlanCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: Slidable(
-        endActionPane: ActionPane(
-          motion: const ScrollMotion(),
-          extentRatio: 0.25,
-          children: [
-            Expanded(
-              child: Container(
-                alignment: Alignment.center,
-                child: Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade400,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: onDelete,
-                      borderRadius: BorderRadius.circular(12),
-                      child: const Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.delete, color: Colors.white, size: 20),
-                          SizedBox(height: 2),
-                          Text(
-                            'Delete',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
+        endActionPane: (onDuplicate != null || onDelete != null)
+            ? ActionPane(
+                motion: const ScrollMotion(),
+                extentRatio:
+                    (onDuplicate != null ? 0.25 : 0) +
+                    (onDelete != null ? 0.25 : 0),
+                children: [
+                  if (onDuplicate != null)
+                    Expanded(
+                      child: Container(
+                        alignment: Alignment.center,
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade500,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: onDuplicate,
+                              borderRadius: BorderRadius.circular(12),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.copy, color: Colors.white, size: 20),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Duplicate',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
+                  if (onDelete != null)
+                    Expanded(
+                      child: Container(
+                        alignment: Alignment.center,
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade400,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: onDelete,
+                              borderRadius: BorderRadius.circular(12),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.delete, color: Colors.white, size: 20),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Delete',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              )
+            : null,
         child: Builder(
           builder: (context) => GestureDetector(
             onTap: () {
