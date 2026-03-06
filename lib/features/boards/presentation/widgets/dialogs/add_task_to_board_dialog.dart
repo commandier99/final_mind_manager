@@ -227,9 +227,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
       }
 
       // Debug logging
-      print('?? [TaskDialog] Creating task with deadline: $finalDeadline');
+      debugPrint('?? [TaskDialog] Creating task with deadline: $finalDeadline');
       if (finalDeadline == null) {
-        print('?? [TaskDialog] No deadline set for this task');
+        debugPrint('?? [TaskDialog] No deadline set for this task');
       }
 
       // Convert repeat time to HH:mm format
@@ -332,7 +332,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         });
       }
     } catch (e) {
-      print('Error creating task: $e');
+      debugPrint('Error creating task: $e');
       if (mounted) {
         // Close loading modal only
         Navigator.pop(context);
@@ -962,7 +962,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
                           '${_assigneeOptionLabel(entry.key, entry.value)}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                   onChanged: (val) {
                     setState(() {

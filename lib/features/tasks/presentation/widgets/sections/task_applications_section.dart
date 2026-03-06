@@ -151,8 +151,15 @@ class _ApplicationCardState extends State<_ApplicationCard> {
     final updatedTask = widget.task.copyWith(
       taskAssignedTo: widget.userId,
       taskAssignedToName: _user!.userName,
+      taskAssignmentStatus: 'accepted',
+      taskProposedAssigneeId: '',
+      taskProposedAssigneeName: '',
     );
     await taskProvider.updateTask(updatedTask);
+    await TaskApplicationService().deleteApplication(
+      taskId: widget.task.taskId,
+      applicationDocId: widget.applicationDocId,
+    );
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

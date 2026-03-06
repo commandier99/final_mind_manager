@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -127,19 +128,19 @@ class TaskService {
       // Send deadline notification if task has a deadline
       if (normalizedTask.taskDeadline != null &&
           normalizedTask.taskBoardId.isNotEmpty) {
-        print(
+        debugPrint(
           '[Notification] Task has deadline: ${normalizedTask.taskDeadline}, sending notifications...',
         );
         await _sendDeadlineNotification(normalizedTask);
       } else {
-        print(
+        debugPrint(
           '[Notification] Task has no deadline or empty boardId. Deadline: ${normalizedTask.taskDeadline}, BoardId: ${normalizedTask.taskBoardId}',
         );
       }
 
-      print('✅ Task ${normalizedTask.taskId} added successfully');
+      debugPrint('✅ Task ${normalizedTask.taskId} added successfully');
     } catch (e) {
-      print('⚠️ Error adding task: $e');
+      debugPrint('⚠️ Error adding task: $e');
       rethrow;
     }
   }
@@ -167,9 +168,9 @@ class TaskService {
         updatedTask: normalizedTask,
       );
 
-      print('✅ Task ${normalizedTask.taskId} updated successfully');
+      debugPrint('✅ Task ${normalizedTask.taskId} updated successfully');
     } catch (e) {
-      print('⚠️ Error updating task: $e');
+      debugPrint('⚠️ Error updating task: $e');
       rethrow;
     }
   }
@@ -290,9 +291,9 @@ class TaskService {
         );
       }
 
-      print('✅ Task ${task.taskId} soft-deleted');
+      debugPrint('✅ Task ${task.taskId} soft-deleted');
     } catch (e) {
-      print('⚠️ Error soft deleting task: $e');
+      debugPrint('⚠️ Error soft deleting task: $e');
     }
   }
 
@@ -314,7 +315,7 @@ class TaskService {
       if (taskData != null) {
         final user = _auth.currentUser;
         if (user != null) {
-          print('[DEBUG] TaskService: Logging task_deleted activity event');
+          debugPrint('[DEBUG] TaskService: Logging task_deleted activity event');
           await _activityEventService.logEvent(
             userId: user.uid,
             userName: user.displayName ?? 'Unknown User',
@@ -334,9 +335,9 @@ class TaskService {
         }
       }
 
-      print('✅ Task $taskId permanently deleted');
+      debugPrint('✅ Task $taskId permanently deleted');
     } catch (e) {
-      print('⚠️ Error hard deleting task: $e');
+      debugPrint('⚠️ Error hard deleting task: $e');
       rethrow;
     }
   }
@@ -418,9 +419,9 @@ class TaskService {
         );
       }
 
-      print('✅ Task ${task.taskId} done status toggled to $effectiveIsDone');
+      debugPrint('✅ Task ${task.taskId} done status toggled to $effectiveIsDone');
     } catch (e) {
-      print('⚠️ Error toggling task done status: $e');
+      debugPrint('⚠️ Error toggling task done status: $e');
     }
   }
 
@@ -461,11 +462,11 @@ class TaskService {
     Query query = _tasks.where('taskIsDeleted', isEqualTo: false);
 
     if (boardId != null) {
-      print('[DEBUG] TaskService: Streaming tasks for boardId = $boardId');
+      debugPrint('[DEBUG] TaskService: Streaming tasks for boardId = $boardId');
       query = query.where('taskBoardId', isEqualTo: boardId);
     }
     if (ownerId != null) {
-      print('[DEBUG] TaskService: Streaming tasks for ownerId = $ownerId');
+      debugPrint('[DEBUG] TaskService: Streaming tasks for ownerId = $ownerId');
       query = query.where('taskOwnerId', isEqualTo: ownerId);
     }
 
@@ -480,13 +481,13 @@ class TaskService {
                 doc.id,
               );
               if (boardId != null) {
-                print(
+                debugPrint(
                   '[DEBUG] TaskService: Loaded task ${task.taskId} for board $boardId with taskBoardId = ${task.taskBoardId}',
                 );
               }
               return task;
             } catch (e) {
-              print('⚠️ Error parsing task ${doc.id}: $e');
+              debugPrint('⚠️ Error parsing task ${doc.id}: $e');
               return null;
             }
           })
@@ -494,7 +495,7 @@ class TaskService {
           .toList(); // filter out nulls
 
       if (boardId != null) {
-        print(
+        debugPrint(
           '[DEBUG] TaskService: Returning ${tasks.length} tasks for boardId = $boardId',
         );
       }
@@ -539,7 +540,7 @@ class TaskService {
                       doc.id,
                     );
                   } catch (e) {
-                    print('⚠️ Error parsing task ${doc.id}: $e');
+                    debugPrint('⚠️ Error parsing task ${doc.id}: $e');
                     return null;
                   }
                 })
@@ -563,7 +564,7 @@ class TaskService {
                       doc.id,
                     );
                   } catch (e) {
-                    print('⚠️ Error parsing task ${doc.id}: $e');
+                    debugPrint('⚠️ Error parsing task ${doc.id}: $e');
                     return null;
                   }
                 })
@@ -632,7 +633,7 @@ class TaskService {
                     doc.id,
                   );
                 } catch (e) {
-                  print('⚠️ Error parsing task ${doc.id}: $e');
+                  debugPrint('⚠️ Error parsing task ${doc.id}: $e');
                   return null;
                 }
               })
@@ -649,7 +650,7 @@ class TaskService {
         return Task.fromMap(doc.data() as Map<String, dynamic>, doc.id);
       }
     } catch (e) {
-      print('⚠️ Error fetching task $taskId: $e');
+      debugPrint('⚠️ Error fetching task $taskId: $e');
     }
     return null;
   }
@@ -702,9 +703,9 @@ class TaskService {
         metadata: {'taskTitle': task?.taskTitle ?? ''},
       );
 
-      print('Task $taskId accepted by $userName');
+      debugPrint('Task $taskId accepted by $userName');
     } catch (e) {
-      print('Error accepting task: $e');
+      debugPrint('Error accepting task: $e');
       rethrow;
     }
   }
@@ -750,9 +751,9 @@ class TaskService {
         metadata: {'taskTitle': task?.taskTitle ?? ''},
       );
 
-      print('Task $taskId declined by $userName');
+      debugPrint('Task $taskId declined by $userName');
     } catch (e) {
-      print('Error declining task: $e');
+      debugPrint('Error declining task: $e');
       rethrow;
     }
   }
@@ -776,7 +777,7 @@ class TaskService {
           .get();
 
       if (existingRequest.docs.isNotEmpty) {
-        print('⚠️ User already has a pending volunteer request for this task');
+        debugPrint('⚠️ User already has a pending volunteer request for this task');
         return;
       }
 
@@ -810,29 +811,29 @@ class TaskService {
         metadata: {'taskTitle': task.taskTitle, 'requestId': requestId},
       );
 
-      print('✅ $userName requested to volunteer for task $taskId');
+      debugPrint('✅ $userName requested to volunteer for task $taskId');
     } catch (e) {
-      print('⚠️ Error creating volunteer request: $e');
+      debugPrint('⚠️ Error creating volunteer request: $e');
     }
   }
 
   /// Send deadline notification to the assigned user
   Future<void> _sendDeadlineNotification(Task task) async {
     try {
-      print(
+      debugPrint(
         '[Notification] Task has deadline: ${task.taskDeadline}, sending notifications...',
       );
 
       // Send notification to the person assigned to the task
       final assignedUserId = task.taskAssignedTo;
       if (assignedUserId.isEmpty || assignedUserId == 'None') {
-        print(
+        debugPrint(
           '[Notification] ⚠️ Task has no assignee, skipping deadline notification',
         );
         return;
       }
 
-      print('[Notification] Starting to send deadline notifications...');
+      debugPrint('[Notification] Starting to send deadline notifications...');
 
       var boardTitle = (task.taskBoardTitle ?? '').trim();
       var boardManagerName = '';
@@ -886,7 +887,7 @@ class TaskService {
         },
       );
     } catch (e) {
-      print('[Notification] ❌ Error sending deadline notification: $e');
+      debugPrint('[Notification] ❌ Error sending deadline notification: $e');
     }
   }
 

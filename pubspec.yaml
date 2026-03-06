@@ -51,6 +51,8 @@ dependencies:
   timeago: ^3.7.0
   firebase_messaging: ^16.1.1
   flutter_local_notifications: ^19.0.0
+  async: ^2.13.0
+  collection: ^1.19.1
 
 dev_dependencies:
   flutter_test:

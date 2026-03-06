@@ -5,7 +5,6 @@ import 'package:mind_manager_final/features/plans/presentation/controllers/plans
 Plan _plan({
   required String id,
   required String title,
-  required String style,
   DateTime? deadline,
   required DateTime createdAt,
 }) {
@@ -16,7 +15,6 @@ Plan _plan({
     planTitle: title,
     planDescription: 'desc',
     planCreatedAt: createdAt,
-    planStyle: style,
     planDeadline: deadline,
     totalTasks: 10,
     completedTasks: 5,
@@ -32,13 +30,11 @@ void main() {
         _plan(
           id: '1',
           title: 'Write thesis',
-          style: 'GTD',
           createdAt: DateTime(2026, 1, 1),
         ),
         _plan(
           id: '2',
           title: 'Workout',
-          style: 'Checklist',
           createdAt: DateTime(2026, 1, 2),
         ),
       ];
@@ -54,18 +50,18 @@ void main() {
       expect(result.first.planId, '2');
     });
 
-    test('filters by style', () {
+    test('filters by deadline', () {
       final plans = [
         _plan(
           id: '1',
           title: 'A',
-          style: 'GTD',
+          deadline: DateTime(2026, 1, 1),
           createdAt: DateTime(2026, 1, 1),
         ),
         _plan(
           id: '2',
           title: 'B',
-          style: 'Pomodoro',
+          deadline: null,
           createdAt: DateTime(2026, 1, 2),
         ),
       ];
@@ -73,12 +69,12 @@ void main() {
       final result = controller.applyQuery(
         plans: plans,
         searchQuery: '',
-        selectedFilters: {'style_Pomodoro'},
+        selectedFilters: {'deadline_None'},
         sortBy: 'created_desc',
       );
 
       expect(result.length, 1);
-      expect(result.first.planStyle, 'Pomodoro');
+      expect(result.first.planId, '2');
     });
   });
 }

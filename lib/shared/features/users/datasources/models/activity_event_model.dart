@@ -1,3 +1,6 @@
+// ignore_for_file: non_constant_identifier_names
+
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ActivityEvent {
@@ -26,9 +29,9 @@ class ActivityEvent {
 
   factory ActivityEvent.fromMap(Map<String, dynamic> data, String documentId) {
     final activityType = data['activityType'];
-    print('[DEBUG] ActivityEvent.fromMap: Processing document $documentId');
-    print('[DEBUG] ActivityEvent.fromMap: Raw data = $data');
-    print('[DEBUG] ActivityEvent.fromMap: activityType value = $activityType (type: ${activityType.runtimeType})');
+    debugPrint('[DEBUG] ActivityEvent.fromMap: Processing document $documentId');
+    debugPrint('[DEBUG] ActivityEvent.fromMap: Raw data = $data');
+    debugPrint('[DEBUG] ActivityEvent.fromMap: activityType value = $activityType (type: ${activityType.runtimeType})');
     
     return ActivityEvent(
       ActEvId: documentId,

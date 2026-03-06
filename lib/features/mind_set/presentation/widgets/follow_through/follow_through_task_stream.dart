@@ -89,6 +89,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
       _showBlockedByDependencyMessage(dependencyBlocker);
       return;
     }
+    if (!mounted) return;
 
     Task? focusedTask;
     for (final candidate in taskProvider.tasks) {
@@ -122,6 +123,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
             ],
           ),
         );
+        if (!mounted) return;
 
         if (shouldPause != true) return;
       }

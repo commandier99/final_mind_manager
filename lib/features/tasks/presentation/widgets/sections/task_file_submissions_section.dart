@@ -28,13 +28,14 @@ class _TaskFileSubmissionsSectionState
   @override
   void dispose() {
     // Upload continues in background even after dispose
-    print(
+    debugPrint(
       '🗑️ [FileSubmissions] Widget disposed, upload continues in background',
     );
     super.dispose();
   }
 
   Future<void> _pickAndUploadFiles() async {
+    final uploadProgressProvider = context.read<UploadProgressProvider>();
     try {
       // Check current storage usage before opening file picker
       const int maxBytes = 100 * 1024 * 1024; // 100 MB
@@ -57,7 +58,7 @@ class _TaskFileSubmissionsSectionState
         return;
       }
 
-      print('📁 [FilePicker] Opening file picker...');
+      debugPrint('📁 [FilePicker] Opening file picker...');
 
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: true,
@@ -65,19 +66,19 @@ class _TaskFileSubmissionsSectionState
         withData: true, // IMPORTANT: Load file bytes
       );
 
-      print('📁 [FilePicker] Picker closed');
-      print('📁 [FilePicker] Result is null: ${result == null}');
+      debugPrint('📁 [FilePicker] Picker closed');
+      debugPrint('📁 [FilePicker] Result is null: ${result == null}');
 
       if (result != null && result.files.isNotEmpty) {
-        print('📁 [FilePicker] Files selected: ${result.files.length}');
+        debugPrint('📁 [FilePicker] Files selected: ${result.files.length}');
 
         for (int i = 0; i < result.files.length; i++) {
           final file = result.files[i];
-          print('📁 [FilePicker] File ${i + 1}: ${file.name}');
-          print('📁 [FilePicker] - Size: ${file.size}');
-          print('📁 [FilePicker] - Path: ${file.path}');
-          print('📁 [FilePicker] - Has bytes: ${file.bytes != null}');
-          print('📁 [FilePicker] - Extension: ${file.extension}');
+          debugPrint('📁 [FilePicker] File ${i + 1}: ${file.name}');
+          debugPrint('📁 [FilePicker] - Size: ${file.size}');
+          debugPrint('📁 [FilePicker] - Path: ${file.path}');
+          debugPrint('📁 [FilePicker] - Has bytes: ${file.bytes != null}');
+          debugPrint('📁 [FilePicker] - Extension: ${file.extension}');
         }
 
         // Enforce max 100MB per task capacity (existing + new)
@@ -113,7 +114,6 @@ class _TaskFileSubmissionsSectionState
         }
 
         // Start background upload - doesn't await, continues in background
-        final uploadProgressProvider = context.read<UploadProgressProvider>();
 
         _submissionService
             .createSubmission(
@@ -131,7 +131,7 @@ class _TaskFileSubmissionsSectionState
                   },
             )
             .then((submissionId) {
-              print(
+              debugPrint(
                 '✅ [Upload] Background upload completed for task ${widget.task.taskId}',
               );
               uploadProgressProvider.clearProgress(submissionId);
@@ -144,15 +144,13 @@ class _TaskFileSubmissionsSectionState
                 );
               } else {
                 // Widget disposed during upload, but upload completed in background
-                print(
+                debugPrint(
                   '🗑️ [Upload] Widget disposed, upload completed in background',
                 );
               }
             })
             .catchError((e) {
-              print('❌ [Upload] Background upload failed: $e');
-              final uploadProgressProvider = context
-                  .read<UploadProgressProvider>();
+              debugPrint('❌ [Upload] Background upload failed: $e');
               // Clear all active uploads on error
               for (final submissionId
                   in uploadProgressProvider.uploads.keys.toList()) {
@@ -167,15 +165,15 @@ class _TaskFileSubmissionsSectionState
                 );
               } else {
                 // Widget disposed during error handling
-                print('🗑️ [Upload] Widget disposed during error handling');
+                debugPrint('🗑️ [Upload] Widget disposed during error handling');
               }
             });
       } else {
         // User cancelled picker without selecting files
-        print('📁 [FilePicker] No files selected or result is null');
+        debugPrint('📁 [FilePicker] No files selected or result is null');
       }
     } catch (e) {
-      print('❌ [FilePicker] Error: $e');
+      debugPrint('❌ [FilePicker] Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -189,6 +187,7 @@ class _TaskFileSubmissionsSectionState
 
   bool _canUploadFiles() {
     if (widget.task.taskIsDone) return false;
+    if (!_isTaskFocusedStatus(widget.task.taskStatus)) return false;
     final userProvider = context.read<UserProvider>();
     final currentUserId = userProvider.userId ?? '';
 
@@ -199,6 +198,11 @@ class _TaskFileSubmissionsSectionState
     if (widget.task.taskAssignedTo == currentUserId) return true;
 
     return false;
+  }
+
+  bool _isTaskFocusedStatus(String status) {
+    final normalized = status.toUpperCase().replaceAll(' ', '_');
+    return normalized == 'IN_PROGRESS' || normalized == 'FOCUSED';
   }
 
   Board? _findBoard() {
@@ -343,8 +347,8 @@ class _TaskFileSubmissionsSectionState
   Widget build(BuildContext context) {
     final canUpload = _canUploadFiles();
 
-    print('🔍 [FileSubmissions] Building for task: ${widget.task.taskId}');
-    print('🔍 [FileSubmissions] Can upload: $canUpload');
+    debugPrint('🔍 [FileSubmissions] Building for task: ${widget.task.taskId}');
+    debugPrint('🔍 [FileSubmissions] Can upload: $canUpload');
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
@@ -487,7 +491,7 @@ class _TaskFileSubmissionsSectionState
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      'Only the task owner or assigned member can attach files.',
+                      'File uploads are only available while the task is focused (In Progress) and you are the owner/assignee.',
                       style: TextStyle(color: Colors.grey[700], fontSize: 14),
                     ),
                   ),
@@ -502,13 +506,13 @@ class _TaskFileSubmissionsSectionState
               widget.task.taskId,
             ),
             builder: (context, snapshot) {
-              print(
+              debugPrint(
                 '🔍 [FileSubmissions] StreamBuilder state: ${snapshot.connectionState}',
               );
-              print('🔍 [FileSubmissions] Has error: ${snapshot.hasError}');
-              print('🔍 [FileSubmissions] Error: ${snapshot.error}');
-              print('🔍 [FileSubmissions] Has data: ${snapshot.hasData}');
-              print(
+              debugPrint('🔍 [FileSubmissions] Has error: ${snapshot.hasError}');
+              debugPrint('🔍 [FileSubmissions] Error: ${snapshot.error}');
+              debugPrint('🔍 [FileSubmissions] Has data: ${snapshot.hasData}');
+              debugPrint(
                 '🔍 [FileSubmissions] Data length: ${snapshot.data?.length ?? 0}',
               );
 
@@ -535,11 +539,11 @@ class _TaskFileSubmissionsSectionState
 
               final submissions = snapshot.data ?? [];
 
-              print(
+              debugPrint(
                 '🔍 [FileSubmissions] Submissions count: ${submissions.length}',
               );
               if (submissions.isNotEmpty) {
-                print(
+                debugPrint(
                   '🔍 [FileSubmissions] First submission has ${submissions[0].files.length} files',
                 );
               }
@@ -549,14 +553,14 @@ class _TaskFileSubmissionsSectionState
               int usedBytes = 0;
               for (final s in submissions) {
                 for (final f in s.files) {
-                  print(
+                  debugPrint(
                     '📊 [Storage] File: ${f.fileName}, Size: ${f.fileSize} bytes',
                   );
                   usedBytes += f.fileSize;
                 }
               }
-              print('📊 [Storage] Total used bytes: $usedBytes');
-              print('📊 [Storage] Max bytes: $maxBytes');
+              debugPrint('📊 [Storage] Total used bytes: $usedBytes');
+              debugPrint('📊 [Storage] Max bytes: $maxBytes');
               final double progress = (usedBytes / maxBytes).clamp(0.0, 1.0);
               final String usedMb = (usedBytes / (1024 * 1024)).toStringAsFixed(
                 1,
@@ -565,9 +569,9 @@ class _TaskFileSubmissionsSectionState
                   ((maxBytes - usedBytes) / (1024 * 1024))
                       .clamp(0, 100)
                       .toStringAsFixed(1);
-              print('📊 [Storage] Progress: $progress');
-              print('📊 [Storage] Used MB: $usedMb');
-              print('📊 [Storage] Remaining MB: $remainingMb');
+              debugPrint('📊 [Storage] Progress: $progress');
+              debugPrint('📊 [Storage] Used MB: $usedMb');
+              debugPrint('📊 [Storage] Remaining MB: $remainingMb');
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -576,9 +580,9 @@ class _TaskFileSubmissionsSectionState
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withOpacity(0.05),
+                      color: Colors.blue.withValues(alpha: 0.05),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                      border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -742,7 +746,7 @@ class _TaskFileSubmissionsSectionState
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.15),
+                    color: statusColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
@@ -841,9 +845,9 @@ class _TaskFileSubmissionsSectionState
                         vertical: 6,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.05),
+                        color: Colors.blue.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
                       ),
                       child: IntrinsicHeight(
                         child: Row(
@@ -978,13 +982,13 @@ class _TaskFileSubmissionsSectionState
   }
 
   Future<void> _downloadFile(SubmissionFile file) async {
-    print('🔵 Download button tapped!');
-    print('📥 File name: ${file.fileName}');
-    print('📥 File URL: ${file.fileUrl}');
+    debugPrint('🔵 Download button tapped!');
+    debugPrint('📥 File name: ${file.fileName}');
+    debugPrint('📥 File URL: ${file.fileUrl}');
 
     try {
       final url = Uri.parse(file.fileUrl);
-      print('📥 Parsed URL: $url');
+      debugPrint('📥 Parsed URL: $url');
 
       // Show loading indicator
       if (mounted) {
@@ -1009,7 +1013,7 @@ class _TaskFileSubmissionsSectionState
         );
       }
 
-      print('📥 Attempting to launch URL...');
+      debugPrint('📥 Attempting to launch URL...');
 
       // Try different launch modes
       bool launched = false;
@@ -1017,18 +1021,18 @@ class _TaskFileSubmissionsSectionState
       // Try mode 1: External application
       try {
         launched = await launchUrl(url, mode: LaunchMode.externalApplication);
-        print('✅ External application mode: $launched');
+        debugPrint('✅ External application mode: $launched');
       } catch (e) {
-        print('❌ External application failed: $e');
+        debugPrint('❌ External application failed: $e');
       }
 
       // Try mode 2: Platform default
       if (!launched) {
         try {
           launched = await launchUrl(url, mode: LaunchMode.platformDefault);
-          print('✅ Platform default mode: $launched');
+          debugPrint('✅ Platform default mode: $launched');
         } catch (e) {
-          print('❌ Platform default failed: $e');
+          debugPrint('❌ Platform default failed: $e');
         }
       }
 
@@ -1039,9 +1043,9 @@ class _TaskFileSubmissionsSectionState
             url,
             mode: LaunchMode.externalNonBrowserApplication,
           );
-          print('✅ External non-browser mode: $launched');
+          debugPrint('✅ External non-browser mode: $launched');
         } catch (e) {
-          print('❌ External non-browser failed: $e');
+          debugPrint('❌ External non-browser failed: $e');
         }
       }
 
@@ -1049,9 +1053,9 @@ class _TaskFileSubmissionsSectionState
         throw 'Could not open file URL with any launch mode';
       }
 
-      print('✅ File opened successfully');
+      debugPrint('✅ File opened successfully');
     } catch (e) {
-      print('❌ Error downloading file: $e');
+      debugPrint('❌ Error downloading file: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1063,7 +1067,7 @@ class _TaskFileSubmissionsSectionState
               textColor: Colors.white,
               onPressed: () {
                 // User can manually copy and open
-                print('Copy this URL: ${file.fileUrl}');
+                debugPrint('Copy this URL: ${file.fileUrl}');
               },
             ),
           ),

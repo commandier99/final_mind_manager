@@ -150,6 +150,7 @@ Future<TaskDoneEarlyResult?> showTaskDoneEarlyDialog(
                 ),
               ).then((taskId) {
                 if (taskId != null) {
+                  if (!context.mounted) return;
                   Navigator.pop(
                     context,
                     TaskDoneEarlyResult(
@@ -241,7 +242,7 @@ Future<TimerDoneResult?> showTimerDoneDialog(
               ),
               const SizedBox(height: 8),
               DropdownButtonFormField<String>(
-                value: preselectedTaskId,
+                initialValue: preselectedTaskId,
                 decoration: const InputDecoration(
                   labelText: 'Choose task',
                   border: OutlineInputBorder(),
@@ -339,6 +340,7 @@ Future<BreakEndResult?> showBreakEndConfirmationDialog(
               ),
             ).then((taskId) {
               if (taskId != null) {
+                if (!context.mounted) return;
                 Navigator.pop(
                   context,
                   BreakEndResult(confirmed: false, selectedTaskId: taskId),

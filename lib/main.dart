@@ -32,7 +32,7 @@ void main() async {
   // Initialize permission handler
   await Permission.notification.isDenied.then((isDenied) {
     if (isDenied) {
-      print('[main.dart] Notification permission is denied');
+      debugPrint('[main.dart] Notification permission is denied');
     }
   });
 
@@ -76,7 +76,7 @@ class MyApp extends StatelessWidget {
             // Connect AuthenticationProvider to UserProvider via callback
             if (authProvider != null) {
               authProvider.onUserAuthenticated = (userId) {
-                print(
+                debugPrint(
                   '[DEBUG] main.dart: onUserAuthenticated callback triggered for userId: $userId',
                 );
                 userProvider.loadUserData(userId);

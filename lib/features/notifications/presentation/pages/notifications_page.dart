@@ -161,7 +161,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
     if (_hasInitializedStreams) return;
 
     final userId = FirebaseAuth.instance.currentUser?.uid;
-    print('[NotificationsPage] ensureStreams: userId = $userId');
+    debugPrint('[NotificationsPage] ensureStreams: userId = $userId');
 
     if (userId == null) return;
 
@@ -171,7 +171,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       _hasInitializedStreams = true;
 
       // Stream board requests (invitations and join requests)
-      print('[NotificationsPage] Streaming board requests...');
+      debugPrint('[NotificationsPage] Streaming board requests...');
       context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
       context.read<BoardRequestProvider>().streamInvitationsSentByManager(
         userId,
@@ -179,7 +179,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
       context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
 
       // Stream in-app notifications
-      print('[NotificationsPage] Streaming in-app notifications...');
+      debugPrint('[NotificationsPage] Streaming in-app notifications...');
       context.read<InAppNotificationProvider>().streamNotificationsByUser(
         userId,
       );

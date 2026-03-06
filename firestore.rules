@@ -163,6 +163,110 @@ service cloud.firestore {
           request.resource.data.userId != request.auth.uid;
       }
 
+      function notificationTaskId() {
+        return (request.resource.data.relatedId is string &&
+            request.resource.data.relatedId != '')
+          ? request.resource.data.relatedId
+          : (
+              request.resource.data.metadata is map &&
+              request.resource.data.metadata.taskId is string &&
+              request.resource.data.metadata.taskId != ''
+            )
+            ? request.resource.data.metadata.taskId
+            : '';
+      }
+
+      function isTaskAssignmentNotificationCreate() {
+        let taskId = notificationTaskId();
+        return request.resource.data.category == 'task_assigned' &&
+          taskId != '' &&
+          exists(/databases/$(database)/documents/tasks/$(taskId)) &&
+          (
+            // Task owner can notify assigned/proposed assignee
+            (
+              request.auth.uid ==
+                get(/databases/$(database)/documents/tasks/$(taskId)).data.taskOwnerId &&
+              (
+                request.resource.data.userId ==
+                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskAssignedTo ||
+                request.resource.data.userId ==
+                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskProposedAssigneeId
+              )
+            ) ||
+            // Board manager/supervisor can notify assigned/proposed assignee for board tasks
+            (
+              get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId != null &&
+              get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId != '' &&
+              (
+                request.resource.data.userId ==
+                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskAssignedTo ||
+                request.resource.data.userId ==
+                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskProposedAssigneeId
+              ) &&
+              (
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId)).data.boardManagerId ||
+                get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
+              )
+            )
+          );
+      }
+
+      function isTaskApplicationNotificationCreate() {
+        return request.resource.data.category == 'approval' &&
+          request.resource.data.relatedId is string &&
+          exists(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)) &&
+          (
+            // A task participant can notify task owner/board reviewers about an application
+            (
+              (
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo ||
+                (
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
+                  request.auth.uid in
+                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberIds
+                )
+              ) &&
+              request.resource.data.userId != request.auth.uid &&
+              (
+                request.resource.data.userId ==
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
+                (
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
+                  (
+                    request.resource.data.userId ==
+                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.boardManagerId ||
+                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberRoles[request.resource.data.userId] == 'supervisor'
+                  )
+                )
+              )
+            ) ||
+            // Task owner/board reviewers can notify assignee
+            (
+              request.resource.data.userId ==
+                get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo &&
+              (
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
+                (
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
+                  (
+                    request.auth.uid ==
+                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.boardManagerId ||
+                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
+                  )
+                )
+              )
+            )
+          );
+      }
+
       function hasValidNotificationPayload() {
         return request.resource.data.userId is string &&
           request.resource.data.userId != '' &&
@@ -181,7 +285,9 @@ service cloud.firestore {
         (isSelfNotificationCreate() ||
          isInviteNotificationCreate() ||
          isApprovalNotificationCreate() ||
-         isSuggestionNotificationCreate());
+         isSuggestionNotificationCreate() ||
+         isTaskAssignmentNotificationCreate() ||
+         isTaskApplicationNotificationCreate());
 
       // Allow users to READ their own notifications
       allow read: if request.auth != null &&
@@ -528,8 +634,7 @@ service cloud.firestore {
 
       allow create: if request.auth != null &&
         request.resource.data.suggestionAuthorId == request.auth.uid &&
-        (isBoardManager(request.resource.data.suggestionBoardId) ||
-         isBoardSupervisor(request.resource.data.suggestionBoardId));
+        isBoardMember(request.resource.data.suggestionBoardId);
 
       allow update: if request.auth != null &&
         (resource.data.suggestionAuthorId == request.auth.uid ||
@@ -580,26 +685,38 @@ service cloud.firestore {
             request.resource.data.taskBoardLane == 'drafts'))));
 
       allow update: if request.auth != null &&
-        resource.data.taskIsDone != true &&
         (
           (
-            resource.data.taskBoardId != null &&
-            resource.data.taskBoardId != '' &&
-            (isBoardManager(resource.data.taskBoardId) ||
-             isBoardSupervisor(resource.data.taskBoardId))
+            // Assigned members can only update reminder fields.
+            request.auth.uid == resource.data.taskAssignedTo &&
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'taskReminderSentAt',
+              'taskDeadlineMissed'
+            ])
           ) ||
           (
-            (resource.data.taskBoardId == null ||
-             resource.data.taskBoardId == '') &&
-            resource.data.taskOwnerId == request.auth.uid
+            resource.data.taskIsDone != true &&
+            (
+              (
+                resource.data.taskBoardId != null &&
+                resource.data.taskBoardId != '' &&
+                (isBoardManager(resource.data.taskBoardId) ||
+                 isBoardSupervisor(resource.data.taskBoardId))
+              ) ||
+              (
+                (resource.data.taskBoardId == null ||
+                 resource.data.taskBoardId == '') &&
+                resource.data.taskOwnerId == request.auth.uid
+              )
+            ) &&
+            !(
+              resource.data.taskBoardId != null &&
+              resource.data.taskBoardId != '' &&
+              resource.data.taskBoardLane == 'drafts' &&
+              request.resource.data.taskBoardLane == 'published' &&
+              !isBoardManager(resource.data.taskBoardId)
+            )
           )
-        ) &&
-        !(
-          resource.data.taskBoardId != null &&
-          resource.data.taskBoardId != '' &&
-          resource.data.taskBoardLane == 'drafts' &&
-          request.resource.data.taskBoardLane == 'published' &&
-          !isBoardManager(resource.data.taskBoardId)
         );
 
       allow delete: if request.auth != null &&
@@ -681,6 +798,23 @@ service cloud.firestore {
         return request.auth != null && request.auth.uid == task.taskAssignedTo;
       }
 
+      function canManageParentTask(taskId) {
+        let task = parentTask(taskId);
+        return request.auth != null &&
+          (
+            request.auth.uid == task.taskOwnerId ||
+            request.auth.uid == task.taskAssignedTo ||
+            (
+              task.taskBoardId != null &&
+              task.taskBoardId != '' &&
+              (
+                request.auth.uid == get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
+                get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
+              )
+            )
+          );
+      }
+
       function isParentTaskOpen(taskId) {
         let task = parentTask(taskId);
         return task.taskIsDone != true;
@@ -693,15 +827,15 @@ service cloud.firestore {
         resource.data.stepIsDeleted == false;
 
       allow create: if request.auth != null &&
-        isParentTaskAssignee(request.resource.data.parentTaskId) &&
+        canManageParentTask(request.resource.data.parentTaskId) &&
         isParentTaskOpen(request.resource.data.parentTaskId);
 
       allow update: if request.auth != null &&
-        isParentTaskAssignee(resource.data.parentTaskId) &&
+        canManageParentTask(resource.data.parentTaskId) &&
         isParentTaskOpen(resource.data.parentTaskId);
 
       allow delete: if request.auth != null &&
-        isParentTaskAssignee(resource.data.parentTaskId) &&
+        canManageParentTask(resource.data.parentTaskId) &&
         isParentTaskOpen(resource.data.parentTaskId);
     }
 

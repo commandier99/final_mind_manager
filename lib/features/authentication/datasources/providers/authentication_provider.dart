@@ -105,7 +105,7 @@ class AuthenticationProvider extends ChangeNotifier {
         await _syncLoginMetadata(_user!.uid);
         // Trigger UserProvider to load user data
         onUserAuthenticated?.call(_user!.uid);
-        print(
+        debugPrint(
           '✅ [AuthenticationProvider] User signed in, triggering user data load',
         );
       }
@@ -154,40 +154,40 @@ class AuthenticationProvider extends ChangeNotifier {
     _error = null;
 
     try {
-      print('🔵 [AuthenticationProvider] Starting Google Sign-In...');
+      debugPrint('🔵 [AuthenticationProvider] Starting Google Sign-In...');
       // Sign out first to force the account picker to show
       await _googleSignIn.signOut();
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
       if (googleUser == null) {
-        print('⚠️ [AuthenticationProvider] Google Sign-In cancelled by user');
+        debugPrint('⚠️ [AuthenticationProvider] Google Sign-In cancelled by user');
         _setLoading(false);
         return;
       }
 
-      print('🔵 [AuthenticationProvider] Getting Google authentication...');
+      debugPrint('🔵 [AuthenticationProvider] Getting Google authentication...');
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
-      print('🔵 [AuthenticationProvider] Creating Firebase credential...');
+      debugPrint('🔵 [AuthenticationProvider] Creating Firebase credential...');
       final credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      print('🔵 [AuthenticationProvider] Signing in to Firebase...');
+      debugPrint('🔵 [AuthenticationProvider] Signing in to Firebase...');
       final userCredential = await FirebaseAuth.instance.signInWithCredential(
         credential,
       );
 
       _user = userCredential.user;
-      print(
+      debugPrint(
         '🔵 [AuthenticationProvider] Firebase sign-in complete. User: ${_user?.email}',
       );
 
       if (_user != null) {
         // Check if user document already exists to determine if this is a new user
-        print(
+        debugPrint(
           '🔵 [AuthenticationProvider] Checking if user document exists...',
         );
         final userDoc = await FirebaseFirestore.instance
@@ -199,7 +199,7 @@ class AuthenticationProvider extends ChangeNotifier {
         try {
           if (isNewUser) {
             // Create complete user document for NEW users
-            print('🔵 [AuthenticationProvider] Creating new user document...');
+            debugPrint('🔵 [AuthenticationProvider] Creating new user document...');
             final newUser = UserModel(
               userId: _user!.uid,
               userEmail: _user!.email!,
@@ -218,12 +218,12 @@ class AuthenticationProvider extends ChangeNotifier {
               userTimezone: _currentTimezoneOffsetLabel(),
             );
             await _userService.saveUser(newUser);
-            print(
+            debugPrint(
               '✅ [AuthenticationProvider] New user document and user_stats created',
             );
           } else {
             // Update only specific fields for EXISTING users to preserve their data
-            print('🔵 [AuthenticationProvider] Updating existing user...');
+            debugPrint('🔵 [AuthenticationProvider] Updating existing user...');
             final updates = <String, dynamic>{};
 
             // Only update email verification status and profile picture if they changed
@@ -241,30 +241,30 @@ class AuthenticationProvider extends ChangeNotifier {
             // Update the fields if there are any changes
             if (updates.isNotEmpty) {
               await _userService.updateUserFields(_user!.uid, updates);
-              print(
+              debugPrint(
                 '✅ [AuthenticationProvider] Existing user updated with: $updates',
               );
             } else {
-              print(
+              debugPrint(
                 'ℹ️ [AuthenticationProvider] No updates needed for existing user',
               );
             }
           }
         } catch (e) {
-          print('❌ [AuthenticationProvider] Error creating user document: $e');
+          debugPrint('❌ [AuthenticationProvider] Error creating user document: $e');
           _error = 'Failed to create user profile: $e';
           return;
         }
 
         // Trigger UserProvider to load user data
         onUserAuthenticated?.call(_user!.uid);
-        print(
+        debugPrint(
           '✅ [AuthenticationProvider] Google sign-in successful, triggering user data load',
         );
       }
     } catch (e, stackTrace) {
-      print('❌ [AuthenticationProvider] Google Sign-In error: $e');
-      print('❌ [AuthenticationProvider] Stack trace: $stackTrace');
+      debugPrint('❌ [AuthenticationProvider] Google Sign-In error: $e');
+      debugPrint('❌ [AuthenticationProvider] Stack trace: $stackTrace');
       _error = _getErrorMessage(e);
     } finally {
       _setLoading(false);

@@ -31,7 +31,7 @@ class InAppNotificationProvider extends ChangeNotifier {
 
   /// Stream notifications for a user
   void streamNotificationsByUser(String userId) {
-     print('[InAppNotificationProvider] streamNotificationsByUser called for userId: $userId');
+     debugPrint('[InAppNotificationProvider] streamNotificationsByUser called for userId: $userId');
    
      // Cancel previous subscription if any
      _notificationSubscription?.cancel();
@@ -41,7 +41,7 @@ class InAppNotificationProvider extends ChangeNotifier {
 
      _notificationSubscription = _service.streamNotificationsByUser(userId).listen(
       (notifications) {
-        print('[InAppNotificationProvider] Received ${notifications.length} notifications');
+        debugPrint('[InAppNotificationProvider] Received ${notifications.length} notifications');
         _notifications = notifications;
         _unreadCount = notifications.where((n) => !n.isRead).length;
         _handleNewNotifications(notifications);
@@ -50,7 +50,7 @@ class InAppNotificationProvider extends ChangeNotifier {
         notifyListeners();
       },
       onError: (e) {
-        print('[InAppNotificationProvider] Error streaming: $e');
+        debugPrint('[InAppNotificationProvider] Error streaming: $e');
         _error = e.toString();
         _isLoading = false;
         notifyListeners();
@@ -253,7 +253,7 @@ class InAppNotificationProvider extends ChangeNotifier {
         notificationDetails,
       );
     } catch (e) {
-      print('[InAppNotificationProvider] Local notification error: $e');
+      debugPrint('[InAppNotificationProvider] Local notification error: $e');
     }
   }
 }

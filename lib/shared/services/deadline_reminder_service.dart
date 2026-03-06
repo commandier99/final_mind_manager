@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -20,7 +21,7 @@ class DeadlineReminderService {
   void startPeriodicReminders({Duration interval = const Duration(minutes: 1)}) {
     if (_periodicTimer != null) return;
 
-    print(
+    debugPrint(
       '[DeadlineReminder] Starting periodic reminders (every ${interval.inMinutes} min)',
     );
 
@@ -44,7 +45,7 @@ class DeadlineReminderService {
 
     final timeUntilNextCheck = nextCheckTime.difference(now);
 
-    print(
+    debugPrint(
       '[DeadlineReminder] Next check scheduled in ${timeUntilNextCheck.inSeconds}s',
     );
 
@@ -58,23 +59,23 @@ class DeadlineReminderService {
   void stopPeriodicReminders() {
     _periodicTimer?.cancel();
     _periodicTimer = null;
-    print('[DeadlineReminder] Stopped periodic reminders');
+    debugPrint('[DeadlineReminder] Stopped periodic reminders');
   }
 
   /// Check for upcoming deadlines and send reminders
   /// Sends reminders at: 1 day before, 1 hour before, and when deadline is missed
   Future<void> checkAndSendReminders() async {
     try {
-      print('[DeadlineReminder] Starting deadline reminder check...');
+      debugPrint('[DeadlineReminder] Starting deadline reminder check...');
 
       final currentUser = _auth.currentUser;
       if (currentUser == null) {
-        print('[DeadlineReminder] No user logged in');
+        debugPrint('[DeadlineReminder] No user logged in');
         return;
       }
 
       final userId = currentUser.uid;
-      print('[DeadlineReminder] Checking reminders for user: $userId');
+      debugPrint('[DeadlineReminder] Checking reminders for user: $userId');
 
       final now = DateTime.now();
       final allTasksSnapshot = await _firestore
@@ -88,7 +89,7 @@ class DeadlineReminderService {
           )
           .get();
 
-      print('[DeadlineReminder] Found ${allTasksSnapshot.docs.length} incomplete tasks');
+      debugPrint('[DeadlineReminder] Found ${allTasksSnapshot.docs.length} incomplete tasks');
 
       var remindersCount = 0;
 
@@ -97,14 +98,14 @@ class DeadlineReminderService {
           final taskData = Task.fromMap(doc.data(), doc.id);
 
           if (taskData.taskDeadline == null) {
-            print('[DeadlineReminder] Skipping ${taskData.taskTitle} (${taskData.taskId}): no deadline');
+            debugPrint('[DeadlineReminder] Skipping ${taskData.taskTitle} (${taskData.taskId}): no deadline');
             continue;
           }
 
           final timeUntilDeadline = taskData.taskDeadline!.difference(now);
           final isPastDeadline = timeUntilDeadline.isNegative;
 
-          print(
+          debugPrint(
             '[DeadlineReminder] Task ${taskData.taskTitle} (${taskData.taskId}) | '
             'deadline=${taskData.taskDeadline} | timeUntil=${timeUntilDeadline.inMinutes}m | '
             'reminderSentAt=${taskData.taskReminderSentAt} | pastDue=$isPastDeadline',
@@ -124,7 +125,7 @@ class DeadlineReminderService {
                 'taskDeadlineMissed': true,
               });
               remindersCount++;
-              print('[DeadlineReminder] Missed deadline notification sent for: ${taskData.taskTitle}');
+              debugPrint('[DeadlineReminder] Missed deadline notification sent for: ${taskData.taskTitle}');
             }
             continue;
           }
@@ -138,7 +139,7 @@ class DeadlineReminderService {
                 'taskReminderSentAt': FieldValue.serverTimestamp(),
               });
               remindersCount++;
-              print('[DeadlineReminder] 1-hour reminder sent for: ${taskData.taskTitle}');
+              debugPrint('[DeadlineReminder] 1-hour reminder sent for: ${taskData.taskTitle}');
             }
             continue;
           }
@@ -153,16 +154,16 @@ class DeadlineReminderService {
               'taskReminderSentAt': FieldValue.serverTimestamp(),
             });
             remindersCount++;
-            print('[DeadlineReminder] 1-day reminder sent for: ${taskData.taskTitle}');
+            debugPrint('[DeadlineReminder] 1-day reminder sent for: ${taskData.taskTitle}');
           }
         } catch (e) {
-          print('[DeadlineReminder] Error processing task: $e');
+          debugPrint('[DeadlineReminder] Error processing task: $e');
         }
       }
 
-      print('[DeadlineReminder] Completed - sent $remindersCount reminders');
+      debugPrint('[DeadlineReminder] Completed - sent $remindersCount reminders');
     } catch (e) {
-      print('[DeadlineReminder] Error checking reminders: $e');
+      debugPrint('[DeadlineReminder] Error checking reminders: $e');
     }
   }
 
@@ -207,9 +208,9 @@ class DeadlineReminderService {
         },
       );
 
-      print('[DeadlineReminder] Missed deadline notification sent for ${task.taskTitle}');
+      debugPrint('[DeadlineReminder] Missed deadline notification sent for ${task.taskTitle}');
     } catch (e) {
-      print('[DeadlineReminder] Error sending missed deadline notification: $e');
+      debugPrint('[DeadlineReminder] Error sending missed deadline notification: $e');
     }
   }
 
@@ -246,9 +247,9 @@ class DeadlineReminderService {
         },
       );
 
-      print('[DeadlineReminder] 1-hour reminder sent for ${task.taskTitle}');
+      debugPrint('[DeadlineReminder] 1-hour reminder sent for ${task.taskTitle}');
     } catch (e) {
-      print('[DeadlineReminder] Error sending 1-hour reminder: $e');
+      debugPrint('[DeadlineReminder] Error sending 1-hour reminder: $e');
     }
   }
 
@@ -284,9 +285,9 @@ class DeadlineReminderService {
         },
       );
 
-      print('[DeadlineReminder] 1-day reminder sent for ${task.taskTitle}');
+      debugPrint('[DeadlineReminder] 1-day reminder sent for ${task.taskTitle}');
     } catch (e) {
-      print('[DeadlineReminder] Error sending 1-day reminder: $e');
+      debugPrint('[DeadlineReminder] Error sending 1-day reminder: $e');
     }
   }
 

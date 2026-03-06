@@ -172,6 +172,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       );
       return;
     }
+    if (!mounted) return;
 
     Task? focusedTask;
     for (final candidate in taskProvider.tasks) {
@@ -205,6 +206,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
             ],
           ),
         );
+        if (!mounted) return;
 
         if (shouldPause != true) return;
       }

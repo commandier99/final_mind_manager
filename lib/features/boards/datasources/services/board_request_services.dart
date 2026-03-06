@@ -4,7 +4,6 @@ import '../models/board_request_model.dart';
 import '../models/board_roles.dart';
 import 'board_services.dart';
 import 'package:flutter/foundation.dart';
-import '../../../notifications/datasources/helpers/notification_helper.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 
 class BoardRequestService {
@@ -78,24 +77,6 @@ class BoardRequestService {
           'invitedUserId': userId,
           'invitedUserName': userData?['userName'] ?? 'Unknown User',
           'requestedRole': requestedRole,
-        },
-      );
-
-      await NotificationHelper.createNotificationPair(
-        userId: userId,
-        title: 'Board Invitation',
-        message:
-            '${boardData?['boardManagerName'] ?? 'A manager'} invited you to join "$boardTitle".',
-        category: NotificationHelper.categoryInvitation,
-        relatedId: requestId,
-        metadata: {
-          'boardId': boardId,
-          'boardTitle': boardTitle,
-          'boardRequestId': requestId,
-          'boardReqType': BoardRequest.typeRecruitment,
-          'requestedRole': requestedRole,
-          'managerId': boardData?['boardManagerId'] ?? '',
-          'managerName': boardData?['boardManagerName'] ?? 'Unknown',
         },
       );
 
@@ -498,3 +479,4 @@ class BoardRequestService {
     }
   }
 }
+

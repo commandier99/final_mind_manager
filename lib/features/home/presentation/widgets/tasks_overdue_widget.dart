@@ -47,7 +47,7 @@ class TasksOverdueWidget extends StatelessWidget {
             })
             .toList();
         
-        print('[DEBUG] TasksOverdueWidget: Found ${tasksOverdue.length} overdue tasks for user $userId');
+        debugPrint('[DEBUG] TasksOverdueWidget: Found ${tasksOverdue.length} overdue tasks for user $userId');
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

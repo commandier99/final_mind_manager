@@ -14,15 +14,15 @@ class ActivityCard extends StatelessWidget {
     final isCurrentUser = currentUser?.uid == activity.ActEvUserId;
     final displayName = isCurrentUser ? 'You' : activity.ActEvUserName;
 
-    print('[DEBUG] ActivityCard: Building card');
-    print('[DEBUG] ActivityCard: ActEvId = ${activity.ActEvId}');
-    print('[DEBUG] ActivityCard: ActEvType = ${activity.ActEvType} (raw)');
-    print('[DEBUG] ActivityCard: activityType after coalesce = $activityType');
-    print('[DEBUG] ActivityCard: ActEvUserName = ${activity.ActEvUserName}');
-    print(
+    debugPrint('[DEBUG] ActivityCard: Building card');
+    debugPrint('[DEBUG] ActivityCard: ActEvId = ${activity.ActEvId}');
+    debugPrint('[DEBUG] ActivityCard: ActEvType = ${activity.ActEvType} (raw)');
+    debugPrint('[DEBUG] ActivityCard: activityType after coalesce = $activityType');
+    debugPrint('[DEBUG] ActivityCard: ActEvUserName = ${activity.ActEvUserName}');
+    debugPrint(
       '[DEBUG] ActivityCard: ActEvDescription = ${activity.ActEvDescription}',
     );
-    print(
+    debugPrint(
       '[DEBUG] ActivityCard: isCurrentUser = $isCurrentUser, displayName = $displayName',
     );
 
@@ -30,7 +30,7 @@ class ActivityCard extends StatelessWidget {
     final color = _getActivityColor(activityType);
     final message = _buildReadableMessage(displayName, activity);
 
-    print('[DEBUG] ActivityCard: Selected icon = $icon, color = $color');
+    debugPrint('[DEBUG] ActivityCard: Selected icon = $icon, color = $color');
 
     return Card(
       elevation: 1,

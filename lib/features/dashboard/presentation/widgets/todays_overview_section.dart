@@ -8,9 +8,9 @@ class TodaysOverviewSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('[DEBUG] TodaysOverviewSection: build called');
+    debugPrint('[DEBUG] TodaysOverviewSection: build called');
     final taskProvider = context.watch<TaskProvider>();
-    print('[DEBUG] TodaysOverviewSection: TaskProvider has ${taskProvider.tasks.length} total tasks');
+    debugPrint('[DEBUG] TodaysOverviewSection: TaskProvider has ${taskProvider.tasks.length} total tasks');
 
     final todayTasks = taskProvider.tasks.where((task) {
       if (task.taskDeadline == null) return false;
@@ -20,7 +20,7 @@ class TodaysOverviewSection extends StatelessWidget {
           deadline.month == today.month &&
           deadline.day == today.day;
     }).length;
-    print('[DEBUG] TodaysOverviewSection: Tasks due today = $todayTasks');
+    debugPrint('[DEBUG] TodaysOverviewSection: Tasks due today = $todayTasks');
 
     final completedToday = taskProvider.tasks.where((task) {
       if (!task.taskIsDone || task.taskIsDoneAt == null) return false;
@@ -30,7 +30,7 @@ class TodaysOverviewSection extends StatelessWidget {
           doneAt.month == today.month &&
           doneAt.day == today.day;
     }).length;
-    print('[DEBUG] TodaysOverviewSection: Tasks completed today = $completedToday');
+    debugPrint('[DEBUG] TodaysOverviewSection: Tasks completed today = $completedToday');
 
     return Row(
       children: [

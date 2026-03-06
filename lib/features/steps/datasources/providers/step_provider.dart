@@ -34,7 +34,7 @@ class StepProvider with ChangeNotifier {
       );
     } catch (e) {
       if (kDebugMode) {
-        print("Error adding step: $e");
+        debugPrint("Error adding step: $e");
       }
     }
   }
@@ -59,7 +59,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.toggleStepDoneStatus(step);
     } catch (e) {
       if (kDebugMode) {
-        print("Error toggling step: $e");
+        debugPrint("Error toggling step: $e");
       }
     }
   }
@@ -69,7 +69,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.softDeleteStep(step);
     } catch (e) {
       if (kDebugMode) {
-        print("Error soft deleting step: $e");
+        debugPrint("Error soft deleting step: $e");
       }
     }
   }
@@ -79,7 +79,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.restoreStep(step);
     } catch (e) {
       if (kDebugMode) {
-        print("Error restoring step: $e");
+        debugPrint("Error restoring step: $e");
       }
     }
   }
@@ -89,7 +89,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.deleteStep(stepId);
     } catch (e) {
       if (kDebugMode) {
-        print("Error deleting step: $e");
+        debugPrint("Error deleting step: $e");
       }
     }
   }
@@ -99,7 +99,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.updateStep(stepId, updatedStep);
     } catch (e) {
       if (kDebugMode) {
-        print("Error updating step: $e");
+        debugPrint("Error updating step: $e");
       }
     }
   }
@@ -109,7 +109,7 @@ class StepProvider with ChangeNotifier {
       return await _stepService.getStepById(stepId);
     } catch (e) {
       if (kDebugMode) {
-        print("Error fetching step by ID: $e");
+        debugPrint("Error fetching step by ID: $e");
       }
       return null;
     }
@@ -120,7 +120,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.swapStepOrder(first, second);
     } catch (e) {
       if (kDebugMode) {
-        print("Error reordering steps: $e");
+        debugPrint("Error reordering steps: $e");
       }
     }
   }
@@ -133,7 +133,7 @@ class StepProvider with ChangeNotifier {
       await _stepService.reorderSteps(taskId, orderedSteps);
     } catch (e) {
       if (kDebugMode) {
-        print("Error reordering steps list: $e");
+        debugPrint("Error reordering steps list: $e");
       }
     }
   }
@@ -143,7 +143,7 @@ class StepProvider with ChangeNotifier {
       return await _stepService.getLatestActiveStepForTask(taskId);
     } catch (e) {
       if (kDebugMode) {
-        print("Error fetching latest active step: $e");
+        debugPrint("Error fetching latest active step: $e");
       }
       return null;
     }
@@ -154,7 +154,7 @@ class StepProvider with ChangeNotifier {
       return await _stepService.hasActiveStepsForTask(taskId);
     } catch (e) {
       if (kDebugMode) {
-        print("Error checking active steps: $e");
+        debugPrint("Error checking active steps: $e");
       }
       return false;
     }

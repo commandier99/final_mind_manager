@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:io';
 import 'package:cloudinary_public/cloudinary_public.dart';
 import 'package:file_picker/file_picker.dart';
@@ -32,7 +33,7 @@ class CloudinaryService {
       );
       return response.secureUrl;
     } catch (e) {
-      print('[Cloudinary] Upload error: $e');
+      debugPrint('[Cloudinary] Upload error: $e');
       rethrow;
     }
   }
@@ -76,7 +77,7 @@ class CloudinaryService {
 
       return {'url': response.secureUrl, 'publicId': response.publicId};
     } catch (e) {
-      print('[Cloudinary] Upload error: $e');
+      debugPrint('[Cloudinary] Upload error: $e');
       rethrow;
     }
   }
@@ -86,7 +87,7 @@ class CloudinaryService {
   Future<void> deleteProfilePicture(String userId) async {
     // Deletion not supported in cloudinary_public package
     // Images are overwritten on new upload, so this is not critical
-    print(
+    debugPrint(
       '[Cloudinary] Delete not supported - image will be overwritten on next upload',
     );
   }

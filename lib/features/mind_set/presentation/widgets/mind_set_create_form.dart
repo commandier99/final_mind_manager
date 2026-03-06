@@ -178,7 +178,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
               ],
               if (!_isFollowThrough) ...[
                 DropdownButtonFormField<String>(
-                  value: _selectedMode,
+                  initialValue: _selectedMode,
                   decoration: InputDecoration(
                     labelText: 'Mode (can be changed later)',
                     border: OutlineInputBorder(
@@ -200,7 +200,7 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
                 const SizedBox(height: 16),
                 if (_isGoWithFlow) ...[
                   DropdownButtonFormField<String>(
-                    value: _flowStyle,
+                    initialValue: _flowStyle,
                     decoration: InputDecoration(
                       labelText: 'Flow Style',
                       border: OutlineInputBorder(

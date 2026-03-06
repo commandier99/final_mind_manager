@@ -21,10 +21,11 @@ class PlanTasksSection extends StatelessWidget {
     Task task,
     bool? isDone,
   ) async {
+    final taskProvider = context.read<TaskProvider>();
     final shouldComplete = isDone ?? false;
     final hasSubmission = (task.taskSubmissionId ?? '').trim().isNotEmpty;
     if (!shouldComplete) {
-      await context.read<TaskProvider>().toggleTaskDone(
+      await taskProvider.toggleTaskDone(
         task.copyWith(taskIsDone: false, taskStatus: Task.statusToDo),
       );
       return;
@@ -100,7 +101,7 @@ class PlanTasksSection extends StatelessWidget {
       }
     }
 
-    await context.read<TaskProvider>().toggleTaskDone(
+    await taskProvider.toggleTaskDone(
       task.copyWith(taskIsDone: true, taskStatus: Task.statusCompleted),
     );
   }

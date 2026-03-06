@@ -471,14 +471,14 @@ Future<void> _handleAccept(
   BoardRequest request,
   BoardRequestProvider provider,
 ) async {
-  final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     await provider.approveRequest(
       request,
       responseMessage: 'Recruitment accepted',
     );
 
-    messenger?.showSnackBar(
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text(
           'Joined ${request.boardTitle} as ${_roleLabel(request.boardReqRequestedRole)}!',
@@ -487,7 +487,8 @@ Future<void> _handleAccept(
       ),
     );
   } catch (e) {
-    messenger?.showSnackBar(
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text('Error accepting: $e'),
         backgroundColor: Colors.red,
@@ -501,7 +502,6 @@ Future<void> _handleDecline(
   BoardRequest request,
   BoardRequestProvider provider,
 ) async {
-  final messenger = ScaffoldMessenger.maybeOf(context);
   final reasonController = TextEditingController();
 
   showDialog(
@@ -551,14 +551,16 @@ Future<void> _handleDecline(
                     : 'Recruitment declined',
               );
 
-              messenger?.showSnackBar(
+              if (!context.mounted) return;
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                 const SnackBar(
                   content: Text('Recruitment declined'),
                   backgroundColor: Colors.red,
                 ),
               );
             } catch (e) {
-              messenger?.showSnackBar(
+              if (!context.mounted) return;
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
                 SnackBar(
                   content: Text('Error declining: $e'),
                   backgroundColor: Colors.red,
@@ -582,17 +584,18 @@ Future<void> _handleCancelRequest(
   BoardRequest request,
   BoardRequestProvider provider,
 ) async {
-  final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     await provider.cancelRequest(request.boardRequestId);
-    messenger?.showSnackBar(
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       const SnackBar(
         content: Text('Request cancelled'),
         backgroundColor: Colors.red,
       ),
     );
   } catch (e) {
-    messenger?.showSnackBar(
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
       SnackBar(
         content: Text('Error cancelling request: $e'),
         backgroundColor: Colors.red,

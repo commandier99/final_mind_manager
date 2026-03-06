@@ -5,7 +5,7 @@ class AboutPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('[DEBUG] AboutPage: build called');
+    debugPrint('[DEBUG] AboutPage: build called');
     return const Center(child: Text('About Page'));
   }
 }

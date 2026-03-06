@@ -17,20 +17,20 @@ class ActivityEventProvider extends ChangeNotifier {
 
   /// Listen to user events with proper subscription management
   void listenToUser(String userId) {
-    print('[DEBUG] ActivityEventProvider: Starting event listener for userId: $userId');
+    debugPrint('[DEBUG] ActivityEventProvider: Starting event listener for userId: $userId');
     
     // Cancel existing subscription if any
     _subscription?.cancel();
     
     _subscription = _service.streamUserEvents(userId).listen(
       (data) {
-        print('[DEBUG] ActivityEventProvider: Received ${data.length} events for userId: $userId');
+        debugPrint('[DEBUG] ActivityEventProvider: Received ${data.length} events for userId: $userId');
         _events = data;
         _error = null;
         notifyListeners();
       },
       onError: (error) {
-        print('[ERROR] ActivityEventProvider: Stream error - $error');
+        debugPrint('[ERROR] ActivityEventProvider: Stream error - $error');
         _error = error.toString();
         notifyListeners();
       },
@@ -39,20 +39,20 @@ class ActivityEventProvider extends ChangeNotifier {
 
   /// Listen to all board events (all members' activities) with proper subscription management
   void listenToBoard(String boardId) {
-    print('[DEBUG] ActivityEventProvider: Starting event listener for boardId: $boardId');
+    debugPrint('[DEBUG] ActivityEventProvider: Starting event listener for boardId: $boardId');
     
     // Cancel existing subscription if any
     _subscription?.cancel();
     
     _subscription = _service.streamBoardEvents(boardId).listen(
       (data) {
-        print('[DEBUG] ActivityEventProvider: Received ${data.length} events for boardId: $boardId');
+        debugPrint('[DEBUG] ActivityEventProvider: Received ${data.length} events for boardId: $boardId');
         _events = data;
         _error = null;
         notifyListeners();
       },
       onError: (error) {
-        print('[ERROR] ActivityEventProvider: Stream error - $error');
+        debugPrint('[ERROR] ActivityEventProvider: Stream error - $error');
         _error = error.toString();
         notifyListeners();
       },
@@ -71,7 +71,7 @@ class ActivityEventProvider extends ChangeNotifier {
     } catch (e) {
       _isLoading = false;
       _error = e.toString();
-      print('[ERROR] ActivityEventProvider: Failed to get user events - $e');
+      debugPrint('[ERROR] ActivityEventProvider: Failed to get user events - $e');
       notifyListeners();
     }
   }
@@ -97,9 +97,9 @@ class ActivityEventProvider extends ChangeNotifier {
         description: description,
         metadata: metadata,
       );
-      print('[DEBUG] ActivityEventProvider: Event logged successfully');
+      debugPrint('[DEBUG] ActivityEventProvider: Event logged successfully');
     } catch (e) {
-      print('[ERROR] ActivityEventProvider: Failed to log event: $e');
+      debugPrint('[ERROR] ActivityEventProvider: Failed to log event: $e');
       rethrow;
     }
   }
@@ -112,7 +112,7 @@ class ActivityEventProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    print('[DEBUG] ActivityEventProvider: Disposing - cancelling subscription');
+    debugPrint('[DEBUG] ActivityEventProvider: Disposing - cancelling subscription');
     _subscription?.cancel();
     super.dispose();
   }

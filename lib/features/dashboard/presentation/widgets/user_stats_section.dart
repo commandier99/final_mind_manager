@@ -8,16 +8,16 @@ class UserStatsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    print('[DEBUG] UserStatsSection: build called');
+    debugPrint('[DEBUG] UserStatsSection: build called');
 
     try {
       final statsProvider = context.watch<UserStatsProvider>();
-      print('[DEBUG] UserStatsSection: UserStatsProvider accessed successfully');
-      print('[DEBUG] UserStatsSection: Tasks created = ${statsProvider.stats?.userTasksCreatedCount ?? 0}');
-      print('[DEBUG] UserStatsSection: Boards created = ${statsProvider.stats?.userBoardsCreatedCount ?? 0}');
+      debugPrint('[DEBUG] UserStatsSection: UserStatsProvider accessed successfully');
+      debugPrint('[DEBUG] UserStatsSection: Tasks created = ${statsProvider.stats?.userTasksCreatedCount ?? 0}');
+      debugPrint('[DEBUG] UserStatsSection: Boards created = ${statsProvider.stats?.userBoardsCreatedCount ?? 0}');
 
       if (statsProvider.stats == null) {
-        print('[DEBUG] UserStatsSection: Stats is null, showing loading');
+        debugPrint('[DEBUG] UserStatsSection: Stats is null, showing loading');
         return Center(
           child: Padding(
             padding: const EdgeInsets.all(16.0),
@@ -60,7 +60,7 @@ class UserStatsSection extends StatelessWidget {
         ],
       );
     } catch (e) {
-      print('[ERROR] UserStatsSection: Error accessing UserStatsProvider: $e');
+      debugPrint('[ERROR] UserStatsSection: Error accessing UserStatsProvider: $e');
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(16.0),

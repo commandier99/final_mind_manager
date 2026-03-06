@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
@@ -48,7 +49,7 @@ class AuthenticationService {
       );
 
       await _userService.saveUser(newUser);
-      print('[AuthenticationService] User created with UserModel and UserService');
+      debugPrint('[AuthenticationService] User created with UserModel and UserService');
     }
 
     return userCredential;

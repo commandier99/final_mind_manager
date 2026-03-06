@@ -35,7 +35,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
   @override
   void initState() {
     super.initState();
-    print(
+    debugPrint(
       '[DEBUG] TaskStepsList: initState called for parentTaskId = ${widget.parentTaskId}',
     );
   }
@@ -50,7 +50,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
     final stepController = TextEditingController(text: step.stepTitle);
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Edit step'),
         content: TextField(
           controller: stepController,
@@ -60,7 +60,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(dialogContext).pop(),
             child: const Text('Cancel'),
           ),
           FilledButton(
@@ -72,9 +72,8 @@ class _TaskStepsListState extends State<TaskStepsList> {
                 step.stepId,
                 step.copyWith(stepTitle: updated),
               );
-              if (mounted) {
-                Navigator.of(context).pop();
-              }
+              if (!dialogContext.mounted) return;
+              Navigator.of(dialogContext).pop();
             },
             child: const Text('Save'),
           ),
@@ -85,7 +84,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
 
   @override
   Widget build(BuildContext context) {
-    print(
+    debugPrint(
       '[DEBUG] TaskStepsList: build called for parentTaskId = ${widget.parentTaskId}',
     );
 
@@ -108,7 +107,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
               }
 
               if (snapshot.hasError) {
-                print(
+                debugPrint(
                   '[DEBUG] TaskStepsList: Error loading steps - ${snapshot.error}',
                 );
                 return Text('Error: ${snapshot.error}');
@@ -117,7 +116,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
               final steps = snapshot.data ?? <TaskStep>[];
 
               if (steps.isEmpty) {
-                print('[DEBUG] TaskStepsList: No steps found.');
+                debugPrint('[DEBUG] TaskStepsList: No steps found.');
                 if (!canAddStep) return const SizedBox.shrink();
                 if (_isAddingStepInline) {
                   return _buildInlineStepComposer(
@@ -129,7 +128,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
                 return _buildAddStepGhostCard(context, onTap: _startInlineAdd);
               }
 
-              print(
+              debugPrint(
                 '[DEBUG] TaskStepsList: Building ListView with ${steps.length} steps.',
               );
               return ReorderableListView.builder(
@@ -211,7 +210,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
                                 canMutateSteps &&
                                     widget.allowCompletionToggle
                                 ? (value) {
-                                    print(
+                                    debugPrint(
                                       '[DEBUG] TaskStepsList: Toggling step ${step.stepId}',
                                     );
                                     stepProvider.toggleStepDoneStatus(
@@ -221,7 +220,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
                                 : null,
                             onDelete: canMutateSteps
                                 ? () {
-                                    print(
+                                    debugPrint(
                                       '[DEBUG] TaskStepsList: Deleting step ${step.stepId}',
                                     );
                                     stepProvider.softDeleteStep(step);
@@ -233,7 +232,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
                             onDuplicate: canMutateSteps && canAddStep
                                 ? () async {
                                     await stepProvider.duplicateStep(step);
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(
                                         content: Text('Step duplicated'),
@@ -367,7 +366,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
 
   void _startInlineAdd() {
     if (_isAddingStepInline) return;
-    print('[DEBUG] TaskStepsList: Add step card tapped');
+    debugPrint('[DEBUG] TaskStepsList: Add step card tapped');
     setState(() {
       _isAddingStepInline = true;
       _newStepController.clear();

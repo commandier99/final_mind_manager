@@ -5,7 +5,6 @@ import '../../../../shared/features/users/datasources/providers/user_provider.da
 import '../../../mind_set/datasources/services/mind_set_session_service.dart';
 import '../../../mind_set/datasources/models/mind_set_session_model.dart';
 import 'mind_set_session_widget.dart';
-import '../../../mind_set/presentation/pages/mind_set_page.dart';
 
 class MindSetSessionsCarouselWidget extends StatelessWidget {
   const MindSetSessionsCarouselWidget({super.key});
@@ -62,6 +61,4 @@ class MindSetSessionsCarouselWidget extends StatelessWidget {
       },
     );
   }
-
-  
 }

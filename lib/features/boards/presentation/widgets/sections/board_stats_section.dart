@@ -6,6 +6,7 @@ import '../../../datasources/providers/board_stats_provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import 'board_activity_section.dart';
 
 class BoardStatsSection extends StatefulWidget {
@@ -23,6 +24,50 @@ class BoardStatsSection extends StatefulWidget {
 }
 
 class _BoardStatsSectionState extends State<BoardStatsSection> {
+  final UserService _userService = UserService();
+  Map<String, String> _memberNamesById = const {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMemberNames();
+  }
+
+  @override
+  void didUpdateWidget(covariant BoardStatsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.board.boardId != widget.board.boardId ||
+        oldWidget.board.memberIds.join(',') != widget.board.memberIds.join(',') ||
+        oldWidget.board.boardManagerId != widget.board.boardManagerId) {
+      _loadMemberNames();
+    }
+  }
+
+  Future<void> _loadMemberNames() async {
+    final ids = <String>{...widget.board.memberIds, widget.board.boardManagerId}
+        .where((id) => id.trim().isNotEmpty)
+        .toList();
+    if (ids.isEmpty) return;
+
+    final resolved = <String, String>{};
+    for (final id in ids) {
+      try {
+        final user = await _userService.getUserById(id);
+        final name = user?.userName.trim();
+        if (name != null && name.isNotEmpty) {
+          resolved[id] = name;
+        }
+      } catch (_) {
+        // Best-effort enrichment only.
+      }
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _memberNamesById = resolved;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<BoardStatsProvider, TaskProvider>(
@@ -272,8 +317,13 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
   }
 
   String _resolveMemberDisplayName(String memberId, List<Task> tasks) {
+    final resolvedName = _memberNamesById[memberId];
     if (memberId == widget.board.boardManagerId) {
-      return '${widget.board.boardManagerName} (Manager)';
+      final managerName = (resolvedName ?? widget.board.boardManagerName).trim();
+      return '${managerName.isEmpty ? 'Manager' : managerName} (Manager)';
+    }
+    if (resolvedName != null && resolvedName.isNotEmpty) {
+      return resolvedName;
     }
     for (final task in tasks) {
       if (task.taskAssignedTo == memberId &&

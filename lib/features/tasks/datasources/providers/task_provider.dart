@@ -38,7 +38,7 @@ class TaskProvider extends ChangeNotifier {
   }
 
   void _setLoading(bool value) {
-    print('[DEBUG] TaskProvider: _setLoading called with value = $value');
+    debugPrint('[DEBUG] TaskProvider: _setLoading called with value = $value');
     _isLoading = value;
     // Defer the notification to avoid "setState() or markNeedsBuild() called during build"
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -110,13 +110,13 @@ class TaskProvider extends ChangeNotifier {
 
   /// Stream tasks for a specific board
   void streamTasksByBoard(String boardId) {
-    print(
+    debugPrint(
       '[DEBUG] TaskProvider: streamTasksByBoard called for boardId = $boardId',
     );
 
     // Don't reinitialize if already streaming this board
     if (_currentStreamingMode == 'board' && _currentStreamingId == boardId) {
-      print('[DEBUG] TaskProvider: Already streaming this board, skipping');
+      debugPrint('[DEBUG] TaskProvider: Already streaming this board, skipping');
       return;
     }
 
@@ -129,7 +129,7 @@ class TaskProvider extends ChangeNotifier {
     _setLoading(true);
     _taskStream = _taskService.streamTasks(boardId: boardId);
     _taskSubscription = _taskStream!.listen((tasks) {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: streamTasksByBoard received ${tasks.length} tasks',
       );
       _updateTasks(tasks);
@@ -139,7 +139,7 @@ class TaskProvider extends ChangeNotifier {
 
   /// Stream active tasks assigned to a user
   void streamUserActiveTasks(String userId) {
-    print(
+    debugPrint(
       '[DEBUG] TaskProvider: streamUserActiveTasks called for userId = $userId',
     );
     // Cancel previous subscription
@@ -151,13 +151,13 @@ class TaskProvider extends ChangeNotifier {
     _setLoading(true);
     _taskStream = _taskService.streamTasksAssignedTo(userId);
     _taskSubscription = _taskStream!.listen((tasks) {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: streamUserActiveTasks received ${tasks.length} tasks, filtering active ones',
       );
       final filteredTasks = tasks
           .where((t) => !t.taskIsDone && !t.taskIsDeleted)
           .toList();
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: after filtering, ${filteredTasks.length} active tasks remain',
       );
       _updateTasks(filteredTasks);
@@ -167,13 +167,13 @@ class TaskProvider extends ChangeNotifier {
 
   /// Stream ALL tasks for a user (including completed) - for statistics
   void streamAllUserTasks(String userId) {
-    print(
+    debugPrint(
       '[DEBUG] TaskProvider: streamAllUserTasks called for userId = $userId',
     );
 
     // Don't reinitialize if already streaming all tasks for this user
     if (_currentStreamingMode == 'all' && _currentStreamingId == userId) {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: Already streaming all tasks for this user, skipping',
       );
       return;
@@ -188,11 +188,11 @@ class TaskProvider extends ChangeNotifier {
     _setLoading(true);
     _taskStream = _taskService.streamTasksAssignedTo(userId);
     _taskSubscription = _taskStream!.listen((tasks) {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: streamAllUserTasks received ${tasks.length} tasks',
       );
       final filteredTasks = tasks.where((t) => !t.taskIsDeleted).toList();
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: after filtering deleted, ${filteredTasks.length} tasks remain',
       );
       _updateTasks(filteredTasks);
@@ -202,12 +202,12 @@ class TaskProvider extends ChangeNotifier {
 
   /// Stream tasks by a list of task IDs (for plans)
   void streamTasksByIds(List<String> taskIds) {
-    print(
+    debugPrint(
       '[DEBUG] TaskProvider: streamTasksByIds called for ${taskIds.length} tasks',
     );
 
     if (taskIds.isEmpty) {
-      print('[DEBUG] TaskProvider: No task IDs provided, clearing tasks');
+      debugPrint('[DEBUG] TaskProvider: No task IDs provided, clearing tasks');
       _updateTasks([]);
       return;
     }
@@ -221,7 +221,7 @@ class TaskProvider extends ChangeNotifier {
     _setLoading(true);
     _taskStream = _taskService.streamTasksByIds(taskIds);
     _taskSubscription = _taskStream!.listen((tasks) {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: streamTasksByIds received ${tasks.length} tasks',
       );
       _updateTasks(tasks);
@@ -239,8 +239,8 @@ class TaskProvider extends ChangeNotifier {
     String? selectedAssigneeName,
   }) async {
     try {
-      print('[DEBUG] TaskProvider: addTask called for taskId = ${task.taskId}');
-      print(
+      debugPrint('[DEBUG] TaskProvider: addTask called for taskId = ${task.taskId}');
+      debugPrint(
         '[DEBUG] TaskProvider: selectedAssigneeId = $selectedAssigneeId, selectedAssigneeName = $selectedAssigneeName',
       );
       // Ensure taskStats is initialized (fallback to empty TaskStats)
@@ -249,13 +249,13 @@ class TaskProvider extends ChangeNotifier {
       // Add task immediately to local list for instant UI update
       _tasks.add(newTask);
       notifyListeners();
-      print('[DEBUG] TaskProvider: Task added to local list immediately');
+      debugPrint('[DEBUG] TaskProvider: Task added to local list immediately');
 
       // Add task to Firestore using TaskService
       await _taskService.addTask(newTask);
 
       // Send task assignment notification if a specific member was selected
-      print(
+      debugPrint(
         '[TaskNotification] selectedAssigneeId = "$selectedAssigneeId", isEmpty = ${selectedAssigneeId?.isEmpty ?? true}',
       );
 
@@ -271,7 +271,7 @@ class TaskProvider extends ChangeNotifier {
 
       // Create task assignment notification only when task is already published.
       if (shouldNotifyAssignment && assigneeId != null) {
-        print(
+        debugPrint(
           '[TaskNotification] published task - creating notification for userId: $assigneeId',
         );
         try {
@@ -280,17 +280,17 @@ class TaskProvider extends ChangeNotifier {
             assigneeId: assigneeId,
             assigneeName: selectedAssigneeName,
           );
-          print(
+          debugPrint(
             '[TaskNotification] task assignment notification created for: ${newTask.taskId}',
           );
         } catch (e) {
           // Log error but don't fail task creation - notification is optional
-          print(
+          debugPrint(
             '[TaskNotification] failed to create notification (non-critical): $e',
           );
         }
       } else {
-        print(
+        debugPrint(
           '[TaskNotification] notification skipped - task not published or no valid assignee',
         );
       }
@@ -311,9 +311,9 @@ class TaskProvider extends ChangeNotifier {
       // are live subscriptions - they automatically receive updates when data changes.
       // The task will appear automatically in the active stream without reinitializing.
 
-      print('✅ Task ${newTask.taskId} added successfully');
+      debugPrint('✅ Task ${newTask.taskId} added successfully');
     } catch (e) {
-      print('⚠️ Error adding task: $e');
+      debugPrint('⚠️ Error adding task: $e');
       rethrow;
     }
   }
@@ -373,7 +373,7 @@ class TaskProvider extends ChangeNotifier {
     Task? previousTask;
 
     try {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: updateTask called for taskId = ${task.taskId}',
       );
       // Ensure taskStats is initialized (fallback to empty TaskStats)
@@ -415,14 +415,14 @@ class TaskProvider extends ChangeNotifier {
               assigneeId: currentNotifyTarget,
             );
           } catch (e) {
-            print(
+            debugPrint(
               '[TaskNotification] failed to send assignment notification on update: $e',
             );
           }
         }
       }
 
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: Task ${updatedTask.taskId} updated successfully',
       );
     } catch (e) {
@@ -433,14 +433,14 @@ class TaskProvider extends ChangeNotifier {
         _tasks[existingIndex] = previousTask;
         notifyListeners();
       }
-      print('[DEBUG] TaskProvider: Error updating task: $e');
+      debugPrint('[DEBUG] TaskProvider: Error updating task: $e');
       rethrow;
     }
   }
 
   Future<void> softDeleteTask(Task task) async {
     try {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: softDeleteTask called for taskId = ${task.taskId}',
       );
       await _taskService.softDeleteTask(task);
@@ -457,15 +457,15 @@ class TaskProvider extends ChangeNotifier {
         );
       }
 
-      print('✅ Task ${task.taskId} soft-deleted');
+      debugPrint('✅ Task ${task.taskId} soft-deleted');
     } catch (e) {
-      print('⚠️ Error soft deleting task: $e');
+      debugPrint('⚠️ Error soft deleting task: $e');
     }
   }
 
   Future<void> deleteTask(String taskId, {String? ownerId, Task? task}) async {
     try {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: deleteTask called for taskId = $taskId, ownerId = $ownerId',
       );
 
@@ -496,7 +496,7 @@ class TaskProvider extends ChangeNotifier {
 
       // Track activity for task deletion using the task owner
       if (taskToDelete != null) {
-        print(
+        debugPrint(
           '[DEBUG] TaskProvider: Tracking deletion for user ${taskToDelete.taskOwnerId}',
         );
         await _userDailyActivityService.incrementToday(
@@ -504,20 +504,20 @@ class TaskProvider extends ChangeNotifier {
           {'tasksDeletedCount': 1},
         );
       } else {
-        print(
+        debugPrint(
           '[WARNING] TaskProvider: Could not find task to track deletion activity',
         );
       }
 
-      print('✅ Task $taskId permanently deleted');
+      debugPrint('✅ Task $taskId permanently deleted');
     } catch (e) {
-      print('⚠️ Error hard deleting task: $e');
+      debugPrint('⚠️ Error hard deleting task: $e');
     }
   }
 
   Future<void> toggleTaskDone(Task task) async {
     try {
-      print(
+      debugPrint(
         '[DEBUG] TaskProvider: toggleTaskDone called for taskId = ${task.taskId}, new isDone = ${task.taskIsDone}',
       );
 
@@ -536,7 +536,7 @@ class TaskProvider extends ChangeNotifier {
           final ownerSuffix =
               blockerOwner.isEmpty || blockerOwner == 'Unassigned'
               ? ''
-              : ' (${blockerOwner})';
+              : ' ($blockerOwner)';
           throw StateError(
             'Blocked by "${blocker.taskTitle}"$ownerSuffix. Complete it first.',
           );
@@ -597,9 +597,9 @@ class TaskProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      print('✅ Task ${task.taskId} done status toggled');
+      debugPrint('✅ Task ${task.taskId} done status toggled');
     } catch (e) {
-      print('⚠️ Error toggling task done status: $e');
+      debugPrint('⚠️ Error toggling task done status: $e');
       rethrow;
     }
   }
@@ -631,7 +631,7 @@ class TaskProvider extends ChangeNotifier {
 
   Future<void> acceptTask(String taskId) async {
     try {
-      print('[DEBUG] TaskProvider: acceptTask called for taskId = $taskId');
+      debugPrint('[DEBUG] TaskProvider: acceptTask called for taskId = $taskId');
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         throw Exception('No user logged in');
@@ -645,16 +645,16 @@ class TaskProvider extends ChangeNotifier {
 
       // Notification will be created by the UI layer when needed
 
-      print('✅ Task $taskId accepted');
+      debugPrint('✅ Task $taskId accepted');
     } catch (e) {
-      print('⚠️ Error accepting task: $e');
+      debugPrint('⚠️ Error accepting task: $e');
       rethrow;
     }
   }
 
   Future<void> declineTask(String taskId) async {
     try {
-      print('[DEBUG] TaskProvider: declineTask called for taskId = $taskId');
+      debugPrint('[DEBUG] TaskProvider: declineTask called for taskId = $taskId');
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser == null) {
         throw Exception('No user logged in');
@@ -666,9 +666,9 @@ class TaskProvider extends ChangeNotifier {
         currentUser.displayName ?? 'Unknown User',
       );
 
-      print('✅ Task $taskId declined');
+      debugPrint('✅ Task $taskId declined');
     } catch (e) {
-      print('⚠️ Error declining task: $e');
+      debugPrint('⚠️ Error declining task: $e');
       rethrow;
     }
   }
@@ -706,9 +706,9 @@ class TaskProvider extends ChangeNotifier {
         }
       }
 
-      print('✅ Task ${task.taskId} deadline marked as missed');
+      debugPrint('✅ Task ${task.taskId} deadline marked as missed');
     } catch (e) {
-      print('⚠️ Error marking deadline as missed: $e');
+      debugPrint('⚠️ Error marking deadline as missed: $e');
       rethrow;
     }
   }
@@ -723,9 +723,9 @@ class TaskProvider extends ChangeNotifier {
       );
       await updateTask(updatedTask);
 
-      print('✅ Task ${task.taskId} deadline extended to $newDeadline');
+      debugPrint('✅ Task ${task.taskId} deadline extended to $newDeadline');
     } catch (e) {
-      print('⚠️ Error extending deadline: $e');
+      debugPrint('⚠️ Error extending deadline: $e');
       rethrow;
     }
   }
@@ -739,9 +739,9 @@ class TaskProvider extends ChangeNotifier {
       );
       await updateTask(updatedTask);
 
-      print('✅ Task ${task.taskId} marked as failed');
+      debugPrint('✅ Task ${task.taskId} marked as failed');
     } catch (e) {
-      print('⚠️ Error marking task as failed: $e');
+      debugPrint('⚠️ Error marking task as failed: $e');
       rethrow;
     }
   }

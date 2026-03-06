@@ -139,41 +139,28 @@ class _MindSetDetailsSettingsFormState
                         ),
                       ),
                       const SizedBox(height: 8),
-                      RadioListTile<String>(
-                        title: const Text('Tasks Completed (counts up)'),
-                        value: 'tasks completed',
-                        groupValue: _taskCountMode,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _taskCountMode = value);
-                            widget.onTaskCountModeChange(value);
-                          }
+                      SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment<String>(
+                            value: 'tasks completed',
+                            label: Text('Completed'),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'tasks remaining',
+                            label: Text('Remaining'),
+                          ),
+                          ButtonSegment<String>(
+                            value: 'hide',
+                            label: Text('Hide'),
+                          ),
+                        ],
+                        selected: {_taskCountMode},
+                        onSelectionChanged: (selection) {
+                          if (selection.isEmpty) return;
+                          final value = selection.first;
+                          setState(() => _taskCountMode = value);
+                          widget.onTaskCountModeChange(value);
                         },
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      RadioListTile<String>(
-                        title: const Text('Tasks Remaining (counts down)'),
-                        value: 'tasks remaining',
-                        groupValue: _taskCountMode,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _taskCountMode = value);
-                            widget.onTaskCountModeChange(value);
-                          }
-                        },
-                        contentPadding: EdgeInsets.zero,
-                      ),
-                      RadioListTile<String>(
-                        title: const Text('Hide Task Count'),
-                        value: 'hide',
-                        groupValue: _taskCountMode,
-                        onChanged: (value) {
-                          if (value != null) {
-                            setState(() => _taskCountMode = value);
-                            widget.onTaskCountModeChange(value);
-                          }
-                        },
-                        contentPadding: EdgeInsets.zero,
                       ),
                     ],
                   ),

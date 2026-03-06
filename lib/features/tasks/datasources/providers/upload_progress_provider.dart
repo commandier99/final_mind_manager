@@ -44,12 +44,12 @@ class UploadProgressProvider extends ChangeNotifier {
       progress: progress,
     );
     notifyListeners();
-    print('📊 [UploadProgress] ${_uploads[submissionId]!}');
+    debugPrint('📊 [UploadProgress] ${_uploads[submissionId]!}');
   }
 
   void clearProgress(String submissionId) {
     _uploads.remove(submissionId);
     notifyListeners();
-    print('📊 [UploadProgress] Cleared submission: $submissionId');
+    debugPrint('📊 [UploadProgress] Cleared submission: $submissionId');
   }
 }

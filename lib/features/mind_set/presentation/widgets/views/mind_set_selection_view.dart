@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:uuid/uuid.dart';
-import 'package:mind_manager_final/shared/modes/mind_set_modes.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
 import '/features/plans/datasources/services/plan_service.dart';
 import '/features/tasks/datasources/services/task_services.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
-import '../../../datasources/models/mind_set_session_stats_model.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 import '../mind_set_create_form.dart';
 
@@ -92,7 +89,7 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -125,17 +122,20 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
   }
 
   Future<void> _openCreateSession(String sessionType) async {
+    final messenger = ScaffoldMessenger.of(context);
     if (await _hasActiveSession()) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (!mounted) return;
+      messenger.showSnackBar(
         const SnackBar(content: Text('End your current session first.')),
       );
       return;
     }
+    if (!mounted) return;
 
     if (sessionType == 'go_with_flow') {
       final userId = context.read<UserProvider>().userId;
       if (userId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('User not found. Please sign in again.'),
           ),
@@ -146,7 +146,7 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
       final hasUnplanned = await _hasUnplannedTasks(userId);
       if (!mounted) return;
       if (!hasUnplanned) {
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(
             content: Text('No unplanned tasks available for Go with the Flow.'),
           ),
@@ -167,77 +167,12 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
       final userId = context.read<UserProvider>().userId;
       if (userId != null) {
         final session = await _sessionService.streamActiveSession(userId).first;
+        if (!mounted) return;
         if (session != null && session.sessionStatus == 'created') {
           await _startSession(session);
         }
       }
     }
-  }
-
-  Future<void> _handleGoWithFlowSelection() async {
-    if (await _hasActiveSession()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('End your current session first.')),
-      );
-      return;
-    }
-
-    final userId = context.read<UserProvider>().userId;
-
-    if (userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not found. Please sign in again.')),
-      );
-      return;
-    }
-
-    final hasUnplanned = await _hasUnplannedTasks(userId);
-
-    if (!hasUnplanned) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No unplanned tasks to work on.')),
-      );
-      return;
-    }
-
-    final sessionId = const Uuid().v4();
-
-    final session = MindSetSession(
-      sessionId: sessionId,
-      sessionUserId: userId,
-      sessionType: 'go_with_flow',
-      sessionMode: MindSetModes.checklist,
-      sessionModeHistory: [
-        MindSetModeChange(
-          mode: MindSetModes.checklist,
-          changedAt: DateTime.now(),
-        ),
-      ],
-      sessionTitle: 'Flow Session',
-      sessionPurpose: 'Do What I Can',
-      sessionWhy: 'Make Progress In Any Way',
-      sessionStatus: 'active',
-      sessionCreatedAt: DateTime.now(),
-      sessionStartedAt: DateTime.now(),
-      sessionStats: const MindSetSessionStats(
-        tasksTotalCount: 0,
-        tasksDoneCount: 0,
-        sessionFocusDurationMinutes: 0,
-        sessionFocusDurationSeconds: 0,
-        pomodoroCount: 0,
-        pomodoroTargetCount: 4,
-        pomodoroFocusMinutes: 25,
-        pomodoroBreakMinutes: 5,
-        pomodoroLongBreakMinutes: 60,
-        pomodoroIsRunning: false,
-        pomodoroIsOnBreak: false,
-        pomodoroIsLongBreak: false,
-        pomodoroMotivation: 'focused',
-      ),
-    );
-
-    await _sessionService.addSession(session);
   }
 
   Future<bool> _hasActiveSession() async {

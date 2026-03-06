@@ -37,21 +37,21 @@ class _SettingsPageState extends State<SettingsPage> {
     if (value) {
       // First check current status
       final currentStatus = await Permission.notification.status;
-      print('[SettingsPage] Current notification permission status: $currentStatus');
+      debugPrint('[SettingsPage] Current notification permission status: $currentStatus');
       
       PermissionStatus status;
       
       // Only request if not already granted
       if (currentStatus.isDenied) {
-        print('[SettingsPage] Permission denied, requesting...');
+        debugPrint('[SettingsPage] Permission denied, requesting...');
         status = await Permission.notification.request();
-        print('[SettingsPage] Notification permission after request: $status');
+        debugPrint('[SettingsPage] Notification permission after request: $status');
       } else {
         status = currentStatus;
       }
       
       if (status.isGranted) {
-        print('[SettingsPage] Permission granted! Enabling push notifications...');
+        debugPrint('[SettingsPage] Permission granted! Enabling push notifications...');
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('pushNotifications', true);
         setState(() {
@@ -67,13 +67,13 @@ class _SettingsPageState extends State<SettingsPage> {
           );
         }
       } else if (status.isPermanentlyDenied) {
-        print('[SettingsPage] Permission permanently denied');
+        debugPrint('[SettingsPage] Permission permanently denied');
         if (mounted) {
           setState(() => _pushNotificationsEnabled = false);
           _showPermissionDialog();
         }
       } else if (status.isDenied) {
-        print('[SettingsPage] Permission denied by user');
+        debugPrint('[SettingsPage] Permission denied by user');
         if (mounted) {
           setState(() => _pushNotificationsEnabled = false);
           ScaffoldMessenger.of(context).showSnackBar(

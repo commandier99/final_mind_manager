@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
@@ -43,8 +44,8 @@ class TaskSubmissionService {
     Function(String, int, int, String, double)? onProgress,
   }) async {
     try {
-      print('📤 [Upload] Starting submission for task: $taskId');
-      print('📤 [Upload] Number of files: ${files.length}');
+      debugPrint('📤 [Upload] Starting submission for task: $taskId');
+      debugPrint('📤 [Upload] Number of files: ${files.length}');
 
       final currentUser = _auth.currentUser;
       if (currentUser == null) throw Exception('User not authenticated');
@@ -60,19 +61,19 @@ class TaskSubmissionService {
       final submissionId = _submissions.doc().id;
       final uploadedFiles = <SubmissionFile>[];
 
-      print('📤 [Upload] Submission ID: $submissionId');
+      debugPrint('📤 [Upload] Submission ID: $submissionId');
 
       // Upload each file to Cloudinary
       for (int i = 0; i < files.length; i++) {
         final file = files[i];
-        print(
+        debugPrint(
           '📤 [Upload] Processing file ${i + 1}/${files.length}: ${file.name}',
         );
-        print('📤 [Upload] File size: ${file.size} bytes');
-        print('📤 [Upload] Has bytes: ${file.bytes != null}');
+        debugPrint('📤 [Upload] File size: ${file.size} bytes');
+        debugPrint('📤 [Upload] Has bytes: ${file.bytes != null}');
 
         if (file.bytes != null) {
-          print('📤 [Upload] Uploading to Cloudinary...');
+          debugPrint('📤 [Upload] Uploading to Cloudinary...');
 
           // Report progress
           onProgress?.call(submissionId, i + 1, files.length, file.name, 0.0);
@@ -84,9 +85,9 @@ class TaskSubmissionService {
             submissionId: submissionId,
           );
 
-          print('📤 [Upload] Upload successful!');
-          print('📤 [Upload] URL: ${uploadResult['url']}');
-          print('📤 [Upload] Public ID: ${uploadResult['publicId']}');
+          debugPrint('📤 [Upload] Upload successful!');
+          debugPrint('📤 [Upload] URL: ${uploadResult['url']}');
+          debugPrint('📤 [Upload] Public ID: ${uploadResult['publicId']}');
 
           // Report progress complete for this file
           onProgress?.call(submissionId, i + 1, files.length, file.name, 1.0);
@@ -105,15 +106,15 @@ class TaskSubmissionService {
             ),
           );
 
-          print(
+          debugPrint(
             '📤 [Upload] File added to list. Total files: ${uploadedFiles.length}',
           );
         } else {
-          print('⚠️ [Upload] File has no bytes, skipping');
+          debugPrint('⚠️ [Upload] File has no bytes, skipping');
         }
       }
 
-      print(
+      debugPrint(
         '📤 [Upload] All files processed. Total uploaded: ${uploadedFiles.length}',
       );
 
@@ -130,12 +131,12 @@ class TaskSubmissionService {
         status: TaskSubmission.statusPending,
       );
 
-      print('📤 [Upload] Saving submission to Firestore...');
-      print('📤 [Upload] Submission has ${submission.files.length} files');
+      debugPrint('📤 [Upload] Saving submission to Firestore...');
+      debugPrint('📤 [Upload] Submission has ${submission.files.length} files');
 
       await _submissions.doc(submissionId).set(submission.toMap());
 
-      print('📤 [Upload] Submission saved to Firestore');
+      debugPrint('📤 [Upload] Submission saved to Firestore');
 
       // Load task metadata once for activity logging + reviewer notifications.
       String? boardId;
@@ -152,6 +153,7 @@ class TaskSubmissionService {
       final taskRef = _firestore.collection('tasks').doc(taskId);
       await taskRef.update({
         'taskSubmissionId': submissionId,
+        'taskStatus': Task.statusSubmitted,
         if ((taskData?['taskRequiresApproval'] as bool? ?? false) == true)
           'taskApprovalStatus': 'pending',
       });
@@ -172,7 +174,7 @@ class TaskSubmissionService {
           },
         );
       } catch (e) {
-        print('⚠️ Failed to log activity: $e');
+        debugPrint('⚠️ Failed to log activity: $e');
       }
 
       // Notify reviewers that a member submitted work.
@@ -185,15 +187,15 @@ class TaskSubmissionService {
           submitterName: userData?['userName'] ?? 'Unknown',
         );
       } catch (e) {
-        print('⚠️ Failed to notify reviewers: $e');
+        debugPrint('⚠️ Failed to notify reviewers: $e');
       }
 
-      print(
+      debugPrint(
         '✅ Submission created: $submissionId with ${uploadedFiles.length} files',
       );
       return submissionId;
     } catch (e) {
-      print('⚠️ Error creating submission: $e');
+      debugPrint('⚠️ Error creating submission: $e');
       rethrow;
     }
   }
@@ -275,7 +277,7 @@ class TaskSubmissionService {
 
       return TaskSubmission.fromMap(doc.data() as Map<String, dynamic>, doc.id);
     } catch (e) {
-      print('⚠️ Error getting submission: $e');
+      debugPrint('⚠️ Error getting submission: $e');
       return null;
     }
   }
@@ -332,7 +334,7 @@ class TaskSubmissionService {
           )
           .toList();
     } catch (e) {
-      print('⚠️ Error getting user submissions: $e');
+      debugPrint('⚠️ Error getting user submissions: $e');
       return [];
     }
   }
@@ -355,7 +357,7 @@ class TaskSubmissionService {
       }
       return total;
     } catch (e) {
-      print('⚠️ Error calculating total task bytes: $e');
+      debugPrint('⚠️ Error calculating total task bytes: $e');
       return 0;
     }
   }
@@ -409,10 +411,10 @@ class TaskSubmissionService {
           metadata: {'submissionId': submissionId, 'fileCount': files.length},
         );
       } catch (e) {
-        print('⚠️ Failed to log deletion activity: $e');
+        debugPrint('⚠️ Failed to log deletion activity: $e');
       }
     } catch (e) {
-      print('⚠️ Error deleting submission: $e');
+      debugPrint('⚠️ Error deleting submission: $e');
       rethrow;
     }
   }
@@ -510,7 +512,7 @@ class TaskSubmissionService {
           feedback: feedback,
         );
       } catch (e) {
-        print('⚠️ Failed to notify submitter of review result: $e');
+        debugPrint('⚠️ Failed to notify submitter of review result: $e');
       }
 
       // Intentionally do not mutate task execution fields here.
@@ -541,12 +543,12 @@ class TaskSubmissionService {
           );
         }
       } catch (e) {
-        print('Failed to log submission review activity: $e');
+        debugPrint('Failed to log submission review activity: $e');
       }
 
-      print('✅ Submission reviewed: $submissionId');
+      debugPrint('✅ Submission reviewed: $submissionId');
     } catch (e) {
-      print('⚠️ Error reviewing submission: $e');
+      debugPrint('⚠️ Error reviewing submission: $e');
       rethrow;
     }
   }

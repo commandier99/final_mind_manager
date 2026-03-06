@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../users/datasources/models/user_model.dart';
 import '../../../../features/boards/datasources/models/board_model.dart';
@@ -25,7 +26,7 @@ class SearchService {
                   .where((user) => user.userIsActive && !user.userIsBanned)
                   .toList();
 
-          print('[SearchService] Streaming ${users.length} public users');
+          debugPrint('[SearchService] Streaming ${users.length} public users');
           return users;
         });
 
@@ -74,7 +75,7 @@ class SearchService {
 
       return results;
     } catch (e) {
-      print('[SearchService] Error searching users: $e');
+      debugPrint('[SearchService] Error searching users: $e');
       return [];
     }
   }
@@ -133,7 +134,7 @@ class SearchService {
 
       return results;
     } catch (e) {
-      print('[SearchService] Error searching public boards: $e');
+      debugPrint('[SearchService] Error searching public boards: $e');
       return [];
     }
   }
@@ -188,7 +189,7 @@ class SearchService {
 
       return results;
     } catch (e) {
-      print('[SearchService] Error searching tasks: $e');
+      debugPrint('[SearchService] Error searching tasks: $e');
       return [];
     }
   }

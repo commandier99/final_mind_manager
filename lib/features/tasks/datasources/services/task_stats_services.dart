@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/task_stats_model.dart';
 
@@ -9,9 +10,9 @@ class TaskStatsService {
   Future<void> addTaskStats(String taskId, TaskStats taskStats) async {
     try {
       await _taskStats.doc(taskId).set(taskStats.toMap());
-      print('✅ Task stats for $taskId added successfully');
+      debugPrint('✅ Task stats for $taskId added successfully');
     } catch (e) {
-      print('⚠️ Error adding task stats for $taskId: $e');
+      debugPrint('⚠️ Error adding task stats for $taskId: $e');
     }
   }
 
@@ -19,9 +20,9 @@ class TaskStatsService {
   Future<void> updateTaskStats(String taskId, TaskStats taskStats) async {
     try {
       await _taskStats.doc(taskId).update(taskStats.toMap());
-      print('✅ Task stats for $taskId updated successfully');
+      debugPrint('✅ Task stats for $taskId updated successfully');
     } catch (e) {
-      print('⚠️ Error updating task stats for $taskId: $e');
+      debugPrint('⚠️ Error updating task stats for $taskId: $e');
     }
   }
 
@@ -33,7 +34,7 @@ class TaskStatsService {
         return TaskStats.fromMap(docSnapshot.data() as Map<String, dynamic>);
       }
     } catch (e) {
-      print('⚠️ Error fetching task stats for $taskId: $e');
+      debugPrint('⚠️ Error fetching task stats for $taskId: $e');
     }
     return null;
   }
@@ -45,10 +46,10 @@ class TaskStatsService {
       if (taskStats != null) {
         final updatedStats = taskStats.copyWith(taskEditsCount: (taskStats.taskEditsCount ?? 0) + 1);
         await updateTaskStats(taskId, updatedStats);
-        print('✅ Task stats for $taskId edits count incremented');
+        debugPrint('✅ Task stats for $taskId edits count incremented');
       }
     } catch (e) {
-      print('⚠️ Error incrementing task stats for $taskId: $e');
+      debugPrint('⚠️ Error incrementing task stats for $taskId: $e');
     }
   }
 
@@ -63,10 +64,10 @@ class TaskStatsService {
           taskStepsDeletedCount: (taskStats.taskStepsDeletedCount ?? 0) + deleted,
         );
         await updateTaskStats(taskId, updatedStats);
-        print('✅ Task stats for $taskId step count incremented');
+        debugPrint('✅ Task stats for $taskId step count incremented');
       }
     } catch (e) {
-      print('⚠️ Error incrementing step count for $taskId: $e');
+      debugPrint('⚠️ Error incrementing step count for $taskId: $e');
     }
   }
 
@@ -75,9 +76,9 @@ class TaskStatsService {
     try {
       // Delete task stats from the 'task_stats' collection
       await _taskStats.doc(taskId).delete();
-      print('✅ Task stats for $taskId permanently deleted');
+      debugPrint('✅ Task stats for $taskId permanently deleted');
     } catch (e) {
-      print('⚠️ Error deleting task stats for $taskId: $e');
+      debugPrint('⚠️ Error deleting task stats for $taskId: $e');
     }
   }
 
@@ -90,10 +91,10 @@ class TaskStatsService {
           deadlinesMissedCount: (taskStats.deadlinesMissedCount ?? 0) + 1,
         );
         await updateTaskStats(taskId, updatedStats);
-        print('✅ Task stats for $taskId deadlines missed count incremented');
+        debugPrint('✅ Task stats for $taskId deadlines missed count incremented');
       }
     } catch (e) {
-      print('⚠️ Error incrementing deadlines missed for $taskId: $e');
+      debugPrint('⚠️ Error incrementing deadlines missed for $taskId: $e');
     }
   }
 
@@ -106,10 +107,10 @@ class TaskStatsService {
           deadlinesExtendedCount: (taskStats.deadlinesExtendedCount ?? 0) + 1,
         );
         await updateTaskStats(taskId, updatedStats);
-        print('✅ Task stats for $taskId deadlines extended count incremented');
+        debugPrint('✅ Task stats for $taskId deadlines extended count incremented');
       }
     } catch (e) {
-      print('⚠️ Error incrementing deadlines extended for $taskId: $e');
+      debugPrint('⚠️ Error incrementing deadlines extended for $taskId: $e');
     }
   }
 
@@ -122,10 +123,10 @@ class TaskStatsService {
           tasksFailedCount: (taskStats.tasksFailedCount ?? 0) + 1,
         );
         await updateTaskStats(taskId, updatedStats);
-        print('✅ Task stats for $taskId tasks failed count incremented');
+        debugPrint('✅ Task stats for $taskId tasks failed count incremented');
       }
     } catch (e) {
-      print('⚠️ Error incrementing tasks failed for $taskId: $e');
+      debugPrint('⚠️ Error incrementing tasks failed for $taskId: $e');
     }
   }
 }

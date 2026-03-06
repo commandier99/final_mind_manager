@@ -153,7 +153,7 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       backgroundColor: isSelected
-                          ? accentColor.withOpacity(0.12)
+                          ? accentColor.withValues(alpha: 0.12)
                           : Colors.white,
                       side: BorderSide(
                         color: isSelected ? accentColor : Colors.grey.shade300,
@@ -181,9 +181,9 @@ class _AddBoardFormPageState extends State<AddBoardFormPage> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: accentColor.withOpacity(0.08),
+            color: accentColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: accentColor.withOpacity(0.2)),
+            border: Border.all(color: accentColor.withValues(alpha: 0.2)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

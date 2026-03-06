@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../services/search_service.dart';
 import '../../users/datasources/models/user_model.dart';
-import '../../users/datasources/services/user_services.dart';
 import '../../../../features/boards/datasources/models/board_model.dart';
 import '../../../../features/tasks/datasources/models/task_model.dart';
 
@@ -18,9 +17,8 @@ class SearchProvider extends ChangeNotifier {
     bool get isSearching => _isLoadingUsers;
 
     /// User search results filtered by query
-    List<UserModel> get searchResults => filteredUserResults;
+  List<UserModel> get searchResults => filteredUserResults;
   final SearchService _searchService = SearchService();
-  final UserService _userService = UserService();
 
   // Search query
   String _query = '';
@@ -93,20 +91,20 @@ class SearchProvider extends ChangeNotifier {
 
   /// Stream discoverable users in real-time
   void streamDiscoverableUsers() {
-    print('[SearchProvider] Starting stream for discoverable users');
+    debugPrint('[SearchProvider] Starting stream for discoverable users');
     _isLoadingUsers = true;
     notifyListeners();
 
     _userStreamSubscription?.cancel();
     _userStreamSubscription = _searchService.streamDiscoverableUsers().listen(
       (users) {
-        print('[SearchProvider] Received ${users.length} discoverable users');
+        debugPrint('[SearchProvider] Received ${users.length} discoverable users');
         _userResults = users;
         _isLoadingUsers = false;
         notifyListeners();
       },
       onError: (e) {
-        print('[SearchProvider] Error streaming users: $e');
+        debugPrint('[SearchProvider] Error streaming users: $e');
         _userResults = [];
         _isLoadingUsers = false;
         notifyListeners();
@@ -159,7 +157,7 @@ class SearchProvider extends ChangeNotifier {
         currentUserId: currentUserId,
       );
     } catch (e) {
-      print('[SearchProvider] Error searching boards: $e');
+      debugPrint('[SearchProvider] Error searching boards: $e');
       _boardResults = [];
     }
 
@@ -176,7 +174,7 @@ class SearchProvider extends ChangeNotifier {
     try {
       _taskResults = await _searchService.searchUserTasks(query, userId);
     } catch (e) {
-      print('[SearchProvider] Error searching tasks: $e');
+      debugPrint('[SearchProvider] Error searching tasks: $e');
       _taskResults = [];
     }
 

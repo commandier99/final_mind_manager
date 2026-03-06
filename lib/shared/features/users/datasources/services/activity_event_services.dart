@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/activity_event_model.dart';
 
@@ -16,7 +17,7 @@ class ActivityEventService {
     String? description,
     Map<String, dynamic>? metadata,
   }) async {
-    print('[DEBUG] ActivityEventService.logEvent: Logging event - type: $activityType, userId: $userId, taskId: $taskId');
+    debugPrint('[DEBUG] ActivityEventService.logEvent: Logging event - type: $activityType, userId: $userId, taskId: $taskId');
     try {
       final eventRef = _events.doc();
       
@@ -34,15 +35,15 @@ class ActivityEventService {
       );
       
       await eventRef.set(event.toMap());
-      print('[DEBUG] ActivityEventService.logEvent: Event logged successfully with ID: ${event.ActEvId}');
+      debugPrint('[DEBUG] ActivityEventService.logEvent: Event logged successfully with ID: ${event.ActEvId}');
     } catch (e) {
-      print('[ERROR] ActivityEventService.logEvent: Failed to log event - $e');
+      debugPrint('[ERROR] ActivityEventService.logEvent: Failed to log event - $e');
       rethrow;
     }
   }
 
   Stream<List<ActivityEvent>> streamUserEvents(String userId) {
-    print('[DEBUG] ActivityEventService.streamUserEvents: Starting stream for userId: $userId');
+    debugPrint('[DEBUG] ActivityEventService.streamUserEvents: Starting stream for userId: $userId');
     return _events
         .where('userId', isEqualTo: userId)
         .orderBy('timestamp', descending: true)
@@ -50,19 +51,19 @@ class ActivityEventService {
         .snapshots()
         .map(
           (snap) {
-            print('[DEBUG] ActivityEventService.streamUserEvents: Received ${snap.docs.length} events for userId: $userId');
+            debugPrint('[DEBUG] ActivityEventService.streamUserEvents: Received ${snap.docs.length} events for userId: $userId');
             return snap.docs.map((doc) {
               return ActivityEvent.fromMap(doc.data() as Map<String, dynamic>, doc.id);
             }).toList();
           },
         )
         .handleError((error) {
-          print('[ERROR] ActivityEventService.streamUserEvents: Stream error for userId $userId - $error');
+          debugPrint('[ERROR] ActivityEventService.streamUserEvents: Stream error for userId $userId - $error');
         });
   }
 
   Future<List<ActivityEvent>> getUserEvents(String userId, {int limit = 50}) async {
-    print('[DEBUG] ActivityEventService.getUserEvents: Fetching events for userId: $userId, limit: $limit');
+    debugPrint('[DEBUG] ActivityEventService.getUserEvents: Fetching events for userId: $userId, limit: $limit');
     try {
       final snapshot = await _events
           .where('userId', isEqualTo: userId)
@@ -70,19 +71,19 @@ class ActivityEventService {
           .limit(limit)
           .get();
 
-      print('[DEBUG] ActivityEventService.getUserEvents: Retrieved ${snapshot.docs.length} events for userId: $userId');
+      debugPrint('[DEBUG] ActivityEventService.getUserEvents: Retrieved ${snapshot.docs.length} events for userId: $userId');
       return snapshot.docs
           .map((doc) => ActivityEvent.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
     } catch (e) {
-      print('[ERROR] ActivityEventService.getUserEvents: Failed to fetch events - $e');
+      debugPrint('[ERROR] ActivityEventService.getUserEvents: Failed to fetch events - $e');
       return [];
     }
   }
 
   /// Stream all activities for a specific board (all members' activities)
   Stream<List<ActivityEvent>> streamBoardEvents(String boardId) {
-    print('[DEBUG] ActivityEventService.streamBoardEvents: Starting stream for boardId: $boardId');
+    debugPrint('[DEBUG] ActivityEventService.streamBoardEvents: Starting stream for boardId: $boardId');
     return _events
         .where('boardId', isEqualTo: boardId)
         .orderBy('timestamp', descending: true)
@@ -90,20 +91,20 @@ class ActivityEventService {
         .snapshots()
         .map(
           (snap) {
-            print('[DEBUG] ActivityEventService.streamBoardEvents: Received ${snap.docs.length} events for boardId: $boardId');
+            debugPrint('[DEBUG] ActivityEventService.streamBoardEvents: Received ${snap.docs.length} events for boardId: $boardId');
             return snap.docs.map((doc) {
               return ActivityEvent.fromMap(doc.data() as Map<String, dynamic>, doc.id);
             }).toList();
           },
         )
         .handleError((error) {
-          print('[ERROR] ActivityEventService.streamBoardEvents: Stream error for boardId $boardId - $error');
+          debugPrint('[ERROR] ActivityEventService.streamBoardEvents: Stream error for boardId $boardId - $error');
         });
   }
 
   /// Fetch all activities for a specific board (all members' activities)
   Future<List<ActivityEvent>> getBoardEvents(String boardId, {int limit = 100}) async {
-    print('[DEBUG] ActivityEventService.getBoardEvents: Fetching events for boardId: $boardId, limit: $limit');
+    debugPrint('[DEBUG] ActivityEventService.getBoardEvents: Fetching events for boardId: $boardId, limit: $limit');
     try {
       final snapshot = await _events
           .where('boardId', isEqualTo: boardId)
@@ -111,12 +112,12 @@ class ActivityEventService {
           .limit(limit)
           .get();
 
-      print('[DEBUG] ActivityEventService.getBoardEvents: Retrieved ${snapshot.docs.length} events for boardId: $boardId');
+      debugPrint('[DEBUG] ActivityEventService.getBoardEvents: Retrieved ${snapshot.docs.length} events for boardId: $boardId');
       return snapshot.docs
           .map((doc) => ActivityEvent.fromMap(doc.data() as Map<String, dynamic>, doc.id))
           .toList();
     } catch (e) {
-      print('[ERROR] ActivityEventService.getBoardEvents: Failed to fetch events - $e');
+      debugPrint('[ERROR] ActivityEventService.getBoardEvents: Failed to fetch events - $e');
       return [];
     }
   }

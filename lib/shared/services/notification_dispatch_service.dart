@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
@@ -19,13 +20,13 @@ class NotificationDispatchService {
     Map<String, String>? data,
   }) async {
     try {
-      print('[NotificationDispatch] Sending $category notification to user: $userId');
+      debugPrint('[NotificationDispatch] Sending $category notification to user: $userId');
 
       // Get user's FCM tokens
       final userDoc = await _firestore.collection('users').doc(userId).get();
       
       if (!userDoc.exists) {
-        print('[NotificationDispatch] ⚠️ User not found: $userId');
+        debugPrint('[NotificationDispatch] ⚠️ User not found: $userId');
         return;
       }
 
@@ -33,7 +34,7 @@ class NotificationDispatchService {
       final fcmTokens = List<String>.from(userData['fcmTokens'] ?? []);
 
       if (fcmTokens.isEmpty) {
-        print('[NotificationDispatch] ⚠️ No FCM tokens for user: $userId');
+        debugPrint('[NotificationDispatch] ⚠️ No FCM tokens for user: $userId');
       } else {
         // Try to send push notifications via FCM
         await _sendPushNotifications(fcmTokens, title, body, data);
@@ -48,9 +49,9 @@ class NotificationDispatchService {
         data: data,
       );
 
-      print('[NotificationDispatch] ✅ Notification sent to user: $userId');
+      debugPrint('[NotificationDispatch] ✅ Notification sent to user: $userId');
     } catch (e) {
-      print('[NotificationDispatch] ❌ Error sending notification: $e');
+      debugPrint('[NotificationDispatch] ❌ Error sending notification: $e');
     }
   }
 
@@ -62,19 +63,19 @@ class NotificationDispatchService {
     Map<String, String>? data,
   ) async {
     try {
-      print('[NotificationDispatch] Sending push to ${fcmTokens.length} tokens');
+      debugPrint('[NotificationDispatch] Sending push to ${fcmTokens.length} tokens');
 
       for (final token in fcmTokens) {
         try {
-          print('[NotificationDispatch] FCM token available: ${token.substring(0, 20)}...');
+          debugPrint('[NotificationDispatch] FCM token available: ${token.substring(0, 20)}...');
         } catch (e) {
-          print('[NotificationDispatch] ⚠️ Error with token: $e');
+          debugPrint('[NotificationDispatch] ⚠️ Error with token: $e');
         }
       }
 
-      print('[NotificationDispatch] ✅ Push notifications attempted');
+      debugPrint('[NotificationDispatch] ✅ Push notifications attempted');
     } catch (e) {
-      print('[NotificationDispatch] ❌ Error in _sendPushNotifications: $e');
+      debugPrint('[NotificationDispatch] ❌ Error in _sendPushNotifications: $e');
     }
   }
 
@@ -101,12 +102,12 @@ class NotificationDispatchService {
           .collection('in_app_notifications')
           .add(notificationDoc);
 
-      print('[NotificationDispatch] ✅ In-app notification created: ${docRef.id}');
+      debugPrint('[NotificationDispatch] ✅ In-app notification created: ${docRef.id}');
 
       // Show local notification
       await _showLocalNotification(title, body, category);
     } catch (e) {
-      print('[NotificationDispatch] ❌ Error creating in-app notification: $e');
+      debugPrint('[NotificationDispatch] ❌ Error creating in-app notification: $e');
     }
   }
 
@@ -134,9 +135,9 @@ class NotificationDispatchService {
         notificationDetails,
       );
 
-      print('[NotificationDispatch] ✅ Local notification shown: $title');
+      debugPrint('[NotificationDispatch] ✅ Local notification shown: $title');
     } catch (e) {
-      print('[NotificationDispatch] ⚠️ Error showing local notification: $e');
+      debugPrint('[NotificationDispatch] ⚠️ Error showing local notification: $e');
     }
   }
 }

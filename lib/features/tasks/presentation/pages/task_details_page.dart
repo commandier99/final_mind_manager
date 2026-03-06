@@ -111,7 +111,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    print(
+    debugPrint(
       '[DEBUG] TaskDetailsPage: build called for taskId = ${widget.task.taskId}',
     );
     final navigation = context.watch<NavigationProvider>();
@@ -159,15 +159,16 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
             ),
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
-              itemBuilder: (context) => [
+              itemBuilder: (menuContext) => [
                 if (canEditTaskDetails)
                   PopupMenuItem(
                     child: const Text('Edit'),
                     onTap: () {
                       // Show edit task dialog after menu closes
                       Future.delayed(Duration.zero, () {
+                        if (!mounted) return;
                         showDialog(
-                          context: context,
+                          context: this.context,
                           builder: (context) =>
                               EditTaskDialog(task: widget.task),
                         );
@@ -188,7 +189,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                   ),
                   onTap: () {
                     // TODO: Implement task deletion
-                    print(
+                    debugPrint(
                       '[DEBUG] TaskDetailsPage: Delete tapped for taskId = ${widget.task.taskId}',
                     );
                   },
@@ -200,7 +201,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       ),
       drawer: AppSideMenu(
         onSelect: (sideMenuIndex) {
-          print(
+          debugPrint(
             '[DEBUG] TaskDetailsPage: SideMenu selected index = $sideMenuIndex',
           );
           navigation.selectFromSideMenu(sideMenuIndex);
@@ -222,10 +223,12 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
             final isUnassigned = _isTaskUnassigned(currentTask);
             final isAcceptedOrNoAcceptanceNeeded =
                 _isAcceptedOrNoAcceptanceNeeded(currentTask);
+            final canManageTask = _canManageTask(currentTask);
             final showApplicationsTab =
                 isUnassigned && _canViewApplications(currentTask);
             final showWorkTabs =
-                !isUnassigned && isAcceptedOrNoAcceptanceNeeded;
+                canManageTask ||
+                (!isUnassigned && isAcceptedOrNoAcceptanceNeeded);
             final showSubmissionsTab =
                 showWorkTabs && currentTask.taskAllowsSubmissions;
 
@@ -400,7 +403,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       bottomNavigationBar: AppBottomNavigation(
         currentIndex: navigation.bottomNavIndex ?? 0,
         onTap: (index) {
-          print('[DEBUG] TaskDetailsPage: BottomNav tapped index = $index');
+          debugPrint('[DEBUG] TaskDetailsPage: BottomNav tapped index = $index');
           // Pop back to main screen first, then navigate
           Navigator.of(context).popUntil((route) => route.isFirst);
           navigation.selectFromBottomNav(index);
@@ -428,6 +431,16 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       }
     }
     return false;
+  }
+
+  bool _canManageTask(Task task) {
+    final currentUserId = context.read<UserProvider>().userId;
+    if (currentUserId == null || currentUserId.isEmpty) return false;
+    if (task.taskOwnerId == currentUserId) return true;
+    if (task.taskBoardId.isEmpty) return false;
+    final board = context.read<BoardProvider>().getBoardById(task.taskBoardId);
+    if (board == null) return false;
+    return board.isManager(currentUserId) || board.isSupervisor(currentUserId);
   }
 
   bool _isTaskFocusedStatus(String status) {

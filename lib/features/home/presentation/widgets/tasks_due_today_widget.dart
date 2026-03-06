@@ -52,7 +52,7 @@ class TasksDueTodayWidget extends StatelessWidget {
             })
             .toList();
         
-        print('[DEBUG] TasksDueTodayWidget: Found ${tasksDueToday.length} tasks due today for user $userId');
+        debugPrint('[DEBUG] TasksDueTodayWidget: Found ${tasksDueToday.length} tasks due today for user $userId');
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/mind_set_session_model.dart';
@@ -12,9 +13,9 @@ class MindSetSessionService {
   Future<void> addSession(MindSetSession session) async {
     try {
       await _sessions.doc(session.sessionId).set(session.toMap());
-      print('[MindSetSessionService] Session ${session.sessionId} created');
+      debugPrint('[MindSetSessionService] Session ${session.sessionId} created');
     } catch (e) {
-      print('[MindSetSessionService] Error creating session: $e');
+      debugPrint('[MindSetSessionService] Error creating session: $e');
       rethrow;
     }
   }
@@ -22,9 +23,9 @@ class MindSetSessionService {
   Future<void> updateSession(MindSetSession session) async {
     try {
       await _sessions.doc(session.sessionId).update(session.toMap());
-      print('[MindSetSessionService] Session ${session.sessionId} updated');
+      debugPrint('[MindSetSessionService] Session ${session.sessionId} updated');
     } catch (e) {
-      print('[MindSetSessionService] Error updating session: $e');
+      debugPrint('[MindSetSessionService] Error updating session: $e');
       rethrow;
     }
   }
@@ -37,9 +38,9 @@ class MindSetSessionService {
       );
       await _sessions.doc(session.sessionId).update(startedSession.toMap());
       await _logSessionEvent('mindset_session_started', startedSession);
-      print('[MindSetSessionService] Session ${session.sessionId} started');
+      debugPrint('[MindSetSessionService] Session ${session.sessionId} started');
     } catch (e) {
-      print('[MindSetSessionService] Error starting session: $e');
+      debugPrint('[MindSetSessionService] Error starting session: $e');
       rethrow;
     }
   }
@@ -60,9 +61,9 @@ class MindSetSessionService {
           ),
         );
       }
-      print('[MindSetSessionService] Session $sessionId ended');
+      debugPrint('[MindSetSessionService] Session $sessionId ended');
     } catch (e) {
-      print('[MindSetSessionService] Error ending session: $e');
+      debugPrint('[MindSetSessionService] Error ending session: $e');
       rethrow;
     }
   }
@@ -91,9 +92,9 @@ class MindSetSessionService {
 
       await _sessions.doc(session.sessionId).update(completedSession.toMap());
       await _logSessionEvent('mindset_session_completed', completedSession);
-      print('[MindSetSessionService] Session ${session.sessionId} completed');
+      debugPrint('[MindSetSessionService] Session ${session.sessionId} completed');
     } catch (e) {
-      print('[MindSetSessionService] Error completing session ${session.sessionId}: $e');
+      debugPrint('[MindSetSessionService] Error completing session ${session.sessionId}: $e');
       rethrow;
     }
   }
@@ -114,9 +115,9 @@ class MindSetSessionService {
           ),
         );
       }
-      print('[MindSetSessionService] Session $sessionId cancelled');
+      debugPrint('[MindSetSessionService] Session $sessionId cancelled');
     } catch (e) {
-      print('[MindSetSessionService] Error cancelling session: $e');
+      debugPrint('[MindSetSessionService] Error cancelling session: $e');
       rethrow;
     }
   }
@@ -126,9 +127,9 @@ class MindSetSessionService {
       await _sessions.doc(sessionId).update({
         'sessionTaskIds': FieldValue.arrayUnion([taskId]),
       });
-      print('[MindSetSessionService] Session $sessionId linked to task $taskId');
+      debugPrint('[MindSetSessionService] Session $sessionId linked to task $taskId');
     } catch (e) {
-      print('[MindSetSessionService] Error adding task $taskId to session $sessionId: $e');
+      debugPrint('[MindSetSessionService] Error adding task $taskId to session $sessionId: $e');
       rethrow;
     }
   }
@@ -138,9 +139,9 @@ class MindSetSessionService {
       await _sessions.doc(sessionId).update({
         'sessionTaskIds': FieldValue.arrayRemove([taskId]),
       });
-      print('[MindSetSessionService] Session $sessionId unlinked from task $taskId');
+      debugPrint('[MindSetSessionService] Session $sessionId unlinked from task $taskId');
     } catch (e) {
-      print('[MindSetSessionService] Error removing task $taskId from session $sessionId: $e');
+      debugPrint('[MindSetSessionService] Error removing task $taskId from session $sessionId: $e');
       rethrow;
     }
   }
@@ -186,7 +187,7 @@ class MindSetSessionService {
       if (!doc.exists) return null;
       return MindSetSession.fromMap(doc.data() as Map<String, dynamic>);
     } catch (e) {
-      print('[MindSetSessionService] Error fetching session $sessionId: $e');
+      debugPrint('[MindSetSessionService] Error fetching session $sessionId: $e');
       return null;
     }
   }

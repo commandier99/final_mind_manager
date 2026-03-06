@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../models/in_app_notif_model.dart';
 import '../services/in_app_notif_service.dart';
 
@@ -18,7 +19,7 @@ class NotificationHelper {
     Map<String, dynamic>? metadata,
   }) async {
     try {
-      print('[NotificationHelper] Starting createNotificationPair for userId: $userId, category: $category');
+      debugPrint('[NotificationHelper] Starting createNotificationPair for userId: $userId, category: $category');
 
       // Create canonical in-app notification.
       final inAppNotif = InAppNotification(
@@ -33,12 +34,12 @@ class NotificationHelper {
         metadata: metadata,
       );
 
-      print('[NotificationHelper] Creating in-app notification...');
+      debugPrint('[NotificationHelper] Creating in-app notification...');
       final inAppId = await _inAppService.createNotification(inAppNotif);
-      print('[NotificationHelper] ✅ In-app notification created with ID: $inAppId');
-      print('✅ Notification created: in-app=$inAppId');
+      debugPrint('[NotificationHelper] ✅ In-app notification created with ID: $inAppId');
+      debugPrint('✅ Notification created: in-app=$inAppId');
     } catch (e) {
-      print('[NotificationHelper] ❌ Error in createNotificationPair: $e');
+      debugPrint('[NotificationHelper] ❌ Error in createNotificationPair: $e');
       rethrow;
     }
   }
@@ -67,7 +68,7 @@ class NotificationHelper {
 
       return await _inAppService.createNotification(inAppNotif);
     } catch (e) {
-      print('⚠️ Error creating in-app notification: $e');
+      debugPrint('⚠️ Error creating in-app notification: $e');
       rethrow;
     }
   }
@@ -98,7 +99,7 @@ class NotificationHelper {
 
       return await _inAppService.createNotification(inAppNotif);
     } catch (e) {
-      print('⚠️ Error creating push notification: $e');
+      debugPrint('⚠️ Error creating push notification: $e');
       rethrow;
     }
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/step_model.dart';
@@ -151,7 +152,7 @@ class StepService {
         metadata: {'stepTitle': newStep.stepTitle},
       );
     } catch (e) {
-      print('[ERROR] Failed to log step created event: $e');
+      debugPrint('[ERROR] Failed to log step created event: $e');
     }
   }
 
@@ -187,7 +188,7 @@ class StepService {
             metadata: {'stepTitle': step.stepTitle},
           );
         } catch (e) {
-          print('[ERROR] Failed to log step completed event: $e');
+          debugPrint('[ERROR] Failed to log step completed event: $e');
         }
       }
     }
@@ -234,7 +235,7 @@ class StepService {
           metadata: {'stepTitle': step.stepTitle},
         );
       } catch (e) {
-        print('[ERROR] Failed to log step deleted event: $e');
+        debugPrint('[ERROR] Failed to log step deleted event: $e');
       }
     }
   }
@@ -272,7 +273,7 @@ class StepService {
           metadata: {'stepTitle': step.stepTitle},
         );
       } catch (e) {
-        print('[ERROR] Failed to log step restored event: $e');
+        debugPrint('[ERROR] Failed to log step restored event: $e');
       }
     }
   }

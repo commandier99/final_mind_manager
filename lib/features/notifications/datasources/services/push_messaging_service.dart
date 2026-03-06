@@ -6,7 +6,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 /// Top-level background message handler
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   if (kDebugMode) {
-    print('[PushMessaging] Background message: ${message.messageId}');
+    debugPrint('[PushMessaging] Background message: ${message.messageId}');
   }
 }
 
@@ -84,7 +84,7 @@ class PushMessagingService {
 
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
       if (kDebugMode) {
-        print('[PushMessaging] Message opened: ${message.messageId}');
+        debugPrint('[PushMessaging] Message opened: ${message.messageId}');
       }
     });
   }

@@ -18,16 +18,16 @@ class _ActivityLogSectionState extends State<ActivityLogSection> {
   @override
   void initState() {
     super.initState();
-    print('[DEBUG] RecentActivitySection: initState called');
+    debugPrint('[DEBUG] RecentActivitySection: initState called');
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      print('[DEBUG] RecentActivitySection: Starting activity stream');
+      debugPrint('[DEBUG] RecentActivitySection: Starting activity stream');
       // Stream will be started by the provider when needed
     });
   }
 
   @override
   void dispose() {
-    print('[DEBUG] RecentActivitySection: dispose called');
+    debugPrint('[DEBUG] RecentActivitySection: dispose called');
     super.dispose();
   }
 
@@ -36,7 +36,7 @@ class _ActivityLogSectionState extends State<ActivityLogSection> {
     return Consumer<ActivityEventProvider>(
       builder: (context, activityProvider, _) {
         final activities = activityProvider.events;
-        print(
+        debugPrint(
           '[DEBUG] RecentActivitySection: Building with ${activities.length} activities',
         );
 
@@ -48,10 +48,10 @@ class _ActivityLogSectionState extends State<ActivityLogSection> {
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
               child: InkWell(
                 onTap: () {
-                  print('[DEBUG] RecentActivitySection: Toggling expansion - was $_isExpanded');
+                  debugPrint('[DEBUG] RecentActivitySection: Toggling expansion - was $_isExpanded');
                   setState(() {
                     _isExpanded = !_isExpanded;
-                    print('[DEBUG] RecentActivitySection: Expansion toggled - now $_isExpanded');
+                    debugPrint('[DEBUG] RecentActivitySection: Expansion toggled - now $_isExpanded');
                   });
                 },
                 child: Row(
@@ -161,7 +161,7 @@ class _ActivityLogSectionState extends State<ActivityLogSection> {
             padding: const EdgeInsets.only(top: 8),
             child: TextButton(
               onPressed: () {
-                print('[DEBUG] RecentActivitySection: "See more" clicked - showing all ${activities.length} activities');
+                debugPrint('[DEBUG] RecentActivitySection: "See more" clicked - showing all ${activities.length} activities');
                 setState(() {
                   _showAll = true;
                 });
@@ -181,7 +181,7 @@ class _ActivityLogSectionState extends State<ActivityLogSection> {
             padding: const EdgeInsets.only(top: 8),
             child: TextButton(
               onPressed: () {
-                print('[DEBUG] RecentActivitySection: "Show less" clicked - collapsing to 10 activities');
+                debugPrint('[DEBUG] RecentActivitySection: "Show less" clicked - collapsing to 10 activities');
                 setState(() {
                   _showAll = false;
                 });

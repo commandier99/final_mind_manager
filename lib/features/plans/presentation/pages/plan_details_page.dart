@@ -23,7 +23,7 @@ class _PlanDetailsPageState extends State<PlanDetailsPage> {
   @override
   void initState() {
     super.initState();
-    print(
+    debugPrint(
       '[DEBUG] PlanDetailsPage: initState called for planId = ${widget.plan.planId}',
     );
 
@@ -38,7 +38,7 @@ class _PlanDetailsPageState extends State<PlanDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
-    print(
+    debugPrint(
       '[DEBUG] PlanDetailsPage: build called for planId = ${widget.plan.planId}',
     );
     final navigation = context.watch<NavigationProvider>();
@@ -54,7 +54,7 @@ class _PlanDetailsPageState extends State<PlanDetailsPage> {
       ),
       drawer: AppSideMenu(
         onSelect: (sideMenuIndex) {
-          print(
+          debugPrint(
             '[DEBUG] PlanDetailsPage: SideMenu selected index = $sideMenuIndex',
           );
           navigation.selectFromSideMenu(sideMenuIndex);
@@ -80,7 +80,7 @@ class _PlanDetailsPageState extends State<PlanDetailsPage> {
       bottomNavigationBar: AppBottomNavigation(
         currentIndex: navigation.bottomNavIndex ?? 0,
         onTap: (index) {
-          print('[DEBUG] PlanDetailsPage: BottomNav tapped index = $index');
+          debugPrint('[DEBUG] PlanDetailsPage: BottomNav tapped index = $index');
           // Pop back to main screen first, then navigate
           Navigator.of(context).popUntil((route) => route.isFirst);
           navigation.selectFromBottomNav(index);

@@ -70,9 +70,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     unawaited(
       Permission.notification.status.then((status) {
         if (status.isDenied) {
-          print('[SplashScreen] Requesting notification permission on app startup');
+          debugPrint('[SplashScreen] Requesting notification permission on app startup');
           Permission.notification.request().then((result) {
-            print('[SplashScreen] Notification permission result: $result');
+            debugPrint('[SplashScreen] Notification permission result: $result');
           });
         }
       }),
@@ -98,7 +98,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
         // Only proceed if a user document exists in the database.
         if (userProvider.currentUser != null) {
-          print('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
+          debugPrint('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
 
           // Register FCM token only for existing users (prevents creating empty user docs)
           FirebaseMessagingService().registerTokenForUser(userProvider.currentUser!.userId);
@@ -110,15 +110,19 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
           await deadlineReminderService.checkAndSendReminders();
           deadlineReminderService.startPeriodicReminders();
 
+          if (!mounted) return;
           Navigator.pushReplacementNamed(context, '/home');
         } else {
-          print('[SplashScreen] ⚠️ User document not found in database - routing to auth');
+          debugPrint('[SplashScreen] ⚠️ User document not found in database - routing to auth');
+          if (!mounted) return;
           Navigator.pushReplacementNamed(context, '/auth');
         }
         return;
       }
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/auth');
     } else {
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/auth');
     }
   }

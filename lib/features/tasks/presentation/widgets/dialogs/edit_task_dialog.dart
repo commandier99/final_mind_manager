@@ -953,7 +953,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                           '${_assigneeOptionLabel(entry.key, entry.value)}$loadSuffix${atCapacity ? ' - At Capacity' : ''}',
                         ),
                       );
-                    }).toList(),
+                    }),
                   ],
                   onChanged: (val) {
                     setState(() {
