@@ -438,6 +438,11 @@ List<MapEntry<String, dynamic>> _publicMetadataEntries(
     'deadline',
     'taskSummary',
     'taskPriorityLevel',
+    'assignedBy',
+    'assignedById',
+    'assignedByName',
+    'assignmentDecision',
+    'assignmentRespondedAt',
     'kind',
     'pokeId',
     'pokeMessage',
@@ -461,6 +466,13 @@ Widget _buildTaskAssignmentActions(
   BuildContext context,
   InAppNotification notif,
 ) {
+  final decision = _assignmentDecisionFromMetadata(notif).toLowerCase();
+  final taskId = _notificationTaskId(notif);
+  if (taskId.isEmpty) {
+    return const SizedBox.shrink();
+  }
+  final hasResponded = decision == 'accepted' || decision == 'declined';
+
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -476,9 +488,13 @@ Widget _buildTaskAssignmentActions(
         children: [
           Expanded(
             child: ElevatedButton.icon(
-              onPressed: () => _handleAcceptTask(context, notif.relatedId!),
-              icon: const Icon(Icons.check),
-              label: const Text('Accept'),
+              onPressed: hasResponded
+                  ? null
+                  : () => _handleAcceptTask(context, taskId, notif.notificationId),
+              icon: Icon(hasResponded && decision == 'accepted'
+                  ? Icons.check_circle
+                  : Icons.check),
+              label: Text(decision == 'accepted' ? 'Accepted' : 'Accept'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
@@ -489,25 +505,51 @@ Widget _buildTaskAssignmentActions(
           const SizedBox(width: 12),
           Expanded(
             child: OutlinedButton.icon(
-              onPressed: () => _handleDeclineTask(context, notif.relatedId!),
-              icon: const Icon(Icons.close),
-              label: const Text('Decline'),
+              onPressed: hasResponded
+                  ? null
+                  : () => _handleDeclineTask(
+                        context,
+                        taskId,
+                        notif.notificationId,
+                      ),
+              icon: Icon(
+                hasResponded && decision == 'declined'
+                    ? Icons.block
+                    : Icons.close,
+              ),
+              label: Text(decision == 'declined' ? 'Declined' : 'Decline'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
+                foregroundColor:
+                    decision == 'declined' ? Colors.orange : Colors.red,
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
           ),
         ],
       ),
+      if (hasResponded) ...[
+        const SizedBox(height: 8),
+        Text(
+          'Assignment request has been ${decision == 'accepted' ? 'accepted' : 'declined'}.',
+          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+        ),
+      ],
     ],
   );
 }
 
-Future<void> _handleAcceptTask(BuildContext context, String taskId) async {
+Future<void> _handleAcceptTask(
+  BuildContext context,
+  String taskId,
+  String notificationId,
+) async {
   final taskProvider = Provider.of<TaskProvider>(context, listen: false);
   try {
     await taskProvider.acceptTask(taskId);
+    await _markAssignmentDecision(
+      notificationId: notificationId,
+      decision: 'accepted',
+    );
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -515,7 +557,6 @@ Future<void> _handleAcceptTask(BuildContext context, String taskId) async {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.pop(context);
     }
   } catch (e) {
     if (context.mounted) {
@@ -529,10 +570,18 @@ Future<void> _handleAcceptTask(BuildContext context, String taskId) async {
   }
 }
 
-Future<void> _handleDeclineTask(BuildContext context, String taskId) async {
+Future<void> _handleDeclineTask(
+  BuildContext context,
+  String taskId,
+  String notificationId,
+) async {
   final taskProvider = Provider.of<TaskProvider>(context, listen: false);
   try {
     await taskProvider.declineTask(taskId);
+    await _markAssignmentDecision(
+      notificationId: notificationId,
+      decision: 'declined',
+    );
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -540,7 +589,6 @@ Future<void> _handleDeclineTask(BuildContext context, String taskId) async {
           backgroundColor: Colors.orange,
         ),
       );
-      Navigator.pop(context);
     }
   } catch (e) {
     if (context.mounted) {
@@ -556,8 +604,35 @@ Future<void> _handleDeclineTask(BuildContext context, String taskId) async {
 
 bool _isTaskAssignmentNotification(InAppNotification notif) {
   final isTaskAssigned = notif.category == 'task_assigned';
-  final hasTaskId = notif.relatedId != null && notif.relatedId!.isNotEmpty;
+  final hasTaskId = _notificationTaskId(notif).isNotEmpty;
   return isTaskAssigned && hasTaskId;
+}
+
+String _notificationTaskId(InAppNotification notif) {
+  final relatedId = (notif.relatedId ?? '').trim();
+  if (relatedId.isNotEmpty) return relatedId;
+  final metadata = notif.metadata ?? const <String, dynamic>{};
+  return (metadata['taskId']?.toString() ?? '').trim();
+}
+
+String _assignmentDecisionFromMetadata(InAppNotification notif) {
+  final metadata = notif.metadata ?? const <String, dynamic>{};
+  return (metadata['assignmentDecision']?.toString() ?? '').trim();
+}
+
+Future<void> _markAssignmentDecision({
+  required String notificationId,
+  required String decision,
+}) async {
+  await FirebaseFirestore.instance
+      .collection('in_app_notifications')
+      .doc(notificationId)
+      .update({
+    'metadata.assignmentDecision': decision,
+    'metadata.assignmentRespondedAt': Timestamp.now(),
+    'isRead': true,
+    'readAt': Timestamp.now(),
+  });
 }
 
 bool _isPokeNotification(InAppNotification notif) {

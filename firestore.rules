@@ -163,6 +163,63 @@ service cloud.firestore {
           request.resource.data.userId != request.auth.uid;
       }
 
+      function isPokeReminderNotificationCreate() {
+        return request.resource.data.category == 'reminder' &&
+          request.resource.data.userId is string &&
+          request.resource.data.userId != '' &&
+          request.resource.data.userId != request.auth.uid &&
+          request.resource.data.metadata is map &&
+          request.resource.data.metadata.source == 'poke' &&
+          (
+            // Task poke: task participant can notify assigned member.
+            (
+              request.resource.data.metadata.targetType == 'task' &&
+              request.resource.data.relatedId is string &&
+              exists(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)) &&
+              (
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo ||
+                (
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
+                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
+                  (
+                    request.auth.uid ==
+                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.boardManagerId ||
+                    request.auth.uid in
+                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberIds
+                  )
+                )
+              ) &&
+              request.resource.data.userId ==
+                get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo
+            ) ||
+            // Board poke: board member can notify another user.
+            (
+              request.resource.data.metadata.targetType == 'board' &&
+              request.resource.data.relatedId is string &&
+              exists(/databases/$(database)/documents/boards/$(request.resource.data.relatedId)) &&
+              (
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/boards/$(request.resource.data.relatedId)).data.boardManagerId ||
+                request.auth.uid in
+                  get(/databases/$(database)/documents/boards/$(request.resource.data.relatedId)).data.memberIds
+              )
+            ) ||
+            // Direct user poke.
+            (
+              request.resource.data.metadata.targetType == 'user' &&
+              request.resource.data.relatedId is string &&
+              request.resource.data.relatedId == request.resource.data.userId
+            ) ||
+            // Fallback for legacy poke payloads without explicit target type.
+            (
+              !(request.resource.data.metadata.targetType is string)
+            )
+          );
+      }
+
       function notificationTaskId() {
         return (request.resource.data.relatedId is string &&
             request.resource.data.relatedId != '')
@@ -286,6 +343,7 @@ service cloud.firestore {
          isInviteNotificationCreate() ||
          isApprovalNotificationCreate() ||
          isSuggestionNotificationCreate() ||
+         isPokeReminderNotificationCreate() ||
          isTaskAssignmentNotificationCreate() ||
          isTaskApplicationNotificationCreate());
 
@@ -664,6 +722,37 @@ service cloud.firestore {
           get(/databases/$(database)/documents/boards/$(boardId)).data.memberRoles[request.auth.uid] == 'supervisor';
       }
 
+      function isAssignmentResponseByProposedAssignee() {
+        return request.auth != null &&
+          resource.data.taskIsDone != true &&
+          resource.data.taskAssignmentStatus == 'pending' &&
+          resource.data.taskProposedAssigneeId is string &&
+          resource.data.taskProposedAssigneeId == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'taskAssignedTo',
+            'taskAssignedToName',
+            'taskAssignmentStatus',
+            'taskAcceptanceStatus',
+            'taskProposedAssigneeId',
+            'taskProposedAssigneeName'
+          ]) &&
+          request.resource.data.taskAssignmentStatus in ['accepted', 'declined'] &&
+          (
+            (
+              request.resource.data.taskAssignmentStatus == 'accepted' &&
+              request.resource.data.taskAssignedTo == request.auth.uid &&
+              request.resource.data.taskAssignedToName is string &&
+              request.resource.data.taskAssignedToName != ''
+            ) ||
+            (
+              request.resource.data.taskAssignmentStatus == 'declined' &&
+              request.resource.data.taskAssignedTo == 'None'
+            )
+          ) &&
+          !('taskProposedAssigneeId' in request.resource.data) &&
+          !('taskProposedAssigneeName' in request.resource.data);
+      }
+
       allow read: if request.auth != null &&
         (
           resource.data.taskOwnerId == request.auth.uid ||
@@ -717,6 +806,9 @@ service cloud.firestore {
               !isBoardManager(resource.data.taskBoardId)
             )
           )
+          ||
+          // Proposed assignee can accept/decline assignment.
+          isAssignmentResponseByProposedAssignee()
         );
 
       allow delete: if request.auth != null &&

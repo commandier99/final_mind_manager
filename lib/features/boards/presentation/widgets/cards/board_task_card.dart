@@ -289,7 +289,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
 
   Future<void> _pokeMember() async {
     if (!_canPokeMember() || _isPoking) return;
-    final detailsController = TextEditingController();
+    String detailsText = '';
     String? detailsError;
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
@@ -332,10 +332,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                     ),
                     const SizedBox(height: 10),
                     TextField(
-                      controller: detailsController,
                       maxLines: 4,
                       maxLength: 400,
-                      onChanged: (_) {
+                      onChanged: (value) {
+                        detailsText = value;
                         if (detailsError != null) {
                           setModalState(() => detailsError = null);
                         }
@@ -354,7 +354,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                       alignment: Alignment.centerRight,
                       child: ElevatedButton.icon(
                         onPressed: () {
-                          final details = detailsController.text.trim();
+                          final details = detailsText.trim();
                           if (details.length < 15) {
                             setModalState(() {
                               detailsError =
@@ -377,8 +377,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       },
     );
 
-    final details = detailsController.text.trim();
-    detailsController.dispose();
+    final details = detailsText.trim();
     if (confirmed != true) return;
 
     setState(() => _isPoking = true);
@@ -409,13 +408,11 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
           'type': 'task_poke',
         },
       );
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Poke sent.')));
+      final messenger = mounted ? ScaffoldMessenger.maybeOf(context) : null;
+      messenger?.showSnackBar(const SnackBar(content: Text('Poke sent.')));
     } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      final messenger = mounted ? ScaffoldMessenger.maybeOf(context) : null;
+      messenger?.showSnackBar(
         SnackBar(
           content: Text('Failed to send poke: $e'),
           backgroundColor: Colors.red,

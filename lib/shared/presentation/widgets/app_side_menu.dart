@@ -130,23 +130,30 @@ class AppSideMenu extends StatelessWidget {
             leading: const Icon(Icons.logout),
             title: const Text('Sign Out'),
             onTap: () async {
-              Navigator.pop(context);
-              
+              final rootNavigator = Navigator.of(context, rootNavigator: true);
               final authProvider = Provider.of<AuthenticationProvider>(
                 context,
                 listen: false,
               );
-              
-              // Sign out and clear all user data
+              final userProvider = Provider.of<UserProvider>(
+                context,
+                listen: false,
+              );
+              final navigationProvider = Provider.of<NavigationProvider>(
+                context,
+                listen: false,
+              );
+
+              // Close drawer first; use captured references afterwards.
+              Navigator.of(context).pop();
+
+              // Sign out and clear user/session state.
               await authProvider.signOut();
-              
-              if (context.mounted) {
-                // Navigate to auth screen and remove all previous routes
-                Navigator.of(context).pushNamedAndRemoveUntil(
-                  '/auth',
-                  (route) => false,
-                );
-              }
+              await userProvider.signOut();
+              navigationProvider.selectFromBottomNav(0);
+
+              // Navigate to auth screen and remove all previous routes.
+              rootNavigator.pushNamedAndRemoveUntil('/auth', (route) => false);
             },
           ),
         ],

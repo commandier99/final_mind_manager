@@ -122,22 +122,12 @@ class StepService {
       stepStatsAmountOfTimesEdited: 0,
     );
 
-    await FirebaseFirestore.instance.runTransaction((transaction) async {
-      final taskRef = FirebaseFirestore.instance
-          .collection('tasks')
-          .doc(stepTaskId);
-      final taskSnapshot = await transaction.get(taskRef);
-
-      transaction.set(stepRef, newStep.toMap());
-
-      if (taskSnapshot.exists) {
-        transaction.update(taskRef, {
-          'taskStats.taskStepsCount': FieldValue.increment(1),
-          if (initialDone)
-            'taskStats.taskStepsDoneCount': FieldValue.increment(1),
-        });
-      }
-    });
+    await stepRef.set(newStep.toMap());
+    await _tryIncrementTaskStepStats(
+      stepTaskId,
+      totalDelta: 1,
+      doneDelta: initialDone ? 1 : 0,
+    );
 
     // Log activity event
     try {
@@ -166,7 +156,7 @@ class StepService {
     await updateStep(step.stepId, updatedStep);
 
     if ((step.parentTaskId).isNotEmpty) {
-      await _incrementTaskStepStats(
+      await _tryIncrementTaskStepStats(
         step.parentTaskId,
         doneDelta: updatedStep.stepIsDone ? 1 : -1,
       );
@@ -212,7 +202,7 @@ class StepService {
     await updateStep(step.stepId, updatedStep);
 
     if ((step.parentTaskId).isNotEmpty) {
-      await _incrementTaskStepStats(
+      await _tryIncrementTaskStepStats(
         step.parentTaskId,
         totalDelta: -1,
         deletedDelta: 1,
@@ -250,7 +240,7 @@ class StepService {
     await updateStep(step.stepId, updatedStep);
 
     if ((step.parentTaskId).isNotEmpty) {
-      await _incrementTaskStepStats(
+      await _tryIncrementTaskStepStats(
         step.parentTaskId,
         totalDelta: 1,
         deletedDelta: -1,
@@ -333,12 +323,11 @@ class StepService {
         .where('parentTaskId', isEqualTo: taskId)
         .where('stepIsDone', isEqualTo: false)
         .where('stepIsDeleted', isEqualTo: false)
-        .orderBy('stepCreatedAt', descending: true)
-        .limit(1)
         .get();
     if (snapshot.docs.isEmpty) return null;
-    final doc = snapshot.docs.first;
-    return TaskStep.fromMap(doc.data() as Map<String, dynamic>, doc.id);
+    final steps = _mapStepSnapshot(snapshot);
+    steps.sort((a, b) => b.stepCreatedAt.compareTo(a.stepCreatedAt));
+    return steps.first;
   }
 
   Future<void> _permanentlyDeleteStep(String stepId) async {
@@ -372,6 +361,26 @@ class StepService {
     }
     if (updates.isEmpty) return;
     await taskRef.update(updates);
+  }
+
+  Future<void> _tryIncrementTaskStepStats(
+    String taskId, {
+    int totalDelta = 0,
+    int doneDelta = 0,
+    int deletedDelta = 0,
+  }) async {
+    try {
+      await _incrementTaskStepStats(
+        taskId,
+        totalDelta: totalDelta,
+        doneDelta: doneDelta,
+        deletedDelta: deletedDelta,
+      );
+    } catch (e) {
+      // Step writes should not fail just because task stats cannot be updated
+      // by the current user under Firestore rules.
+      debugPrint('[StepService] Task stats update skipped: $e');
+    }
   }
 
   Future<bool> hasActiveStepsForTask(String taskId) async {

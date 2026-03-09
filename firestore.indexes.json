@@ -1,0 +1,45 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "steps",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "parentTaskId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stepIsDeleted",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stepCreatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "steps",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "parentTaskId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stepIsDone",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stepIsDeleted",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "stepCreatedAt",
+          "order": "ASCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

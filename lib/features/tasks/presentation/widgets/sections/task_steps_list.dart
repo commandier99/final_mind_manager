@@ -117,15 +117,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
 
               if (steps.isEmpty) {
                 debugPrint('[DEBUG] TaskStepsList: No steps found.');
-                if (!canAddStep) return const SizedBox.shrink();
-                if (_isAddingStepInline) {
-                  return _buildInlineStepComposer(
-                    context,
-                    stepProvider: stepProvider,
-                    stepNumber: 1,
-                  );
-                }
-                return _buildAddStepGhostCard(context, onTap: _startInlineAdd);
+                return const SizedBox.shrink();
               }
 
               debugPrint(

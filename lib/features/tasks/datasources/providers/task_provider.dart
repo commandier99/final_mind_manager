@@ -8,6 +8,7 @@ import '../services/task_services.dart';
 import '../helpers/task_dependency_helper.dart';
 import '../../../boards/datasources/services/board_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/user_daily_activity_services.dart';
+import '../../../../shared/features/users/datasources/services/user_services.dart';
 import '../../../notifications/datasources/helpers/notification_helper.dart';
 
 class TaskProvider extends ChangeNotifier {
@@ -73,6 +74,11 @@ class TaskProvider extends ChangeNotifier {
     required String assigneeId,
     String? assigneeName,
   }) async {
+    final assignedById = task.taskAssignedBy.trim();
+    final assignedByName = await _resolveAssignerName(
+      assignedById: assignedById,
+      fallbackName: task.taskOwnerName,
+    );
     final deadlineInfo = task.taskDeadline != null
         ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}'
         : '';
@@ -85,7 +91,7 @@ class TaskProvider extends ChangeNotifier {
       userId: assigneeId,
       title: 'Task Assignment Request',
       message:
-          '${task.taskAssignedBy} wants to assign you the task "${task.taskTitle}"$deadlineInfo',
+          '$assignedByName wants to assign you the task "${task.taskTitle}"$deadlineInfo',
       category: NotificationHelper.categoryTaskAssigned,
       relatedId: task.taskId,
       metadata: {
@@ -96,12 +102,43 @@ class TaskProvider extends ChangeNotifier {
             task.taskProposedAssigneeName ??
             task.taskAssignedToName,
         if (task.taskDeadline != null) 'deadline': task.taskDeadline.toString(),
-        'assignedBy': task.taskAssignedBy,
+        'assignedBy': assignedByName,
+        if (assignedById.isNotEmpty) 'assignedById': assignedById,
+        'assignedByName': assignedByName,
         'taskId': task.taskId,
         'taskPriorityLevel': task.taskPriorityLevel,
         if (taskSummary.isNotEmpty) 'taskSummary': taskSummary,
       },
     );
+  }
+
+  Future<String> _resolveAssignerName({
+    required String assignedById,
+    required String fallbackName,
+  }) async {
+    final normalizedFallback = fallbackName.trim();
+
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (assignedById.isNotEmpty &&
+        currentUser != null &&
+        currentUser.uid == assignedById) {
+      final displayName = (currentUser.displayName ?? '').trim();
+      if (displayName.isNotEmpty) return displayName;
+    }
+
+    if (assignedById.isNotEmpty) {
+      try {
+        final user = await UserService().getUserById(assignedById);
+        final userName = (user?.userName ?? '').trim();
+        if (userName.isNotEmpty) return userName;
+      } catch (_) {
+        // Best effort only for display enrichment.
+      }
+    }
+
+    if (normalizedFallback.isNotEmpty) return normalizedFallback;
+    if (assignedById.isNotEmpty) return assignedById;
+    return 'Manager';
   }
 
   // ------------------------

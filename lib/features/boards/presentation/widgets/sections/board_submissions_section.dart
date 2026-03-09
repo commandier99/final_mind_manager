@@ -150,14 +150,26 @@ class _BoardSubmissionsSectionState extends State<BoardSubmissionsSection> {
         }
 
         final taskById = <String, Task>{for (final t in boardTasks) t.taskId: t};
+        final boardTaskIds = boardTasks.map((t) => t.taskId).toList();
 
         return StreamBuilder<List<TaskSubmission>>(
-          stream: _submissionService.streamAllSubmissions(),
+          stream: _submissionService.streamSubmissionsForTaskIds(boardTaskIds),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: Text(
+                    'Error loading submissions: ${snapshot.error}',
+                    style: const TextStyle(color: Colors.red),
+                  ),
+                ),
               );
             }
 

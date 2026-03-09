@@ -24,19 +24,13 @@ class StepProvider with ChangeNotifier {
     String? stepDescription,
     bool initialDone = false,
   }) async {
-    try {
-      await _stepService.addStep(
-        stepTaskId: stepTaskId,
-        stepBoardId: stepBoardId,
-        stepTitle: stepTitle,
-        stepDescription: stepDescription,
-        initialDone: initialDone,
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint("Error adding step: $e");
-      }
-    }
+    await _stepService.addStep(
+      stepTaskId: stepTaskId,
+      stepBoardId: stepBoardId,
+      stepTitle: stepTitle,
+      stepDescription: stepDescription,
+      initialDone: initialDone,
+    );
   }
 
   Future<void> duplicateStep(TaskStep step) async {

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:async';
 import '../models/task_submission_model.dart';
 import '../models/task_model.dart';
 import '../models/task_stats_model.dart';
@@ -315,6 +316,74 @@ class TaskSubmissionService {
               )
               .toList();
         });
+  }
+
+  /// Stream submissions for multiple tasks without requiring global collection read access.
+  Stream<List<TaskSubmission>> streamSubmissionsForTaskIds(List<String> taskIds) {
+    final normalizedTaskIds = taskIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (normalizedTaskIds.isEmpty) {
+      return Stream<List<TaskSubmission>>.value(const <TaskSubmission>[]);
+    }
+
+    // Firestore whereIn supports a limited number of values, so split large boards.
+    final taskIdChunks = <List<String>>[];
+    const int chunkSize = 30;
+    for (int i = 0; i < normalizedTaskIds.length; i += chunkSize) {
+      final end = (i + chunkSize < normalizedTaskIds.length)
+          ? i + chunkSize
+          : normalizedTaskIds.length;
+      taskIdChunks.add(normalizedTaskIds.sublist(i, end));
+    }
+
+    final controller = StreamController<List<TaskSubmission>>.broadcast();
+    final latestChunkData = List<List<TaskSubmission>>.generate(
+      taskIdChunks.length,
+      (_) => <TaskSubmission>[],
+    );
+    final subscriptions = <StreamSubscription<QuerySnapshot>>[];
+
+    void emitMergedSubmissions() {
+      final merged = latestChunkData
+          .expand((items) => items)
+          .toList()
+        ..sort((a, b) => b.submittedAt.compareTo(a.submittedAt));
+      controller.add(merged);
+    }
+
+    for (int index = 0; index < taskIdChunks.length; index++) {
+      final chunk = taskIdChunks[index];
+      final subscription = _submissions
+          .where('taskId', whereIn: chunk)
+          .snapshots()
+          .listen(
+            (snapshot) {
+              latestChunkData[index] = snapshot.docs
+                  .map(
+                    (doc) => TaskSubmission.fromMap(
+                      doc.data() as Map<String, dynamic>,
+                      doc.id,
+                    ),
+                  )
+                  .toList();
+              emitMergedSubmissions();
+            },
+            onError: controller.addError,
+          );
+      subscriptions.add(subscription);
+    }
+
+    controller.onCancel = () async {
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    };
+
+    return controller.stream;
   }
 
   /// Get submissions by user
