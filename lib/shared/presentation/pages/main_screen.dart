@@ -19,7 +19,7 @@ import '../pages/settings_page.dart';
 import '../pages/help_page.dart';
 import '../pages/about_page.dart';
 import '../../../features/mind_set/presentation/pages/mind_set_page.dart';
-import '../../features/poke/presentation/pages/poke_page.dart';
+import '../../features/poke/presentation/pages/memory_page.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -107,7 +107,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     const HelpPage(),
     const AboutPage(),
     const MindSetPage(),
-    const PokePage(),
+    const MemoryPage(),
   ];
 
   final DeadlineReminderService _deadlineReminderService =

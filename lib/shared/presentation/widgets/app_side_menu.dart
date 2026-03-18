@@ -89,12 +89,12 @@ class AppSideMenu extends StatelessWidget {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.ads_click),
-            title: const Text('Poke'),
+            leading: const Icon(Icons.memory_outlined),
+            title: const Text('Memory Bank'),
             onTap: () {
               Navigator.pop(context);
               onSelect?.call(11);
-              context.read<NavigationProvider>().selectFromSideMenu(11);
+              context.read<NavigationProvider>().openMemoryBank();
             },
           ),
           const Divider(),

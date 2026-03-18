@@ -1,25 +1,31 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../../../features/boards/datasources/models/board_request_model.dart';
+import '../../../../../features/boards/datasources/providers/board_request_provider.dart';
+import '../../../../../features/notifications/datasources/models/in_app_notif_model.dart';
+import '../../../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 import '../../../../../features/tasks/datasources/models/task_model.dart';
 import '../../../../../features/boards/datasources/providers/board_provider.dart';
 import '../../../../../features/tasks/datasources/providers/task_provider.dart';
+import '../../../../datasources/providers/navigation_provider.dart';
 import '../../../../features/users/datasources/providers/user_provider.dart';
 import '../../../../features/users/datasources/services/user_services.dart';
 import '../../datasources/models/poke_model.dart';
 import '../../datasources/providers/poke_provider.dart';
 import '../../../../../features/boards/datasources/models/board_roles.dart';
 
-class PokePage extends StatefulWidget {
+class MemoryPage extends StatefulWidget {
   final bool composeOnly;
 
-  const PokePage({super.key, this.composeOnly = false});
+  const MemoryPage({super.key, this.composeOnly = false});
 
   @override
-  State<PokePage> createState() => _PokePageState();
+  State<MemoryPage> createState() => _MemoryPageState();
 }
 
-class _PokePageState extends State<PokePage> {
+class _MemoryPageState extends State<MemoryPage> {
   final TextEditingController _subjectController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _detailsController = TextEditingController();
@@ -36,6 +42,9 @@ class _PokePageState extends State<PokePage> {
   String? _selectedTargetId;
   List<_TargetOption> _targetOptions = const [];
   bool _loadingTargets = true;
+  String _selectedThought = NavigationProvider.memoryBankThoughtAll;
+  final Set<String> _processingInviteIds = <String>{};
+  final Set<String> _processingAssignmentNotifIds = <String>{};
 
   DateTime? _scheduledDate;
   TimeOfDay? _scheduledTime;
@@ -62,6 +71,9 @@ class _PokePageState extends State<PokePage> {
     final userId = context.read<UserProvider>().userId;
     if (userId != null && userId.isNotEmpty) {
       context.read<PokeProvider>().streamMailbox(userId);
+      context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
+      context.read<BoardRequestProvider>().streamInvitationsSentByManager(userId);
+      context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
     }
   }
 
@@ -240,7 +252,7 @@ class _PokePageState extends State<PokePage> {
       builder: (context) {
         return AlertDialog(
           title: const Text('Send Now?'),
-          content: const Text('Send this poke now?'),
+          content: const Text('Send this thought now?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
@@ -431,7 +443,7 @@ class _PokePageState extends State<PokePage> {
     if (!mounted) return;
     final timingLabel = timing == PokeModel.timingNow ? 'now' : 'for later';
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Poke queued $timingLabel for ${selected.label}.')),
+      SnackBar(content: Text('Thought queued $timingLabel for ${selected.label}.')),
     );
   }
 
@@ -714,53 +726,276 @@ class _PokePageState extends State<PokePage> {
     }
   }
 
+  String _thoughtLabel(String thoughtKey) {
+    switch (thoughtKey) {
+      case NavigationProvider.memoryBankThoughtBoardInvites:
+        return 'Board Invites';
+      case NavigationProvider.memoryBankThoughtTaskAssignments:
+        return 'Task Assignments';
+      case NavigationProvider.memoryBankThoughtFeedback:
+        return 'Feedback';
+      case NavigationProvider.memoryBankThoughtReminders:
+        return 'Reminders';
+      default:
+        return 'All Thoughts';
+    }
+  }
+
+  String _notificationThoughtKey(InAppNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    final title = notif.title.toLowerCase();
+
+    if (category == 'invitation') {
+      return NavigationProvider.memoryBankThoughtBoardInvites;
+    }
+    if (category == 'task_assigned') {
+      return NavigationProvider.memoryBankThoughtTaskAssignments;
+    }
+    if (category == 'approval' ||
+        type.startsWith('suggestion_') ||
+        title.contains('suggestion')) {
+      return NavigationProvider.memoryBankThoughtFeedback;
+    }
+    if (category == 'task_deadline' ||
+        category == 'reminder' ||
+        kind == 'poke' ||
+        kind == 'poke_reminder') {
+      return NavigationProvider.memoryBankThoughtReminders;
+    }
+    return NavigationProvider.memoryBankThoughtAll;
+  }
+
+  List<InAppNotification> _thoughtNotifications(
+    List<InAppNotification> notifications,
+    String thoughtKey,
+  ) {
+    if (thoughtKey == NavigationProvider.memoryBankThoughtAll) {
+      return notifications;
+    }
+    return notifications
+        .where((notif) => _notificationThoughtKey(notif) == thoughtKey)
+        .toList();
+  }
+
+  void _syncThoughtFromNavigation(NavigationProvider navigation) {
+    _selectedThought = navigation.memoryBankThoughtKey;
+  }
+
+  bool _isPendingBoardInvite(BoardRequest request) {
+    final isInvite =
+        BoardRequest.normalizeType(request.boardReqType) ==
+        BoardRequest.typeRecruitment;
+    return isInvite && request.boardReqStatus == 'pending';
+  }
+
+  Future<void> _acceptBoardInvite(BoardRequest request) async {
+    if (_processingInviteIds.contains(request.boardRequestId)) return;
+    setState(() => _processingInviteIds.add(request.boardRequestId));
+    try {
+      await context.read<BoardRequestProvider>().approveRequest(
+        request,
+        responseMessage: 'Recruitment accepted',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Joined ${request.boardTitle}.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to accept invite: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingInviteIds.remove(request.boardRequestId));
+      }
+    }
+  }
+
+  Future<void> _declineBoardInvite(BoardRequest request) async {
+    if (_processingInviteIds.contains(request.boardRequestId)) return;
+    setState(() => _processingInviteIds.add(request.boardRequestId));
+    try {
+      await context.read<BoardRequestProvider>().rejectRequest(
+        request,
+        responseMessage: 'Recruitment declined',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invite declined.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to decline invite: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingInviteIds.remove(request.boardRequestId));
+      }
+    }
+  }
+
+  String _taskIdFromNotification(InAppNotification notif) {
+    final relatedId = (notif.relatedId ?? '').trim();
+    if (relatedId.isNotEmpty) return relatedId;
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['taskId']?.toString() ?? '').trim();
+  }
+
+  bool _isTaskAssignmentNotification(InAppNotification notif) {
+    return (notif.category ?? '').trim().toLowerCase() == 'task_assigned' &&
+        _taskIdFromNotification(notif).isNotEmpty;
+  }
+
+  String _assignmentDecision(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['assignmentDecision']?.toString() ?? '')
+        .trim()
+        .toLowerCase();
+  }
+
+  Future<void> _markAssignmentDecision({
+    required String notificationId,
+    required String decision,
+  }) async {
+    await FirebaseFirestore.instance
+        .collection('in_app_notifications')
+        .doc(notificationId)
+        .update({
+      'metadata.assignmentDecision': decision,
+      'metadata.assignmentRespondedAt': Timestamp.now(),
+      'isRead': true,
+      'readAt': Timestamp.now(),
+    });
+  }
+
+  Future<void> _acceptTaskAssignment(InAppNotification notif) async {
+    final notificationId = notif.notificationId;
+    if (_processingAssignmentNotifIds.contains(notificationId)) return;
+    final taskId = _taskIdFromNotification(notif);
+    if (taskId.isEmpty) return;
+
+    setState(() => _processingAssignmentNotifIds.add(notificationId));
+    try {
+      await context.read<TaskProvider>().acceptTask(taskId);
+      await _markAssignmentDecision(
+        notificationId: notificationId,
+        decision: 'accepted',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task accepted.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to accept task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingAssignmentNotifIds.remove(notificationId));
+      }
+    }
+  }
+
+  Future<void> _declineTaskAssignment(InAppNotification notif) async {
+    final notificationId = notif.notificationId;
+    if (_processingAssignmentNotifIds.contains(notificationId)) return;
+    final taskId = _taskIdFromNotification(notif);
+    if (taskId.isEmpty) return;
+
+    setState(() => _processingAssignmentNotifIds.add(notificationId));
+    try {
+      await context.read<TaskProvider>().declineTask(taskId);
+      await _markAssignmentDecision(
+        notificationId: notificationId,
+        decision: 'declined',
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task declined.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to decline task: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _processingAssignmentNotifIds.remove(notificationId));
+      }
+    }
+  }
+
   Widget _buildSelectCard({
     required String label,
     required IconData icon,
     required bool selected,
     required VoidCallback onTap,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Ink(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? Colors.blue.shade50 : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? Colors.blue.shade400 : Colors.grey.shade300,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                size: 18,
-                color: selected ? Colors.blue.shade700 : Colors.grey.shade700,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  color: selected ? Colors.blue.shade700 : Colors.grey.shade800,
-                ),
-              ),
-            ],
-          ),
+    return ChoiceChip(
+      selected: selected,
+      onSelected: (_) => onTap(),
+      avatar: Icon(
+        icon,
+        size: 18,
+        color: selected ? Colors.blue.shade700 : Colors.grey.shade700,
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          fontWeight: FontWeight.w600,
+          color: selected ? Colors.blue.shade700 : Colors.grey.shade800,
         ),
       ),
+      selectedColor: Colors.blue.shade50,
+      backgroundColor: Colors.grey.shade100,
+      side: BorderSide(
+        color: selected ? Colors.blue.shade400 : Colors.grey.shade300,
+        width: selected ? 1.5 : 1,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      showCheckmark: false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final navigation = context.watch<NavigationProvider>();
+    _syncThoughtFromNavigation(navigation);
     final pokeProvider = context.watch<PokeProvider>();
+    final boardRequestProvider = context.watch<BoardRequestProvider>();
+    final inAppProvider = context.watch<InAppNotificationProvider>();
     if (widget.composeOnly) {
       return SafeArea(
         child: Padding(
@@ -792,10 +1027,10 @@ class _PokePageState extends State<PokePage> {
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
                   child: Row(
                     children: [
-                      const Icon(Icons.inbox_outlined),
+                      const Icon(Icons.memory_outlined),
                       const SizedBox(width: 8),
                       const Text(
-                        'Poke Inbox',
+                        'Memory Bank',
                         style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
                       ),
                     ],
@@ -804,12 +1039,107 @@ class _PokePageState extends State<PokePage> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   child: Text(
-                    'Sent and received conversations. Replies bump to the top.',
+                    'Thoughts are grouped by type so actions can happen here.',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
                 ),
                 const SizedBox(height: 10),
-                Expanded(child: _buildMailboxSection(pokeProvider)),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildSelectCard(
+                        label: 'All Thoughts',
+                        icon: Icons.all_inbox_outlined,
+                        selected: _selectedThought == NavigationProvider.memoryBankThoughtAll,
+                        onTap: () {
+                          context.read<NavigationProvider>().setMemoryBankThought(
+                            NavigationProvider.memoryBankThoughtAll,
+                          );
+                        },
+                      ),
+                      _buildSelectCard(
+                        label: 'Board Invites',
+                        icon: Icons.mail_outline,
+                        selected:
+                            _selectedThought ==
+                            NavigationProvider.memoryBankThoughtBoardInvites,
+                        onTap: () {
+                          context.read<NavigationProvider>().setMemoryBankThought(
+                            NavigationProvider.memoryBankThoughtBoardInvites,
+                          );
+                        },
+                      ),
+                      _buildSelectCard(
+                        label: 'Task Assignments',
+                        icon: Icons.assignment_ind_outlined,
+                        selected:
+                            _selectedThought ==
+                            NavigationProvider.memoryBankThoughtTaskAssignments,
+                        onTap: () {
+                          context.read<NavigationProvider>().setMemoryBankThought(
+                            NavigationProvider.memoryBankThoughtTaskAssignments,
+                          );
+                        },
+                      ),
+                      _buildSelectCard(
+                        label: 'Feedback',
+                        icon: Icons.feedback_outlined,
+                        selected:
+                            _selectedThought ==
+                            NavigationProvider.memoryBankThoughtFeedback,
+                        onTap: () {
+                          context.read<NavigationProvider>().setMemoryBankThought(
+                            NavigationProvider.memoryBankThoughtFeedback,
+                          );
+                        },
+                      ),
+                      _buildSelectCard(
+                        label: 'Reminders',
+                        icon: Icons.alarm_outlined,
+                        selected:
+                            _selectedThought ==
+                            NavigationProvider.memoryBankThoughtReminders,
+                        onTap: () {
+                          context.read<NavigationProvider>().setMemoryBankThought(
+                            NavigationProvider.memoryBankThoughtReminders,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    switchInCurve: Curves.easeOut,
+                    switchOutCurve: Curves.easeIn,
+                    transitionBuilder: (child, animation) {
+                      final offsetAnimation = Tween<Offset>(
+                        begin: const Offset(0.06, 0),
+                        end: Offset.zero,
+                      ).animate(animation);
+                      return FadeTransition(
+                        opacity: animation,
+                        child: SlideTransition(
+                          position: offsetAnimation,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey<String>(_selectedThought),
+                      child: _buildThoughtsSection(
+                        pokeProvider: pokeProvider,
+                        boardRequestProvider: boardRequestProvider,
+                        inAppProvider: inAppProvider,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -819,12 +1149,276 @@ class _PokePageState extends State<PokePage> {
           bottom: 20,
           child: FloatingActionButton.extended(
             onPressed: () => _openComposeSheet(pokeProvider),
-            icon: const Icon(Icons.ads_click),
-            label: const Text('New Poke'),
+            icon: const Icon(Icons.note_add_outlined),
+            label: const Text('New Thought'),
           ),
         ),
       ],
     );
+  }
+
+  Widget _buildThoughtsSection({
+    required PokeProvider pokeProvider,
+    required BoardRequestProvider boardRequestProvider,
+    required InAppNotificationProvider inAppProvider,
+  }) {
+    final incomingInvites = boardRequestProvider.invitations.toList()
+      ..sort((a, b) => b.boardReqCreatedAt.compareTo(a.boardReqCreatedAt));
+    final thoughtNotifs = _thoughtNotifications(
+      inAppProvider.notifications,
+      _selectedThought,
+    )..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    if (_selectedThought == NavigationProvider.memoryBankThoughtBoardInvites) {
+      if (incomingInvites.isEmpty) {
+        return Center(
+          child: Text(
+            'No Board Invites yet.',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+          ),
+        );
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
+        itemCount: incomingInvites.length,
+        separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade300),
+        itemBuilder: (context, index) {
+          final invite = incomingInvites[index];
+          final isPending = _isPendingBoardInvite(invite);
+          final isBusy = _processingInviteIds.contains(invite.boardRequestId);
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.mail_outline),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Board invite: ${invite.boardTitle}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'From ${invite.boardManagerName}',
+                              style: TextStyle(color: Colors.grey.shade700),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              timeago.format(invite.boardReqCreatedAt),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      _buildRequestStatusChip(invite.boardReqStatus),
+                    ],
+                  ),
+                  if (isPending) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: isBusy ? null : () => _acceptBoardInvite(invite),
+                            child: Text(isBusy ? 'Working...' : 'Accept'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: isBusy ? null : () => _declineBoardInvite(invite),
+                            child: const Text('Decline'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    }
+
+    if (_selectedThought == NavigationProvider.memoryBankThoughtAll &&
+        thoughtNotifs.isEmpty &&
+        pokeProvider.threadSummaries.isNotEmpty) {
+      return _buildMailboxSection(pokeProvider);
+    }
+
+    if (thoughtNotifs.isEmpty) {
+      return Center(
+        child: Text(
+          'No ${_thoughtLabel(_selectedThought)} yet.',
+          style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
+      itemCount: thoughtNotifs.length,
+      separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade300),
+      itemBuilder: (context, index) {
+        final notif = thoughtNotifs[index];
+        final isTaskAssignment = _isTaskAssignmentNotification(notif);
+        final decision = _assignmentDecision(notif);
+        final hasDecision = decision == 'accepted' || decision == 'declined';
+        final isBusy = _processingAssignmentNotifIds.contains(notif.notificationId);
+
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 6),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.lightbulb_outline),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            _simpleNotificationText(notif),
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            timeago.format(notif.createdAt),
+                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hasDecision)
+                      _buildDecisionChip(decision),
+                  ],
+                ),
+                if (isTaskAssignment && !hasDecision) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: isBusy ? null : () => _acceptTaskAssignment(notif),
+                          child: Text(isBusy ? 'Working...' : 'Accept'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: isBusy ? null : () => _declineTaskAssignment(notif),
+                          child: const Text('Decline'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestStatusChip(String status) {
+    final normalized = status.trim().toLowerCase();
+    final (Color color, String label) = switch (normalized) {
+      'approved' => (Colors.green, 'Accepted'),
+      'rejected' => (Colors.red, 'Declined'),
+      _ => (Colors.orange, 'Pending'),
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDecisionChip(String decision) {
+    final isAccepted = decision == 'accepted';
+    final color = isAccepted ? Colors.green : Colors.red;
+    final label = isAccepted ? 'Accepted' : 'Declined';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  String _simpleNotificationText(InAppNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    final title = notif.title.toLowerCase();
+
+    if (kind == 'poke' || kind == 'poke_reminder') {
+      return 'You received a reminder thought.';
+    }
+    if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+      return 'You received feedback.';
+    }
+    if (category == 'task_assigned') {
+      return 'You have a task assignment update.';
+    }
+    if (category == 'approval') {
+      return 'You have a feedback update.';
+    }
+    if (category == 'invitation') {
+      return 'You received a board invitation.';
+    }
+    if (category == 'task_deadline') {
+      return 'You have a task deadline reminder.';
+    }
+    if (category == 'reminder') {
+      return 'You have a reminder.';
+    }
+    final fallback = notif.message.trim();
+    if (fallback.isEmpty) {
+      return 'You have a new thought.';
+    }
+    return fallback;
   }
 
   Widget _buildMailboxSection(PokeProvider provider) {
@@ -916,7 +1510,7 @@ class _PokePageState extends State<PokePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'New Poke',
+          'New Thought',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
@@ -1140,7 +1734,7 @@ class _PokePageState extends State<PokePage> {
               child: ElevatedButton.icon(
                 onPressed: pokeProvider.isSubmitting ? null : _submitPoke,
                 icon: const Icon(Icons.send),
-                label: Text(pokeProvider.isSubmitting ? 'Sending...' : 'Send Poke'),
+                label: Text(pokeProvider.isSubmitting ? 'Sending...' : 'Send Thought'),
               ),
             ),
       ],

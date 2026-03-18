@@ -24,7 +24,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   final Set<String> _selectedFilters = <String>{};
   bool _hasInitializedStreams = false;
   static const Map<String, String> _filterLabels = {
-    notifFilterPokes: 'Pokes',
+    notifFilterPokes: 'Reminders',
     notifFilterReminders: 'Reminders',
     notifFilterAssignments: 'Assignments',
     notifFilterSubmissions: 'Submissions',

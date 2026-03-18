@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import '../../../../boards/datasources/models/board_request_model.dart';
 import '../../../datasources/models/in_app_notif_model.dart';
 import '../../../datasources/models/push_notif_model.dart';
 import '../../../datasources/providers/in_app_notif_provider.dart';
 import '../../../datasources/providers/push_notif_provider.dart';
-import '../sheets/notif_details_sheet.dart';
+import '../../../../../shared/datasources/providers/navigation_provider.dart';
 
 /// Reusable notification card widget that displays basic info
-/// Opens the notification details sheet on tap
 class NotificationCard extends StatelessWidget {
   final dynamic notification;
   final InAppNotificationProvider? inAppProvider;
@@ -34,7 +34,7 @@ class NotificationCard extends StatelessWidget {
     return const SizedBox.shrink();
   }
 
-  /// Navigate to details sheet and mark as read if applicable
+  /// Navigate to Memory Bank thought and mark as read if applicable
   Future<void> _navigateToDetails(BuildContext context) async {
     // Mark as read when viewing details
     if (notification is InAppNotification) {
@@ -45,20 +45,57 @@ class NotificationCard extends StatelessWidget {
     }
 
     if (context.mounted) {
-      // The details sheet handles different notification types.
-      _showDetailsPage(context);
+      context.read<NavigationProvider>().openMemoryBank(
+        thoughtKey: _targetThoughtKey(notification),
+      );
     }
   }
 
-  /// Show the details sheet for this notification
-  void _showDetailsPage(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (BuildContext sheetContext) {
-        return NotificationDetailsSheet(notification: notification);
-      },
-    );
+  String _targetThoughtKey(dynamic item) {
+    if (item is BoardRequest) {
+      return NavigationProvider.memoryBankThoughtBoardInvites;
+    }
+    if (item is InAppNotification) {
+      final category = (item.category ?? '').trim().toLowerCase();
+      final metadata = item.metadata ?? const <String, dynamic>{};
+      final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
+      final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+      final title = item.title.toLowerCase();
+
+      if (category == 'invitation') {
+        return NavigationProvider.memoryBankThoughtBoardInvites;
+      }
+      if (category == 'task_assigned') {
+        return NavigationProvider.memoryBankThoughtTaskAssignments;
+      }
+      if (category == 'approval' ||
+          type.startsWith('suggestion_') ||
+          title.contains('suggestion')) {
+        return NavigationProvider.memoryBankThoughtFeedback;
+      }
+      if (category == 'task_deadline' ||
+          category == 'reminder' ||
+          kind == 'poke' ||
+          kind == 'poke_reminder') {
+        return NavigationProvider.memoryBankThoughtReminders;
+      }
+    }
+    if (item is PushNotification) {
+      final category = (item.category ?? '').trim().toLowerCase();
+      if (category == 'invitation') {
+        return NavigationProvider.memoryBankThoughtBoardInvites;
+      }
+      if (category == 'task_assigned') {
+        return NavigationProvider.memoryBankThoughtTaskAssignments;
+      }
+      if (category == 'approval') {
+        return NavigationProvider.memoryBankThoughtFeedback;
+      }
+      if (category == 'task_deadline') {
+        return NavigationProvider.memoryBankThoughtReminders;
+      }
+    }
+    return NavigationProvider.memoryBankThoughtAll;
   }
 
   _NotifVisual _inAppVisual(InAppNotification notif) {
@@ -148,6 +185,62 @@ class NotificationCard extends StatelessWidget {
     );
   }
 
+  String _simpleInAppText(InAppNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    final title = notif.title.toLowerCase();
+
+    if (kind == 'poke' || kind == 'poke_reminder') {
+      return 'You received a reminder thought.';
+    }
+    if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+      return 'You received a suggestion.';
+    }
+    if (category == 'task_assigned') {
+      return 'You have a task assignment update.';
+    }
+    if (category == 'approval') {
+      return 'You have a submission update.';
+    }
+    if (category == 'invitation') {
+      return 'You received a board invitation.';
+    }
+    if (category == 'task_deadline') {
+      return 'You have a task deadline reminder.';
+    }
+    if (category == 'reminder') {
+      return 'You have a reminder.';
+    }
+    final fallback = notif.message.trim();
+    if (fallback.isEmpty) {
+      return 'You have a new notification.';
+    }
+    return fallback;
+  }
+
+  String _simplePushText(PushNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    if (category == 'invitation') {
+      return 'You received a board invitation.';
+    }
+    if (category == 'approval') {
+      return 'You have a submission update.';
+    }
+    if (category == 'task_assigned') {
+      return 'You have a task assignment update.';
+    }
+    if (category == 'task_deadline') {
+      return 'You have a task deadline reminder.';
+    }
+    final fallback = notif.body.trim();
+    if (fallback.isEmpty) {
+      return 'You have a new notification.';
+    }
+    return fallback;
+  }
+
   // Board Request Card - Basic version
   Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
     final isRecruitment =
@@ -230,6 +323,7 @@ class NotificationCard extends StatelessWidget {
   // In-App Notification Card - Basic version
   Widget _buildInAppNotifCard(BuildContext context, InAppNotification notif) {
     final visual = _inAppVisual(notif);
+    final message = _simpleInAppText(notif);
     final iconColor = notif.isRead
         ? Colors.grey.shade500
         : visual.color;
@@ -261,18 +355,11 @@ class NotificationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      notif.title,
+                      message,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      notif.message,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -310,6 +397,7 @@ class NotificationCard extends StatelessWidget {
   // Push Notification Card - Basic version
   Widget _buildPushNotifCard(BuildContext context, PushNotification notif) {
     final visual = _pushVisual(notif);
+    final message = _simplePushText(notif);
     final iconColor = notif.isSent ? visual.color : Colors.orange.shade700;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -339,18 +427,11 @@ class NotificationCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      notif.title,
+                      message,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      notif.body,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

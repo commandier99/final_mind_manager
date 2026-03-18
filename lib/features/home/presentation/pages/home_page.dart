@@ -23,7 +23,6 @@ import '../../../boards/datasources/services/board_services.dart';
 import '../../../plans/presentation/pages/create_plan_page.dart';
 import '../../../steps/datasources/providers/step_provider.dart';
 import '../../../steps/presentation/widgets/dialogs/add_step_dialog.dart';
-import '../../../../shared/features/poke/presentation/pages/poke_page.dart';
 import '../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../tasks/datasources/models/task_model.dart';
 
@@ -74,9 +73,9 @@ class _HomePageState extends State<HomePage> {
     ),
     _QuickLaunchAction(
       id: _actionPoke,
-      feature: 'Poke',
-      label: 'Poke',
-      icon: Icons.ads_click,
+      feature: 'Memory Bank',
+      label: 'Memory Bank',
+      icon: Icons.memory_outlined,
     ),
     _QuickLaunchAction(
       id: _actionCreateBoard,
@@ -470,12 +469,7 @@ class _HomePageState extends State<HomePage> {
         await _openMindSetCreateShortcut('follow_through');
         return;
       case _actionPoke:
-        await showModalBottomSheet<void>(
-          context: context,
-          isScrollControlled: true,
-          showDragHandle: true,
-          builder: (context) => const PokePage(composeOnly: true),
-        );
+        context.read<NavigationProvider>().openMemoryBank();
         return;
       default:
         return;
