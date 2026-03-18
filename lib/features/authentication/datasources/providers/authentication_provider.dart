@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/authentication_service.dart';
+import '../../../boards/datasources/services/board_services.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 import '../../../../shared/features/users/datasources/services/user_services.dart';
 
@@ -10,6 +11,7 @@ class AuthenticationProvider extends ChangeNotifier {
   final AuthenticationService _authService = AuthenticationService();
   final GoogleSignIn _googleSignIn = GoogleSignIn();
   final UserService _userService = UserService();
+  final BoardService _boardService = BoardService();
 
   User? _user;
   bool _isLoading = false;
@@ -135,6 +137,10 @@ class AuthenticationProvider extends ChangeNotifier {
 
       _user = userCredential.user;
 
+      if (_user != null) {
+        await _boardService.ensurePersonalBoardForCurrentUser();
+      }
+
       // Send verification email
       if (_user != null && !_user!.emailVerified) {
         await _user!.sendEmailVerification();
@@ -218,6 +224,7 @@ class AuthenticationProvider extends ChangeNotifier {
               userTimezone: _currentTimezoneOffsetLabel(),
             );
             await _userService.saveUser(newUser);
+            await _boardService.ensurePersonalBoardForCurrentUser();
             debugPrint(
               '✅ [AuthenticationProvider] New user document and user_stats created',
             );

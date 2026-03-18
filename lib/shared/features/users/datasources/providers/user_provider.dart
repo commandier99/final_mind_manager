@@ -6,14 +6,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:mind_manager_final/features/notifications/datasources/services/push_messaging_service.dart';
 
-import '../../../../../features/boards/datasources/services/board_services.dart';
 import '../models/user_model.dart';
 import '../services/user_services.dart';
 
 class UserProvider extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final UserService _userService = UserService();
-  final BoardService _boardService = BoardService();
   StreamSubscription<User?>? _authSubscription;
   DateTime? _lastActivitySyncAt;
 
@@ -63,13 +61,6 @@ class UserProvider extends ChangeNotifier {
     }
 
     await loadUserData(firebaseUser.uid);
-
-    // System-level invariant: every signed-in user must have a Personal board.
-    try {
-      await _boardService.ensurePersonalBoardForCurrentUser();
-    } catch (e) {
-      _log('[UserProvider] Error ensuring Personal board: $e');
-    }
 
     // Only register FCM token if user document exists.
     if (_currentUser != null) {
