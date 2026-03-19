@@ -241,6 +241,13 @@ class NotificationCard extends StatelessWidget {
     return fallback;
   }
 
+  String _assignmentDecision(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['assignmentDecision']?.toString() ?? '')
+        .trim()
+        .toLowerCase();
+  }
+
   // Board Request Card - Basic version
   Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
     final isRecruitment =
@@ -324,6 +331,9 @@ class NotificationCard extends StatelessWidget {
   Widget _buildInAppNotifCard(BuildContext context, InAppNotification notif) {
     final visual = _inAppVisual(notif);
     final message = _simpleInAppText(notif);
+    final assignmentDecision = _assignmentDecision(notif);
+    final hasAssignmentDecision =
+        assignmentDecision == 'accepted' || assignmentDecision == 'declined';
     final iconColor = notif.isRead
         ? Colors.grey.shade500
         : visual.color;
@@ -372,21 +382,23 @@ class NotificationCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: notif.isRead ? Colors.grey[200] : Colors.blue[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  notif.isRead ? 'Read' : 'Unread',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: notif.isRead ? Colors.grey[600] : Colors.blue[700],
-                  ),
-                ),
-              ),
+              hasAssignmentDecision
+                  ? _buildDecisionChip(assignmentDecision)
+                  : Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: notif.isRead ? Colors.grey[200] : Colors.blue[100],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        notif.isRead ? 'Read' : 'Unread',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: notif.isRead ? Colors.grey[600] : Colors.blue[700],
+                        ),
+                      ),
+                    ),
             ],
           ),
         ),
@@ -475,7 +487,7 @@ class NotificationCard extends StatelessWidget {
     switch (status) {
       case 'approved':
         color = Colors.green;
-        label = 'Approved';
+        label = 'Accepted';
         break;
       case 'rejected':
         color = Colors.red;
@@ -499,6 +511,27 @@ class NotificationCard extends StatelessWidget {
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.bold,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDecisionChip(String decision) {
+    final isAccepted = decision == 'accepted';
+    final color = isAccepted ? Colors.green : Colors.red;
+    final label = isAccepted ? 'Accepted' : 'Declined';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: color,
         ),
       ),
     );

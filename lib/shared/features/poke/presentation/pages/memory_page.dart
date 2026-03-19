@@ -960,6 +960,7 @@ class _MemoryPageState extends State<MemoryPage> {
     required IconData icon,
     required bool selected,
     required VoidCallback onTap,
+    int unreadCount = 0,
   }) {
     return ChoiceChip(
       selected: selected,
@@ -969,12 +970,39 @@ class _MemoryPageState extends State<MemoryPage> {
         size: 18,
         color: selected ? Colors.blue.shade700 : Colors.grey.shade700,
       ),
-      label: Text(
-        label,
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          color: selected ? Colors.blue.shade700 : Colors.grey.shade800,
-        ),
+      label: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.blue.shade700 : Colors.grey.shade800,
+            ),
+          ),
+          if (unreadCount > 0) ...[
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+              decoration: BoxDecoration(
+                color: selected ? Colors.blue.shade700 : Colors.grey.shade700,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$unreadCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+      labelStyle: TextStyle(
+        fontWeight: FontWeight.w600,
+        color: selected ? Colors.blue.shade700 : Colors.grey.shade800,
       ),
       selectedColor: Colors.blue.shade50,
       backgroundColor: Colors.grey.shade100,
@@ -989,6 +1017,27 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
+  int _unreadThoughtCount({
+    required String thoughtKey,
+    required List<InAppNotification> notifications,
+    required List<BoardRequest> incomingInvites,
+  }) {
+    final pendingInviteCount = incomingInvites.where(_isPendingBoardInvite).length;
+    final unreadNotifications = notifications.where((notif) => !notif.isRead).toList();
+
+    if (thoughtKey == NavigationProvider.memoryBankThoughtAll) {
+      return unreadNotifications.length + pendingInviteCount;
+    }
+
+    if (thoughtKey == NavigationProvider.memoryBankThoughtBoardInvites) {
+      return pendingInviteCount;
+    }
+
+    return unreadNotifications
+        .where((notif) => _notificationThoughtKey(notif) == thoughtKey)
+        .length;
+  }
+
   @override
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
@@ -996,6 +1045,33 @@ class _MemoryPageState extends State<MemoryPage> {
     final pokeProvider = context.watch<PokeProvider>();
     final boardRequestProvider = context.watch<BoardRequestProvider>();
     final inAppProvider = context.watch<InAppNotificationProvider>();
+    final unreadCountByThought = <String, int>{
+      NavigationProvider.memoryBankThoughtAll: _unreadThoughtCount(
+        thoughtKey: NavigationProvider.memoryBankThoughtAll,
+        notifications: inAppProvider.notifications,
+        incomingInvites: boardRequestProvider.invitations,
+      ),
+      NavigationProvider.memoryBankThoughtBoardInvites: _unreadThoughtCount(
+        thoughtKey: NavigationProvider.memoryBankThoughtBoardInvites,
+        notifications: inAppProvider.notifications,
+        incomingInvites: boardRequestProvider.invitations,
+      ),
+      NavigationProvider.memoryBankThoughtTaskAssignments: _unreadThoughtCount(
+        thoughtKey: NavigationProvider.memoryBankThoughtTaskAssignments,
+        notifications: inAppProvider.notifications,
+        incomingInvites: boardRequestProvider.invitations,
+      ),
+      NavigationProvider.memoryBankThoughtFeedback: _unreadThoughtCount(
+        thoughtKey: NavigationProvider.memoryBankThoughtFeedback,
+        notifications: inAppProvider.notifications,
+        incomingInvites: boardRequestProvider.invitations,
+      ),
+      NavigationProvider.memoryBankThoughtReminders: _unreadThoughtCount(
+        thoughtKey: NavigationProvider.memoryBankThoughtReminders,
+        notifications: inAppProvider.notifications,
+        incomingInvites: boardRequestProvider.invitations,
+      ),
+    };
     if (widget.composeOnly) {
       return SafeArea(
         child: Padding(
@@ -1054,6 +1130,8 @@ class _MemoryPageState extends State<MemoryPage> {
                         label: 'All Thoughts',
                         icon: Icons.all_inbox_outlined,
                         selected: _selectedThought == NavigationProvider.memoryBankThoughtAll,
+                        unreadCount:
+                            unreadCountByThought[NavigationProvider.memoryBankThoughtAll] ?? 0,
                         onTap: () {
                           context.read<NavigationProvider>().setMemoryBankThought(
                             NavigationProvider.memoryBankThoughtAll,
@@ -1066,6 +1144,9 @@ class _MemoryPageState extends State<MemoryPage> {
                         selected:
                             _selectedThought ==
                             NavigationProvider.memoryBankThoughtBoardInvites,
+                        unreadCount: unreadCountByThought[
+                                NavigationProvider.memoryBankThoughtBoardInvites] ??
+                            0,
                         onTap: () {
                           context.read<NavigationProvider>().setMemoryBankThought(
                             NavigationProvider.memoryBankThoughtBoardInvites,
@@ -1078,6 +1159,9 @@ class _MemoryPageState extends State<MemoryPage> {
                         selected:
                             _selectedThought ==
                             NavigationProvider.memoryBankThoughtTaskAssignments,
+                        unreadCount: unreadCountByThought[
+                                NavigationProvider.memoryBankThoughtTaskAssignments] ??
+                            0,
                         onTap: () {
                           context.read<NavigationProvider>().setMemoryBankThought(
                             NavigationProvider.memoryBankThoughtTaskAssignments,
@@ -1090,6 +1174,9 @@ class _MemoryPageState extends State<MemoryPage> {
                         selected:
                             _selectedThought ==
                             NavigationProvider.memoryBankThoughtFeedback,
+                        unreadCount:
+                            unreadCountByThought[NavigationProvider.memoryBankThoughtFeedback] ??
+                                0,
                         onTap: () {
                           context.read<NavigationProvider>().setMemoryBankThought(
                             NavigationProvider.memoryBankThoughtFeedback,
@@ -1102,6 +1189,9 @@ class _MemoryPageState extends State<MemoryPage> {
                         selected:
                             _selectedThought ==
                             NavigationProvider.memoryBankThoughtReminders,
+                        unreadCount:
+                            unreadCountByThought[NavigationProvider.memoryBankThoughtReminders] ??
+                                0,
                         onTap: () {
                           context.read<NavigationProvider>().setMemoryBankThought(
                             NavigationProvider.memoryBankThoughtReminders,
@@ -1155,6 +1245,56 @@ class _MemoryPageState extends State<MemoryPage> {
         ),
       ],
     );
+  }
+
+  String _detailedNotificationTitle(InAppNotification notif) {
+    final title = notif.title.trim();
+    if (title.isNotEmpty) return title;
+    return _fallbackThoughtText(notif);
+  }
+
+  String _detailedNotificationSubtitle(InAppNotification notif) {
+    final message = notif.message.trim();
+    if (message.isNotEmpty) return message;
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final taskSummary = (metadata['taskSummary']?.toString() ?? '').trim();
+    if (taskSummary.isNotEmpty) return taskSummary;
+    return '';
+  }
+
+  String _fallbackThoughtText(InAppNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    final title = notif.title.toLowerCase();
+
+    if (kind == 'poke' || kind == 'poke_reminder') {
+      return 'You received a reminder thought.';
+    }
+    if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+      return 'You received feedback.';
+    }
+    if (category == 'task_assigned') {
+      return 'You have a task assignment update.';
+    }
+    if (category == 'approval') {
+      return 'You have a feedback update.';
+    }
+    if (category == 'invitation') {
+      return 'You received a board invitation.';
+    }
+    if (category == 'task_deadline') {
+      return 'You have a task deadline reminder.';
+    }
+    if (category == 'reminder') {
+      return 'You have a reminder.';
+    }
+    final fallback = notif.message.trim();
+    if (fallback.isEmpty) {
+      return 'You have a new thought.';
+    }
+    return fallback;
   }
 
   Widget _buildThoughtsSection({
@@ -1280,6 +1420,7 @@ class _MemoryPageState extends State<MemoryPage> {
         final decision = _assignmentDecision(notif);
         final hasDecision = decision == 'accepted' || decision == 'declined';
         final isBusy = _processingAssignmentNotifIds.contains(notif.notificationId);
+        final subtitle = _detailedNotificationSubtitle(notif);
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 6),
@@ -1298,9 +1439,21 @@ class _MemoryPageState extends State<MemoryPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _simpleNotificationText(notif),
+                            _detailedNotificationTitle(notif),
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
+                          if (subtitle.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              subtitle,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                           const SizedBox(height: 4),
                           Text(
                             timeago.format(notif.createdAt),
@@ -1384,41 +1537,6 @@ class _MemoryPageState extends State<MemoryPage> {
         ),
       ),
     );
-  }
-
-  String _simpleNotificationText(InAppNotification notif) {
-    final category = (notif.category ?? '').trim().toLowerCase();
-    final metadata = notif.metadata ?? const <String, dynamic>{};
-    final kind = (metadata['kind']?.toString() ?? '').trim().toLowerCase();
-    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
-    final title = notif.title.toLowerCase();
-
-    if (kind == 'poke' || kind == 'poke_reminder') {
-      return 'You received a reminder thought.';
-    }
-    if (type.startsWith('suggestion_') || title.contains('suggestion')) {
-      return 'You received feedback.';
-    }
-    if (category == 'task_assigned') {
-      return 'You have a task assignment update.';
-    }
-    if (category == 'approval') {
-      return 'You have a feedback update.';
-    }
-    if (category == 'invitation') {
-      return 'You received a board invitation.';
-    }
-    if (category == 'task_deadline') {
-      return 'You have a task deadline reminder.';
-    }
-    if (category == 'reminder') {
-      return 'You have a reminder.';
-    }
-    final fallback = notif.message.trim();
-    if (fallback.isEmpty) {
-      return 'You have a new thought.';
-    }
-    return fallback;
   }
 
   Widget _buildMailboxSection(PokeProvider provider) {
