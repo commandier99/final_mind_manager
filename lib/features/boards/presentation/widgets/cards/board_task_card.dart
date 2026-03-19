@@ -918,21 +918,27 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                             Row(
                               children: [
                                 if (widget.showCheckbox) ...[
-                                  Tooltip(
-                                    message: missingRequiredSubmission
-                                        ? 'Upload is required before completing this task.'
-                                        : '',
-                                    child: Checkbox(
+                                  if (missingRequiredSubmission)
+                                    Tooltip(
+                                      message:
+                                          'Upload is required before completing this task.',
+                                      child: Checkbox(
+                                        value: widget.task.taskIsDone,
+                                        onChanged:
+                                            isLocked || !widget.task.taskIsDone
+                                            ? null
+                                            : (value) => widget.onToggleDone
+                                                  ?.call(value),
+                                      ),
+                                    )
+                                  else
+                                    Checkbox(
                                       value: widget.task.taskIsDone,
-                                      onChanged:
-                                          isLocked ||
-                                              (missingRequiredSubmission &&
-                                                  !widget.task.taskIsDone)
+                                      onChanged: isLocked
                                           ? null
-                                          : (value) => widget.onToggleDone
-                                                ?.call(value),
+                                          : (value) =>
+                                                widget.onToggleDone?.call(value),
                                     ),
-                                  ),
                                   const SizedBox(width: 8),
                                 ],
                                 // Main content

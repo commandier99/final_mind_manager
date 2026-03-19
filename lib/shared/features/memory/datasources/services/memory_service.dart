@@ -52,4 +52,37 @@ class MemoryService {
               .toList(),
         );
   }
+
+  Stream<List<MemoryModel>> streamBoardThoughts(String boardId) {
+    return _memoryCollection
+        .where('targetType', isEqualTo: MemoryModel.targetBoard)
+        .where('targetId', isEqualTo: boardId)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(
+                (doc) => MemoryModel.fromMap(
+                  doc.data() as Map<String, dynamic>,
+                  doc.id,
+                ),
+              )
+              .where(
+                (memory) =>
+                    memory.status != MemoryModel.statusResolved &&
+                    memory.status != MemoryModel.statusDeleted,
+              )
+              .toList(),
+        );
+  }
+
+  Future<void> updateMemoryStatus({
+    required String memoryId,
+    required String status,
+  }) async {
+    await _memoryCollection.doc(memoryId).update({
+      'status': status,
+      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    });
+  }
 }

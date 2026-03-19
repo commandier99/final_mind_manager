@@ -1,0 +1,4 @@
+﻿WARNING|STATIC_WARNING|UNUSED_LOCAL_VARIABLE|C:\\Users\\anime\\Documents\\School\\Thesis\\final_mind_manager\\lib\\features\\boards\\presentation\\widgets\\sections\\board_tasks_section.dart|152|13|3|The value of the local variable 'now' isn't used.
+WARNING|STATIC_WARNING|UNUSED_IMPORT|C:\\Users\\anime\\Documents\\School\\Thesis\\final_mind_manager\\lib\\shared\\features\\thoughts\\datasources\\providers\\thought_provider.dart|3|8|42|Unused import: 'package:firebase_auth/firebase_auth.dart'.
+INFO|LINT|USE_BUILD_CONTEXT_SYNCHRONOUSLY|C:\\Users\\anime\\Documents\\School\\Thesis\\final_mind_manager\\lib\\shared\\features\\memory\\presentation\\pages\\memory_page.dart|915|13|7|Don't use 'BuildContext's across async gaps.
+INFO|LINT|USE_BUILD_CONTEXT_SYNCHRONOUSLY|C:\\Users\\anime\\Documents\\School\\Thesis\\final_mind_manager\\lib\\shared\\features\\memory\\presentation\\pages\\memory_page.dart|963|13|7|Don't use 'BuildContext's across async gaps.

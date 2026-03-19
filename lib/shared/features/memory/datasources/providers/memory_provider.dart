@@ -16,9 +16,13 @@ class MemoryProvider extends ChangeNotifier {
   List<MemoryModel> get createdMemories => _createdMemories;
   List<MemoryModel> _receivedMemories = const [];
   List<MemoryModel> get receivedMemories => _receivedMemories;
+  List<MemoryModel> _boardThoughts = const [];
+  List<MemoryModel> get boardThoughts => _boardThoughts;
 
   StreamSubscription<List<MemoryModel>>? _createdSub;
   StreamSubscription<List<MemoryModel>>? _receivedSub;
+  StreamSubscription<List<MemoryModel>>? _boardThoughtsSub;
+  String? _boardThoughtsBoardId;
 
   List<MemoryModel> get allMailboxMemories {
     final byId = <String, MemoryModel>{};
@@ -196,6 +200,33 @@ class MemoryProvider extends ChangeNotifier {
     streamReceivedByUser(userId);
   }
 
+  void streamBoardThoughts(String boardId) {
+    if (_boardThoughtsBoardId == boardId && _boardThoughtsSub != null) {
+      return;
+    }
+
+    _boardThoughtsSub?.cancel();
+    _boardThoughtsBoardId = boardId;
+    _boardThoughtsSub = _memoryService.streamBoardThoughts(boardId).listen(
+      (items) {
+        _boardThoughts = items;
+        notifyListeners();
+      },
+      onError: (error) {
+        debugPrint('[MemoryProvider] streamBoardThoughts error: $error');
+        _boardThoughts = const [];
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> updateMemoryStatus({
+    required String memoryId,
+    required String status,
+  }) async {
+    await _memoryService.updateMemoryStatus(memoryId: memoryId, status: status);
+  }
+
   List<MemoryModel> getThreadMessages(String threadId) {
     final messages = allMailboxMemories
         .where((memory) => memory.effectiveThreadId == threadId)
@@ -208,6 +239,7 @@ class MemoryProvider extends ChangeNotifier {
   void dispose() {
     _createdSub?.cancel();
     _receivedSub?.cancel();
+    _boardThoughtsSub?.cancel();
     super.dispose();
   }
 

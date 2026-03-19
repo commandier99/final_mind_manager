@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../../../../features/boards/datasources/models/board_request_model.dart';
 import '../../../../../features/boards/datasources/models/board_model.dart';
-import '../../../../../features/boards/datasources/providers/board_request_provider.dart';
 import '../../../../../features/notifications/datasources/models/in_app_notif_model.dart';
 import '../../../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 import '../../../../../features/tasks/datasources/models/task_model.dart';
@@ -15,8 +13,8 @@ import '../../../../../features/tasks/presentation/pages/task_details_page.dart'
 import '../../../../datasources/providers/navigation_provider.dart';
 import '../../../../features/users/datasources/providers/user_provider.dart';
 import '../../../../features/users/datasources/services/user_services.dart';
-import '../../datasources/models/memory_model.dart';
-import '../../datasources/providers/memory_provider.dart';
+import '../../../thoughts/datasources/models/thought_model.dart';
+import '../../../thoughts/datasources/providers/thought_provider.dart';
 import '../../../../../features/boards/datasources/models/board_roles.dart';
 
 class MemoryPage extends StatefulWidget {
@@ -40,7 +38,7 @@ class _MemoryPageState extends State<MemoryPage> {
     'Confirm completion',
   ];
 
-  String _targetType = MemoryModel.targetUser;
+  String _targetType = ThoughtModel.targetUser;
   String? _selectedActionNeeded = _actionNeededOptions.first;
   String? _selectedTargetId;
   List<_TargetOption> _targetOptions = const [];
@@ -73,10 +71,7 @@ class _MemoryPageState extends State<MemoryPage> {
     if (!mounted) return;
     final userId = context.read<UserProvider>().userId;
     if (userId != null && userId.isNotEmpty) {
-      context.read<MemoryProvider>().streamMailbox(userId);
-      context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
-      context.read<BoardRequestProvider>().streamInvitationsSentByManager(userId);
-      context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
+      context.read<ThoughtProvider>().streamInbox(userId);
     }
   }
 
@@ -149,7 +144,7 @@ class _MemoryPageState extends State<MemoryPage> {
 
     List<_TargetOption> options = const [];
 
-    if (_targetType == MemoryModel.targetUser) {
+    if (_targetType == ThoughtModel.targetUser) {
       final managedBoards = boardProvider.boards
           .where((board) => board.boardManagerId == userId && !board.boardIsDeleted)
           .toList();
@@ -183,7 +178,7 @@ class _MemoryPageState extends State<MemoryPage> {
         );
       }
       options = loaded;
-    } else if (_targetType == MemoryModel.targetBoard) {
+    } else if (_targetType == ThoughtModel.targetBoard) {
       options = boardProvider.boards
           .where((board) => !board.boardIsDeleted && board.boardManagerId == userId)
           .map(
@@ -235,7 +230,7 @@ class _MemoryPageState extends State<MemoryPage> {
     });
   }
 
-  bool get _isUserTarget => _targetType == MemoryModel.targetUser;
+  bool get _isUserTarget => _targetType == ThoughtModel.targetUser;
 
   DateTime _composeScheduledDateTime() {
     final now = DateTime.now();
@@ -315,7 +310,7 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _submitPoke() async {
-    final pokeProvider = context.read<MemoryProvider>();
+    final thoughtProvider = context.read<ThoughtProvider>();
     setState(() {
       _subjectFieldError = null;
       _messageFieldError = null;
@@ -343,10 +338,10 @@ class _MemoryPageState extends State<MemoryPage> {
 
     final scheduledAt = _composeScheduledDateTime();
     final isLater = _isScheduledForLater(scheduledAt);
-    final timing = isLater ? MemoryModel.timingLater : MemoryModel.timingNow;
+    final timing = isLater ? ThoughtModel.timingLater : ThoughtModel.timingNow;
 
-    if (_targetType == MemoryModel.targetTask &&
-        timing == MemoryModel.timingNow &&
+    if (_targetType == ThoughtModel.targetTask &&
+        timing == ThoughtModel.timingNow &&
         (selected.recipientUserId == null || selected.recipientUserId == 'None')) {
       setState(() => _formErrorText = 'This task has no assigned member yet.');
       return;
@@ -386,37 +381,37 @@ class _MemoryPageState extends State<MemoryPage> {
       return;
     }
 
-    if (timing == MemoryModel.timingNow) {
+    if (timing == ThoughtModel.timingNow) {
       final confirmed = await _confirmSendNow();
       if (!confirmed) return;
     }
 
     final createdAt = DateTime.now();
-    final poke = MemoryModel(
-      memoryId: '',
-      createdByUserId: creatorId,
-      createdByUserName:
+    final thought = ThoughtModel(
+      thoughtId: '',
+      senderUserId: creatorId,
+      senderUserName:
           userProvider.currentUser?.userName.isNotEmpty == true
           ? userProvider.currentUser!.userName
           : 'Unknown',
       targetType: _targetType,
       targetId: selected.id,
       targetLabel: selected.label,
-      subject: subject,
+      title: subject,
       message: message,
       timing: timing,
       scheduledAt: isLater ? scheduledAt : null,
-      status: timing == MemoryModel.timingNow
-          ? MemoryModel.statusSent
-          : MemoryModel.statusScheduled,
+      status: timing == ThoughtModel.timingNow
+          ? ThoughtModel.statusSent
+          : ThoughtModel.statusScheduled,
       recipientUserId: selected.recipientUserId,
       createdAt: createdAt,
       updatedAt: createdAt,
     );
 
-    await pokeProvider.createMemoryEntry(
-      memory: poke,
-      notificationUserId: timing == MemoryModel.timingNow
+    await thoughtProvider.createThought(
+      thought: thought,
+      notificationUserId: timing == ThoughtModel.timingNow
           ? selected.recipientUserId
           : null,
       notificationTitle: subject,
@@ -444,14 +439,14 @@ class _MemoryPageState extends State<MemoryPage> {
     _formErrorText = null;
 
     if (!mounted) return;
-    final timingLabel = timing == MemoryModel.timingNow ? 'now' : 'for later';
+    final timingLabel = timing == ThoughtModel.timingNow ? 'now' : 'for later';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Thought queued $timingLabel for ${selected.label}.')),
     );
   }
 
   String _buildStructuredSubject(String targetLabel) {
-    final normalizedTarget = _targetType == MemoryModel.targetTask ? 'Task' : 'Board';
+    final normalizedTarget = _targetType == ThoughtModel.targetTask ? 'Task' : 'Board';
     return '$normalizedTarget Reminder: $targetLabel';
   }
 
@@ -461,7 +456,7 @@ class _MemoryPageState extends State<MemoryPage> {
     return 'Action needed: $action\nDetails: $details';
   }
 
-  Future<void> _openComposeSheet(MemoryProvider pokeProvider) async {
+  Future<void> _openComposeSheet(ThoughtProvider thoughtProvider) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -476,7 +471,7 @@ class _MemoryPageState extends State<MemoryPage> {
             ),
             child: SingleChildScrollView(
               child: _buildComposeSection(
-                pokeProvider,
+                thoughtProvider,
                 updater: setState,
               ),
             ),
@@ -486,20 +481,20 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  Future<void> _openThread(MemoryThreadSummary summary) async {
+  Future<void> _openThread(ThoughtThreadSummary summary) async {
     final userId = context.read<UserProvider>().userId;
     if (userId == null) return;
 
-    final messages = context.read<MemoryProvider>().getThreadMessages(summary.threadId);
-    final latest = summary.latestMessage;
-    final isUserThread = latest.targetType == MemoryModel.targetUser;
+    final messages = context.read<ThoughtProvider>().getThreadThoughts(summary.threadId);
+    final latest = summary.latestThought;
+    final isUserThread = latest.targetType == ThoughtModel.targetUser;
 
     final replyTargetUserId = _resolveReplyTargetUserId(messages, userId);
     final canReply = replyTargetUserId != null && replyTargetUserId.isNotEmpty;
 
     final replySubjectController = TextEditingController(
       text: isUserThread
-          ? _buildReplySubject(latest.subject ?? latest.message)
+          ? _buildReplySubject(latest.title ?? latest.message)
           : '',
     );
     final replyMessageController = TextEditingController();
@@ -530,8 +525,8 @@ class _MemoryPageState extends State<MemoryPage> {
                     shrinkWrap: true,
                     itemCount: messages.length,
                     itemBuilder: (context, index) {
-                      final poke = messages[index];
-                      final mine = poke.createdByUserId == userId;
+                      final thought = messages[index];
+                      final mine = thought.senderUserId == userId;
                       return Align(
                         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
@@ -549,25 +544,25 @@ class _MemoryPageState extends State<MemoryPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                mine ? 'You' : poke.createdByUserName,
+                                mine ? 'You' : thought.senderUserName,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade700,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              if ((poke.subject ?? '').trim().isNotEmpty) ...[
+                              if ((thought.title ?? '').trim().isNotEmpty) ...[
                                 const SizedBox(height: 4),
                                 Text(
-                                  poke.subject!.trim(),
+                                  thought.title!.trim(),
                                   style: const TextStyle(fontWeight: FontWeight.w700),
                                 ),
                               ],
                               const SizedBox(height: 4),
-                              Text(poke.message),
+                              Text(thought.message),
                               const SizedBox(height: 6),
                               Text(
-                                timeago.format(poke.createdAt),
+                                timeago.format(thought.createdAt),
                                 style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
                               ),
                             ],
@@ -604,7 +599,7 @@ class _MemoryPageState extends State<MemoryPage> {
                         final msg = replyMessageController.text.trim();
                         final subject = isUserThread
                             ? replySubjectController.text.trim()
-                            : latest.subject ?? _threadTitle(summary);
+                            : latest.title ?? _threadTitle(summary);
                         if (msg.isEmpty) return;
                         if (isUserThread && subject.isEmpty) return;
 
@@ -638,25 +633,25 @@ class _MemoryPageState extends State<MemoryPage> {
     return 'Re: $cleaned';
   }
 
-  String? _resolveReplyTargetUserId(List<MemoryModel> messages, String currentUserId) {
+  String? _resolveReplyTargetUserId(List<ThoughtModel> messages, String currentUserId) {
     if (messages.isEmpty) return null;
     final latest = messages.last;
     if ((latest.recipientUserId ?? '').trim().isNotEmpty &&
-        latest.createdByUserId == currentUserId) {
+        latest.senderUserId == currentUserId) {
       return latest.recipientUserId;
     }
-    if (latest.createdByUserId != currentUserId) {
-      return latest.createdByUserId;
+    if (latest.senderUserId != currentUserId) {
+      return latest.senderUserId;
     }
 
-    for (final poke in messages.reversed) {
-      if (poke.createdByUserId != currentUserId) return poke.createdByUserId;
+    for (final thought in messages.reversed) {
+      if (thought.senderUserId != currentUserId) return thought.senderUserId;
     }
     return null;
   }
 
   Future<void> _sendReply({
-    required MemoryThreadSummary thread,
+    required ThoughtThreadSummary thread,
     required String recipientUserId,
     required String subject,
     required String message,
@@ -665,31 +660,31 @@ class _MemoryPageState extends State<MemoryPage> {
     final creatorId = userProvider.userId;
     if (creatorId == null) return;
 
-    final latest = thread.latestMessage;
+    final latest = thread.latestThought;
     final now = DateTime.now();
-    final reply = MemoryModel(
-      memoryId: '',
-      createdByUserId: creatorId,
-      createdByUserName:
+    final reply = ThoughtModel(
+      thoughtId: '',
+      senderUserId: creatorId,
+      senderUserName:
           userProvider.currentUser?.userName.isNotEmpty == true
           ? userProvider.currentUser!.userName
           : 'Unknown',
       targetType: latest.targetType,
       targetId: latest.targetId,
       targetLabel: latest.targetLabel,
-      subject: subject,
+      title: subject,
       message: message,
       threadId: thread.threadId,
-      inReplyToMemoryId: latest.memoryId,
-      timing: MemoryModel.timingNow,
-      status: MemoryModel.statusSent,
+      inReplyToThoughtId: latest.thoughtId,
+      timing: ThoughtModel.timingNow,
+      status: ThoughtModel.statusSent,
       recipientUserId: recipientUserId,
       createdAt: now,
       updatedAt: now,
     );
 
-    await context.read<MemoryProvider>().createMemoryEntry(
-      memory: reply,
+    await context.read<ThoughtProvider>().createThought(
+      thought: reply,
       notificationUserId: recipientUserId,
       notificationTitle: subject,
       relatedId: latest.targetId,
@@ -703,26 +698,26 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  String _threadTitle(MemoryThreadSummary thread) {
-    final latest = thread.latestMessage;
-    final subject = (latest.subject ?? '').trim();
+  String _threadTitle(ThoughtThreadSummary thread) {
+    final latest = thread.latestThought;
+    final subject = (latest.title ?? '').trim();
     if (subject.isNotEmpty) return subject;
     return '${_formatTargetType(latest.targetType)}: ${latest.targetLabel}';
   }
 
-  String _threadSubtitle(MemoryThreadSummary thread) {
-    final latest = thread.latestMessage;
-    final sender = latest.createdByUserName.trim().isEmpty
+  String _threadSubtitle(ThoughtThreadSummary thread) {
+    final latest = thread.latestThought;
+    final sender = latest.senderUserName.trim().isEmpty
         ? 'Unknown'
-        : latest.createdByUserName.trim();
+        : latest.senderUserName.trim();
     return '$sender: ${latest.message}';
   }
 
   String _formatTargetType(String value) {
     switch (value) {
-      case MemoryModel.targetTask:
+      case ThoughtModel.targetTask:
         return 'Task';
-      case MemoryModel.targetBoard:
+      case ThoughtModel.targetBoard:
         return 'Board';
       default:
         return 'User';
@@ -798,25 +793,132 @@ class _MemoryPageState extends State<MemoryPage> {
     _selectedThought = requestedThought;
   }
 
-  bool _isPendingBoardInvite(BoardRequest request) {
-    final isInvite =
-        BoardRequest.normalizeType(request.boardReqType) ==
-        BoardRequest.typeRecruitment;
-    return isInvite && request.boardReqStatus == 'pending';
+  bool _isBoardInviteNotification(InAppNotification notif) {
+    final category = (notif.category ?? '').trim().toLowerCase();
+    if (category != 'invitation') return false;
+
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    if (type == ThoughtModel.typeBoardInvite) return true;
+
+    final boardId = _boardInviteBoardId(notif);
+    return boardId.isNotEmpty;
   }
 
-  Future<void> _acceptBoardInvite(BoardRequest request) async {
-    if (_processingInviteIds.contains(request.boardRequestId)) return;
-    setState(() => _processingInviteIds.add(request.boardRequestId));
+  String _boardInviteThoughtId(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['thoughtId']?.toString() ??
+            metadata['memoryId']?.toString() ??
+            metadata['pokeId']?.toString() ??
+            '')
+        .trim();
+  }
+
+  String _boardInviteBoardId(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['boardId']?.toString() ?? notif.relatedId ?? '').trim();
+  }
+
+  String _boardInviteBoardTitle(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['boardTitle']?.toString() ?? '').trim();
+  }
+
+  String _boardInviteManagerName(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['boardManagerName']?.toString() ?? '').trim();
+  }
+
+  String _boardInviteRole(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    return (metadata['requestedRole']?.toString() ?? BoardRoles.member).trim();
+  }
+
+  String _boardInviteStatus(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final decision = (metadata['decision']?.toString() ?? '').trim().toLowerCase();
+    if (decision == 'approved' || decision == 'accepted') {
+      return 'approved';
+    }
+    if (decision == 'rejected' || decision == 'declined') {
+      return 'rejected';
+    }
+
+    final thoughtStatus =
+        (metadata['thoughtStatus']?.toString() ?? '').trim().toLowerCase();
+    if (thoughtStatus == 'approved' ||
+        thoughtStatus == 'resolved' ||
+        thoughtStatus == 'sent') {
+      return 'approved';
+    }
+    if (thoughtStatus == 'rejected' || thoughtStatus == 'deleted') {
+      return 'rejected';
+    }
+    return 'pending';
+  }
+
+  bool _isPendingBoardInvite(InAppNotification notif) {
+    return _isBoardInviteNotification(notif) && _boardInviteStatus(notif) == 'pending';
+  }
+
+  ThoughtModel? _thoughtFromInviteNotification(InAppNotification notif) {
+    final thoughtId = _boardInviteThoughtId(notif);
+    final boardId = _boardInviteBoardId(notif);
+    if (thoughtId.isEmpty || boardId.isEmpty) return null;
+
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final now = notif.createdAt;
+    return ThoughtModel(
+      thoughtId: thoughtId,
+      thoughtType: ThoughtModel.typeBoardInvite,
+      senderUserId: (metadata['boardManagerId']?.toString() ?? '').trim(),
+      senderUserName: _boardInviteManagerName(notif),
+      targetType: ThoughtModel.targetBoard,
+      targetId: boardId,
+      targetLabel: _boardInviteBoardTitle(notif),
+      title: notif.title.trim().isEmpty ? 'Board Invitation' : notif.title.trim(),
+      message: notif.message.trim().isEmpty
+          ? 'You have been invited to join this board'
+          : notif.message.trim(),
+      timing: ThoughtModel.timingNow,
+      status: ThoughtModel.statusPending,
+      recipientUserId: notif.userId,
+      metadata: metadata,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  Future<void> _acceptBoardInvite(InAppNotification notif) async {
+    if (_processingInviteIds.contains(notif.notificationId)) return;
+    setState(() => _processingInviteIds.add(notif.notificationId));
     try {
-      await context.read<BoardRequestProvider>().approveRequest(
-        request,
+      final thought = _thoughtFromInviteNotification(notif);
+      final userProvider = context.read<UserProvider>();
+      final responderUserId = userProvider.userId;
+      if (thought == null || responderUserId == null || responderUserId.isEmpty) {
+        throw Exception('Invite details are incomplete.');
+      }
+
+      final responderUserName =
+          userProvider.currentUser?.userName.trim().isNotEmpty == true
+          ? userProvider.currentUser!.userName.trim()
+          : 'Unknown';
+
+      await context.read<ThoughtProvider>().respondToBoardInvite(
+        thought: thought,
+        approved: true,
+        responderUserId: responderUserId,
+        responderUserName: responderUserName,
         responseMessage: 'Recruitment accepted',
+      );
+      await context.read<InAppNotificationProvider>().deleteNotification(
+        notif.notificationId,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Joined ${request.boardTitle}.'),
+          content: Text('Joined ${_boardInviteBoardTitle(notif)}.'),
           backgroundColor: Colors.green,
         ),
       );
@@ -830,18 +932,36 @@ class _MemoryPageState extends State<MemoryPage> {
       );
     } finally {
       if (mounted) {
-        setState(() => _processingInviteIds.remove(request.boardRequestId));
+        setState(() => _processingInviteIds.remove(notif.notificationId));
       }
     }
   }
 
-  Future<void> _declineBoardInvite(BoardRequest request) async {
-    if (_processingInviteIds.contains(request.boardRequestId)) return;
-    setState(() => _processingInviteIds.add(request.boardRequestId));
+  Future<void> _declineBoardInvite(InAppNotification notif) async {
+    if (_processingInviteIds.contains(notif.notificationId)) return;
+    setState(() => _processingInviteIds.add(notif.notificationId));
     try {
-      await context.read<BoardRequestProvider>().rejectRequest(
-        request,
+      final thought = _thoughtFromInviteNotification(notif);
+      final userProvider = context.read<UserProvider>();
+      final responderUserId = userProvider.userId;
+      if (thought == null || responderUserId == null || responderUserId.isEmpty) {
+        throw Exception('Invite details are incomplete.');
+      }
+
+      final responderUserName =
+          userProvider.currentUser?.userName.trim().isNotEmpty == true
+          ? userProvider.currentUser!.userName.trim()
+          : 'Unknown';
+
+      await context.read<ThoughtProvider>().respondToBoardInvite(
+        thought: thought,
+        approved: false,
+        responderUserId: responderUserId,
+        responderUserName: responderUserName,
         responseMessage: 'Recruitment declined',
+      );
+      await context.read<InAppNotificationProvider>().deleteNotification(
+        notif.notificationId,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -860,7 +980,7 @@ class _MemoryPageState extends State<MemoryPage> {
       );
     } finally {
       if (mounted) {
-        setState(() => _processingInviteIds.remove(request.boardRequestId));
+        setState(() => _processingInviteIds.remove(notif.notificationId));
       }
     }
   }
@@ -1110,8 +1230,8 @@ class _MemoryPageState extends State<MemoryPage> {
     return Task.fromMap(data, doc.id);
   }
 
-  Future<void> _openBoardFromInvite(BoardRequest invite) async {
-    final status = invite.boardReqStatus.trim().toLowerCase();
+  Future<void> _openBoardFromInvite(InAppNotification invite) async {
+    final status = _boardInviteStatus(invite);
     if (status != 'approved') {
       if (!mounted) return;
       final message = status == 'rejected'
@@ -1124,7 +1244,8 @@ class _MemoryPageState extends State<MemoryPage> {
     }
 
     try {
-      final board = await _resolveBoardById(invite.boardId);
+      final boardId = _boardInviteBoardId(invite);
+      final board = await _resolveBoardById(boardId);
       if (!mounted) return;
       if (board == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1366,17 +1487,15 @@ class _MemoryPageState extends State<MemoryPage> {
   int _unreadThoughtCount({
     required String thoughtKey,
     required List<InAppNotification> notifications,
-    required List<BoardRequest> incomingInvites,
   }) {
-    final pendingInviteCount = incomingInvites.where(_isPendingBoardInvite).length;
     final unreadNotifications = notifications.where((notif) => !notif.isRead).toList();
 
     if (thoughtKey == NavigationProvider.memoryBankThoughtAll) {
-      return unreadNotifications.length + pendingInviteCount;
+      return unreadNotifications.length;
     }
 
     if (thoughtKey == NavigationProvider.memoryBankThoughtBoardInvites) {
-      return pendingInviteCount;
+      return unreadNotifications.where(_isPendingBoardInvite).length;
     }
 
     return unreadNotifications
@@ -1388,34 +1507,28 @@ class _MemoryPageState extends State<MemoryPage> {
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
     _syncThoughtFromNavigation(navigation);
-    final pokeProvider = context.watch<MemoryProvider>();
-    final boardRequestProvider = context.watch<BoardRequestProvider>();
+    final thoughtProvider = context.watch<ThoughtProvider>();
     final inAppProvider = context.watch<InAppNotificationProvider>();
     final unreadCountByThought = <String, int>{
       NavigationProvider.memoryBankThoughtBoardInvites: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtBoardInvites,
         notifications: inAppProvider.notifications,
-        incomingInvites: boardRequestProvider.invitations,
       ),
       NavigationProvider.memoryBankThoughtTaskAssignments: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtTaskAssignments,
         notifications: inAppProvider.notifications,
-        incomingInvites: boardRequestProvider.invitations,
       ),
       NavigationProvider.memoryBankThoughtFeedback: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtFeedback,
         notifications: inAppProvider.notifications,
-        incomingInvites: boardRequestProvider.invitations,
       ),
       NavigationProvider.memoryBankThoughtSuggestions: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtSuggestions,
         notifications: inAppProvider.notifications,
-        incomingInvites: boardRequestProvider.invitations,
       ),
       NavigationProvider.memoryBankThoughtReminders: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtReminders,
         notifications: inAppProvider.notifications,
-        incomingInvites: boardRequestProvider.invitations,
       ),
     };
     if (widget.composeOnly) {
@@ -1429,7 +1542,7 @@ class _MemoryPageState extends State<MemoryPage> {
           ),
           child: SingleChildScrollView(
             child: _buildComposeSection(
-              pokeProvider,
+              thoughtProvider,
               updater: setState,
             ),
           ),
@@ -1577,8 +1690,7 @@ class _MemoryPageState extends State<MemoryPage> {
                     child: KeyedSubtree(
                       key: ValueKey<String>(_selectedThought),
                       child: _buildThoughtsSection(
-                        pokeProvider: pokeProvider,
-                        boardRequestProvider: boardRequestProvider,
+                        thoughtProvider: thoughtProvider,
                         inAppProvider: inAppProvider,
                       ),
                     ),
@@ -1592,7 +1704,7 @@ class _MemoryPageState extends State<MemoryPage> {
           right: 20,
           bottom: 20,
           child: FloatingActionButton.extended(
-            onPressed: () => _openComposeSheet(pokeProvider),
+            onPressed: () => _openComposeSheet(thoughtProvider),
             icon: const Icon(Icons.note_add_outlined),
             label: const Text('New Thought'),
           ),
@@ -1652,19 +1764,20 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Widget _buildThoughtsSection({
-    required MemoryProvider pokeProvider,
-    required BoardRequestProvider boardRequestProvider,
+    required ThoughtProvider thoughtProvider,
     required InAppNotificationProvider inAppProvider,
   }) {
-    final incomingInvites = boardRequestProvider.invitations.toList()
-      ..sort((a, b) => b.boardReqCreatedAt.compareTo(a.boardReqCreatedAt));
+    final inviteNotifs = inAppProvider.notifications
+        .where(_isBoardInviteNotification)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     final thoughtNotifs = _thoughtNotifications(
       inAppProvider.notifications,
       _selectedThought,
     )..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     if (_selectedThought == NavigationProvider.memoryBankThoughtBoardInvites) {
-      if (incomingInvites.isEmpty) {
+      if (inviteNotifs.isEmpty) {
         return Center(
           child: Text(
             'No Board Invites yet.',
@@ -1674,12 +1787,12 @@ class _MemoryPageState extends State<MemoryPage> {
       }
       return ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 0, 12, 88),
-        itemCount: incomingInvites.length,
+        itemCount: inviteNotifs.length,
         separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade300),
         itemBuilder: (context, index) {
-          final invite = incomingInvites[index];
+          final invite = inviteNotifs[index];
           final isPending = _isPendingBoardInvite(invite);
-          final isBusy = _processingInviteIds.contains(invite.boardRequestId);
+          final isBusy = _processingInviteIds.contains(invite.notificationId);
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 6),
             child: InkWell(
@@ -1700,19 +1813,24 @@ class _MemoryPageState extends State<MemoryPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Board invite: ${invite.boardTitle}',
+                                'Board invite: ${_boardInviteBoardTitle(invite)}',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'From ${invite.boardManagerName}',
+                                'From ${_boardInviteManagerName(invite)}',
+                                style: TextStyle(color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Role: ${_boardInviteRole(invite)}',
                                 style: TextStyle(color: Colors.grey.shade700),
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                timeago.format(invite.boardReqCreatedAt),
+                                timeago.format(invite.createdAt),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade600,
@@ -1721,7 +1839,7 @@ class _MemoryPageState extends State<MemoryPage> {
                             ],
                           ),
                         ),
-                        _buildRequestStatusChip(invite.boardReqStatus),
+                        _buildRequestStatusChip(_boardInviteStatus(invite)),
                       ],
                     ),
                     if (isPending) ...[
@@ -1755,8 +1873,8 @@ class _MemoryPageState extends State<MemoryPage> {
 
     if (_selectedThought == NavigationProvider.memoryBankThoughtAll &&
         thoughtNotifs.isEmpty &&
-        pokeProvider.threadSummaries.isNotEmpty) {
-      return _buildMailboxSection(pokeProvider);
+        thoughtProvider.threadSummaries.isNotEmpty) {
+      return _buildMailboxSection(thoughtProvider);
     }
 
     if (thoughtNotifs.isEmpty) {
@@ -1901,7 +2019,7 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  Widget _buildMailboxSection(MemoryProvider provider) {
+  Widget _buildMailboxSection(ThoughtProvider provider) {
     final threads = provider.threadSummaries;
     if (threads.isEmpty) {
       return Center(
@@ -1918,9 +2036,9 @@ class _MemoryPageState extends State<MemoryPage> {
       separatorBuilder: (_, _) => Divider(height: 1, color: Colors.grey.shade300),
       itemBuilder: (context, index) {
         final thread = threads[index];
-        final sender = thread.latestMessage.createdByUserName.trim().isEmpty
+        final sender = thread.latestThought.senderUserName.trim().isEmpty
             ? 'Unknown'
-            : thread.latestMessage.createdByUserName.trim();
+            : thread.latestThought.senderUserName.trim();
         final subject = _threadTitle(thread);
         final preview = _threadSubtitle(thread);
 
@@ -1983,7 +2101,7 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Widget _buildComposeSection(
-    MemoryProvider pokeProvider, {
+    ThoughtProvider thoughtProvider, {
     required void Function(VoidCallback fn) updater,
   }) {
     return Column(
@@ -2011,9 +2129,9 @@ class _MemoryPageState extends State<MemoryPage> {
                 _buildSelectCard(
                   label: 'User',
                   icon: Icons.person_outline,
-                  selected: _targetType == MemoryModel.targetUser,
+                  selected: _targetType == ThoughtModel.targetUser,
                   onTap: () {
-                    _onTargetTypeChanged(MemoryModel.targetUser).then((_) {
+                    _onTargetTypeChanged(ThoughtModel.targetUser).then((_) {
                       updater(() {});
                     });
                   },
@@ -2021,9 +2139,9 @@ class _MemoryPageState extends State<MemoryPage> {
                 _buildSelectCard(
                   label: 'Board',
                   icon: Icons.view_kanban_outlined,
-                  selected: _targetType == MemoryModel.targetBoard,
+                  selected: _targetType == ThoughtModel.targetBoard,
                   onTap: () {
-                    _onTargetTypeChanged(MemoryModel.targetBoard).then((_) {
+                    _onTargetTypeChanged(ThoughtModel.targetBoard).then((_) {
                       updater(() {});
                     });
                   },
@@ -2031,9 +2149,9 @@ class _MemoryPageState extends State<MemoryPage> {
                 _buildSelectCard(
                   label: 'Task',
                   icon: Icons.task_alt_outlined,
-                  selected: _targetType == MemoryModel.targetTask,
+                  selected: _targetType == ThoughtModel.targetTask,
                   onTap: () {
-                    _onTargetTypeChanged(MemoryModel.targetTask).then((_) {
+                    _onTargetTypeChanged(ThoughtModel.targetTask).then((_) {
                       updater(() {});
                     });
                   },
@@ -2212,9 +2330,9 @@ class _MemoryPageState extends State<MemoryPage> {
             Align(
               alignment: Alignment.centerRight,
               child: ElevatedButton.icon(
-                onPressed: pokeProvider.isSubmitting ? null : _submitPoke,
+                onPressed: thoughtProvider.isSubmitting ? null : _submitPoke,
                 icon: const Icon(Icons.send),
-                label: Text(pokeProvider.isSubmitting ? 'Sending...' : 'Send Thought'),
+                label: Text(thoughtProvider.isSubmitting ? 'Sending...' : 'Send Thought'),
               ),
             ),
       ],

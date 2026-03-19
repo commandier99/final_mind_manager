@@ -4,16 +4,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import '../../../datasources/models/board_model.dart';
-import '../../../../suggestions/datasources/models/suggestion_model.dart';
-import '../../../../suggestions/datasources/providers/suggestion_provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/models/task_stats_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../../../shared/features/thoughts/datasources/models/thought_model.dart';
+import '../../../../../shared/features/thoughts/datasources/providers/thought_provider.dart';
 import '../../controllers/board_tasks_query_controller.dart';
 import '../dialogs/add_task_to_board_dialog.dart';
 import '../cards/board_task_card.dart';
-import '../../../../suggestions/presentation/widgets/suggestion_card.dart';
 
 class BoardTasksSection extends StatefulWidget {
   final String boardId;
@@ -45,10 +44,6 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   final Set<String> _publishingTaskIds = <String>{};
   bool _isSuggestionsQueueOpen = false;
 
-  bool _isPendingSuggestion(String status) {
-    return status.trim().toLowerCase() == 'pending';
-  }
-
   void _showSnackBarSafe(ScaffoldMessengerState? messenger, SnackBar snackBar) {
     if (!mounted) return;
     if (messenger == null || !messenger.mounted) return;
@@ -63,9 +58,8 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().streamTasksByBoard(widget.boardId);
       if (widget.board.boardType != 'personal') {
-        context.read<SuggestionProvider>().listenToBoardSuggestions(
+        context.read<ThoughtProvider>().streamBoardTaskSuggestions(
           widget.boardId,
-          includeResolved: false,
         );
       }
     });
@@ -131,7 +125,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   Future<void> _showSuggestionsDialog() async {
     final messenger = ScaffoldMessenger.maybeOf(context);
     final userProvider = context.read<UserProvider>();
-    final suggestionProvider = context.read<SuggestionProvider>();
+    final thoughtProvider = context.read<ThoughtProvider>();
 
     final draft = await showDialog<_SuggestionDraft>(
       context: context,
@@ -155,29 +149,26 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
           ? userProvider.currentUser!.userName
           : (firebaseUser.displayName ?? 'Unknown');
 
-      final suggestion = Suggestion(
-        suggestionId: const Uuid().v4(),
-        suggestionBoardId: widget.board.boardId,
-        suggestionAuthorId: firebaseUser.uid,
-        suggestionAuthorName: authorName,
-        suggestionAuthorProfilePicture:
-            userProvider.currentUser?.userProfilePicture,
-        suggestionTitle: draft.title,
-        suggestionDescription: draft.description,
-        suggestionCreatedAt: DateTime.now(),
-        suggestionStatus: 'pending',
+      final now = DateTime.now();
+      await thoughtProvider.createTaskSuggestionThought(
+        boardId: widget.board.boardId,
+        boardTitle: widget.board.boardTitle,
+        boardManagerId: widget.board.boardManagerId,
+        boardManagerName: widget.board.boardManagerName,
+        senderUserId: firebaseUser.uid,
+        senderUserName: authorName,
+        title: draft.title,
+        description: draft.description,
       );
-
-      await suggestionProvider.addSuggestion(suggestion);
       _showSnackBarSafe(
         messenger,
-        const SnackBar(content: Text('Suggestion submitted to Drafts.')),
+        const SnackBar(content: Text('Task suggestion submitted to Drafts.')),
       );
     } catch (e) {
       _showSnackBarSafe(
         messenger,
         SnackBar(
-          content: Text('Failed to submit suggestion: $e'),
+          content: Text('Failed to submit thought: $e'),
           backgroundColor: Colors.red,
         ),
       );
@@ -190,19 +181,19 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Consumer<TaskProvider>(
-      builder: (context, taskProvider, _) {
+    return Consumer2<TaskProvider, ThoughtProvider>(
+      builder: (context, taskProvider, thoughtProvider, _) {
         final currentUserId = FirebaseAuth.instance.currentUser?.uid;
         final isManager = widget.board.isManager(currentUserId);
         final canDraftTasks = widget.board.canDraftTasks(currentUserId);
         final isPersonalBoard = widget.board.boardType == 'personal';
         final activeLane = canDraftTasks ? widget.selectedLane : lanePublished;
-        final suggestions = isPersonalBoard
-            ? const <Suggestion>[]
-            : context.watch<SuggestionProvider>().suggestions;
-        final pendingSuggestions = suggestions
-            .where((s) => _isPendingSuggestion(s.suggestionStatus))
-            .toList();
+        final pendingSuggestions = (isPersonalBoard
+                ? const <ThoughtModel>[]
+                : thoughtProvider.boardTaskSuggestions)
+            .where((thought) => thought.isTaskSuggestion)
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
         final visibleTasks = taskProvider.tasks.where((task) {
           final lane = task.taskBoardLane;
@@ -333,7 +324,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                         if (pendingSuggestions.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('No suggestions right now.'),
+                              content: Text('No task suggestions right now.'),
                             ),
                           );
                           return;
@@ -414,19 +405,23 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: pendingSuggestions
                       .map(
-                        (suggestion) => SuggestionCard(
-                          suggestion: suggestion,
+                        (thought) => _BoardThoughtCard(
+                          key: ValueKey(thought.thoughtId),
+                          title: _thoughtTitle(thought),
+                          description: _thoughtDescription(thought),
+                          authorName: _thoughtAuthor(thought),
                           isConverting: _processingSuggestionIds.contains(
-                            suggestion.suggestionId,
+                            thought.thoughtId,
                           ),
                           isDeleting: _deletingSuggestionIds.contains(
-                            suggestion.suggestionId,
+                            thought.thoughtId,
                           ),
                           canDelete:
                               isManager ||
-                              suggestion.suggestionAuthorId == currentUserId,
-                          onConvert: () => _convertSuggestionToTask(suggestion),
-                          onDelete: () => _deleteSuggestion(suggestion),
+                              thought.senderUserId ==
+                                  currentUserId,
+                          onConvert: () => _convertSuggestionToTask(thought),
+                          onDelete: () => _deleteSuggestion(thought),
                         ),
                       )
                       .toList(),
@@ -442,6 +437,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                   children: sortedTasks
                       .map(
                         (task) => BoardTaskCard(
+                          key: ValueKey(task.taskId),
                           task: task,
                           board: widget.board,
                           currentUserId: FirebaseAuth.instance.currentUser?.uid,
@@ -462,19 +458,19 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     );
   }
 
-  Future<void> _convertSuggestionToTask(Suggestion suggestion) async {
+  Future<void> _convertSuggestionToTask(ThoughtModel thought) async {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) return;
 
     final userProvider = context.read<UserProvider>();
     final taskProvider = context.read<TaskProvider>();
-    final suggestionProvider = context.read<SuggestionProvider>();
+    final thoughtProvider = context.read<ThoughtProvider>();
     final managerName = (userProvider.currentUser?.userName.isNotEmpty ?? false)
         ? userProvider.currentUser!.userName
         : (currentUser.displayName ?? widget.board.boardManagerName);
 
     setState(() {
-      _processingSuggestionIds.add(suggestion.suggestionId);
+      _processingSuggestionIds.add(thought.thoughtId);
     });
 
     try {
@@ -489,10 +485,10 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         taskAssignedToName: 'Unassigned',
         taskPriorityLevel: 'Low',
         taskCreatedAt: DateTime.now(),
-        taskTitle: suggestion.suggestionTitle.trim().isEmpty
+        taskTitle: _thoughtTitle(thought).trim().isEmpty
             ? 'Untitled Task'
-            : suggestion.suggestionTitle.trim(),
-        taskDescription: suggestion.suggestionDescription.trim(),
+            : _thoughtTitle(thought).trim(),
+        taskDescription: _thoughtDescription(thought).trim(),
         taskIsDone: false,
         taskIsDoneAt: null,
         taskIsDeleted: false,
@@ -505,48 +501,46 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       );
 
       await taskProvider.addTask(newTask);
-      await suggestionProvider.reviewSuggestion(
-        suggestionId: suggestion.suggestionId,
-        status: 'converted',
-        reviewerId: currentUser.uid,
-        reviewNote: 'Converted into drafts task',
+      await thoughtProvider.updateSuggestionOutcome(
+        thoughtId: thought.thoughtId,
+        status: ThoughtModel.statusResolved,
         convertedTaskId: newTask.taskId,
       );
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Suggestion converted to Draft task.')),
+        const SnackBar(content: Text('Task suggestion converted to Draft task.')),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to convert suggestion: $e'),
+          content: Text('Failed to convert thought: $e'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _processingSuggestionIds.remove(suggestion.suggestionId);
+          _processingSuggestionIds.remove(thought.thoughtId);
         });
       }
     }
   }
 
-  Future<void> _deleteSuggestion(Suggestion suggestion) async {
-    if (_deletingSuggestionIds.contains(suggestion.suggestionId)) return;
+  Future<void> _deleteSuggestion(ThoughtModel thought) async {
+    if (_deletingSuggestionIds.contains(thought.thoughtId)) return;
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final canDelete =
         currentUserId != null &&
         (widget.board.isManager(currentUserId) ||
-            suggestion.suggestionAuthorId == currentUserId);
+            thought.senderUserId == currentUserId);
     if (!canDelete) {
       _showSnackBarSafe(
         ScaffoldMessenger.maybeOf(context),
         const SnackBar(
           content: Text(
-            'Only the board manager or suggestion author can delete this suggestion.',
+            'Only the board manager or suggestion author can delete this task suggestion.',
           ),
           backgroundColor: Colors.red,
         ),
@@ -557,8 +551,10 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Suggestion'),
-        content: const Text('Are you sure you want to delete this suggestion?'),
+        title: const Text('Delete Task Suggestion'),
+        content: const Text(
+          'Are you sure you want to delete this task suggestion?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -576,32 +572,56 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     if (!mounted) return;
 
     final messenger = ScaffoldMessenger.maybeOf(context);
-    final suggestionProvider = context.read<SuggestionProvider>();
+    final thoughtProvider = context.read<ThoughtProvider>();
     setState(() {
-      _deletingSuggestionIds.add(suggestion.suggestionId);
+      _deletingSuggestionIds.add(thought.thoughtId);
     });
 
     try {
-      await suggestionProvider.softDeleteSuggestion(suggestion.suggestionId);
+      await thoughtProvider.updateThoughtStatus(
+        thoughtId: thought.thoughtId,
+        status: ThoughtModel.statusDeleted,
+      );
       _showSnackBarSafe(
         messenger,
-        const SnackBar(content: Text('Suggestion deleted.')),
+        const SnackBar(content: Text('Task suggestion deleted.')),
       );
     } catch (e) {
       _showSnackBarSafe(
         messenger,
         SnackBar(
-          content: Text('Failed to delete suggestion: $e'),
+          content: Text('Failed to delete thought: $e'),
           backgroundColor: Colors.red,
         ),
       );
     } finally {
       if (mounted) {
         setState(() {
-          _deletingSuggestionIds.remove(suggestion.suggestionId);
+          _deletingSuggestionIds.remove(thought.thoughtId);
         });
       }
     }
+  }
+
+  String _thoughtTitle(ThoughtModel thought) {
+    final metadata = thought.metadata ?? const <String, dynamic>{};
+    final subject = (metadata['suggestionTitle']?.toString() ?? thought.title ?? '')
+        .trim();
+    if (subject.isNotEmpty) return subject;
+    return 'Untitled Task Suggestion';
+  }
+
+  String _thoughtDescription(ThoughtModel thought) {
+    final metadata = thought.metadata ?? const <String, dynamic>{};
+    final description =
+        (metadata['suggestionDescription']?.toString() ?? thought.message).trim();
+    return description;
+  }
+
+  String _thoughtAuthor(ThoughtModel thought) {
+    return thought.senderUserName.trim().isEmpty
+        ? 'Unknown'
+        : thought.senderUserName.trim();
   }
 
   Future<void> _publishTask(Task task) async {
@@ -796,7 +816,7 @@ class _SuggestionDialogState extends State<_SuggestionDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Drop a Suggestion'),
+      title: const Text('Task Suggestion'),
       content: SingleChildScrollView(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 520),
@@ -805,7 +825,7 @@ class _SuggestionDialogState extends State<_SuggestionDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Suggest a task to the manager for the board.',
+                'Send a task suggestion to the board manager for review.',
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
               const SizedBox(height: 12),
@@ -814,7 +834,7 @@ class _SuggestionDialogState extends State<_SuggestionDialog> {
                 maxLength: 80,
                 autofocus: true,
                 decoration: InputDecoration(
-                  labelText: 'Suggestion title',
+                  labelText: 'Task title',
                   border: const OutlineInputBorder(),
                   errorText: _titleError,
                 ),
@@ -847,9 +867,123 @@ class _SuggestionDialogState extends State<_SuggestionDialog> {
         ElevatedButton.icon(
           onPressed: _submit,
           icon: const Icon(Icons.send, size: 16),
-          label: const Text('Submit'),
+          label: const Text('Send'),
         ),
       ],
+    );
+  }
+}
+
+class _BoardThoughtCard extends StatelessWidget {
+  final String title;
+  final String description;
+  final String authorName;
+  final VoidCallback? onConvert;
+  final VoidCallback? onDelete;
+  final bool isConverting;
+  final bool isDeleting;
+  final bool canDelete;
+
+  const _BoardThoughtCard({
+    super.key,
+    required this.title,
+    required this.description,
+    required this.authorName,
+    this.onConvert,
+    this.onDelete,
+    this.isConverting = false,
+    this.isDeleting = false,
+    this.canDelete = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final normalizedTitle = title.trim().isEmpty ? 'Untitled Thought' : title.trim();
+    final normalizedDescription = description.trim();
+    final hasDescription = normalizedDescription.isNotEmpty;
+
+    return Card(
+      elevation: 1,
+      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: BorderSide(color: Colors.grey.shade300),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.lightbulb_outline, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    normalizedTitle,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            if (hasDescription) ...[
+              const SizedBox(height: 6),
+              Text(
+                normalizedDescription,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Suggested by $authorName',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: isConverting ? null : onConvert,
+                  icon: Icon(
+                    isConverting ? Icons.hourglass_top : Icons.task_alt,
+                    size: 16,
+                  ),
+                  label: Text(isConverting ? 'Converting' : 'Convert'),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+                if (canDelete) ...[
+                  const SizedBox(width: 6),
+                  OutlinedButton.icon(
+                    onPressed: isDeleting ? null : onDelete,
+                    icon: Icon(
+                      isDeleting ? Icons.hourglass_top : Icons.delete_outline,
+                      size: 16,
+                    ),
+                    label: Text(isDeleting ? 'Deleting' : 'Delete'),
+                    style: OutlinedButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: Colors.red.shade700,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -5,7 +5,7 @@ import '../../features/users/datasources/models/user_model.dart';
 import '../../features/users/datasources/providers/user_provider.dart';
 import '../../../features/boards/datasources/models/board_model.dart';
 import '../../../features/boards/datasources/providers/board_provider.dart';
-import '../../../features/boards/datasources/providers/board_request_provider.dart';
+import '../../features/thoughts/datasources/providers/thought_provider.dart';
 
 class SearchAndDiscoverPage extends StatefulWidget {
   const SearchAndDiscoverPage({super.key});
@@ -287,10 +287,10 @@ class _SearchAndDiscoverPageState extends State<SearchAndDiscoverPage> {
     }
 
     // Check if there's already a pending request
-    final requestProvider = context.read<BoardRequestProvider>();
-    final hasPending = await requestProvider.hasPendingRequest(
-      board.boardId,
-      user.userId,
+    final thoughtProvider = context.read<ThoughtProvider>();
+    final hasPending = await thoughtProvider.hasPendingBoardInvite(
+      boardId: board.boardId,
+      recipientUserId: user.userId,
     );
 
     if (hasPending) {
@@ -308,10 +308,13 @@ class _SearchAndDiscoverPageState extends State<SearchAndDiscoverPage> {
 
     try {
       // Send recruitment request instead of directly adding
-      await requestProvider.createInvitation(
+      await thoughtProvider.createBoardInviteThought(
         boardId: board.boardId,
         boardTitle: board.boardTitle,
-        userId: user.userId,
+        recipientUserId: user.userId,
+        recipientUserName: user.userName,
+        boardManagerId: board.boardManagerId,
+        boardManagerName: board.boardManagerName,
         message: 'You have been invited to join this board',
       );
 

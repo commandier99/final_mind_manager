@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import '../../../../boards/datasources/models/board_request_model.dart';
 import '../../../datasources/models/in_app_notif_model.dart';
 import '../../../datasources/models/push_notif_model.dart';
 import '../../../datasources/providers/in_app_notif_provider.dart';
@@ -24,9 +22,7 @@ class NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (notification is BoardRequest) {
-      return _buildBoardRequestCard(context, notification as BoardRequest);
-    } else if (notification is InAppNotification) {
+    if (notification is InAppNotification) {
       return _buildInAppNotifCard(context, notification as InAppNotification);
     } else if (notification is PushNotification) {
       return _buildPushNotifCard(context, notification as PushNotification);
@@ -52,9 +48,6 @@ class NotificationCard extends StatelessWidget {
   }
 
   String _targetThoughtKey(dynamic item) {
-    if (item is BoardRequest) {
-      return NavigationProvider.memoryBankThoughtBoardInvites;
-    }
     if (item is InAppNotification) {
       final category = (item.category ?? '').trim().toLowerCase();
       final metadata = item.metadata ?? const <String, dynamic>{};
@@ -255,85 +248,6 @@ class NotificationCard extends StatelessWidget {
         .toLowerCase();
   }
 
-  // Board Request Card - Basic version
-  Widget _buildBoardRequestCard(BuildContext context, BoardRequest request) {
-    final isRecruitment =
-        BoardRequest.normalizeType(request.boardReqType) ==
-        BoardRequest.typeRecruitment;
-    final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final isSender =
-        currentUserId.isNotEmpty && currentUserId == request.boardManagerId;
-    final requestLabel = isRecruitment
-        ? (isSender ? 'Invite Sent' : 'Invite Received')
-        : (isSender ? 'Application Received' : 'Application Sent');
-    final secondaryLine = isRecruitment
-        ? (isSender
-              ? 'To ${request.userName}'
-              : 'From ${request.boardManagerName}')
-        : (isSender ? 'From ${request.userName}' : 'To ${request.boardTitle}');
-    final icon = isRecruitment
-        ? (isSender ? Icons.outgoing_mail : Icons.mark_email_unread_outlined)
-        : (isSender ? Icons.person_add_alt_1 : Icons.inbox_outlined);
-    final iconColor = isRecruitment
-        ? (isSender ? const Color(0xFF5E35B1) : const Color(0xFF3949AB))
-        : (isSender ? const Color(0xFF00897B) : const Color(0xFF1E88E5));
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: InkWell(
-        onTap: () => _navigateToDetails(context),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  icon,
-                  color: iconColor,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      requestLabel,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      secondaryLine,
-                      style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      timeago.format(request.boardReqCreatedAt),
-                      style: TextStyle(fontSize: 12, color: Colors.grey[500]),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              _buildStatusChip(request.boardReqStatus),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   // In-App Notification Card - Basic version
   Widget _buildInAppNotifCard(BuildContext context, InAppNotification notif) {
     final visual = _inAppVisual(notif);
@@ -482,42 +396,6 @@ class NotificationCard extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color color;
-    String label;
-
-    switch (status) {
-      case 'approved':
-        color = Colors.green;
-        label = 'Accepted';
-        break;
-      case 'rejected':
-        color = Colors.red;
-        label = 'Declined';
-        break;
-      default:
-        color = Colors.orange;
-        label = 'Pending';
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
         ),
       ),
     );

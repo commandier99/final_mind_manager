@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../datasources/models/board_model.dart';
 import '../../datasources/models/board_roles.dart';
-import '../../datasources/providers/board_request_provider.dart';
 import '../../../../shared/features/search/providers/search_provider.dart';
+import '../../../../shared/features/thoughts/datasources/providers/thought_provider.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
 
 class AddMemberToBoardPage extends StatefulWidget {
@@ -321,10 +321,10 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
     }
 
     // Check if there's already a pending request
-    final requestProvider = context.read<BoardRequestProvider>();
-    final hasPending = await requestProvider.hasPendingRequest(
-      widget.board.boardId,
-      user.userId,
+    final thoughtProvider = context.read<ThoughtProvider>();
+    final hasPending = await thoughtProvider.hasPendingBoardInvite(
+      boardId: widget.board.boardId,
+      recipientUserId: user.userId,
     );
 
     if (hasPending) {
@@ -342,10 +342,13 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
 
     try {
       // Send invitation request instead of directly adding
-      await requestProvider.createInvitation(
+      await thoughtProvider.createBoardInviteThought(
         boardId: widget.board.boardId,
         boardTitle: widget.board.boardTitle,
-        userId: user.userId,
+        recipientUserId: user.userId,
+        recipientUserName: user.userName,
+        boardManagerId: widget.board.boardManagerId,
+        boardManagerName: widget.board.boardManagerName,
         role: _selectedInviteRole,
         message: 'You have been invited to join this board',
       );

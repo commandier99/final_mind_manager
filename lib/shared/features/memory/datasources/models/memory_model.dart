@@ -11,6 +11,8 @@ class MemoryModel {
   static const String statusPending = 'pending';
   static const String statusSent = 'sent';
   static const String statusScheduled = 'scheduled';
+  static const String statusResolved = 'resolved';
+  static const String statusDeleted = 'deleted';
 
   final String memoryId;
   final String createdByUserId;

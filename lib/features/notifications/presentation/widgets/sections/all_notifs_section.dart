@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../boards/datasources/providers/board_request_provider.dart';
-import '../../../../boards/datasources/models/board_request_model.dart';
 import '../../../datasources/providers/in_app_notif_provider.dart';
 import '../../../datasources/models/in_app_notif_model.dart';
 import '../cards/notif_card.dart';
@@ -46,11 +44,8 @@ Widget buildAllNotificationsSection(
   Widget Function() buildEmptyState,
   Set<String> selectedFilters,
 ) {
-  return Consumer2<BoardRequestProvider, InAppNotificationProvider>(
-    builder: (context, boardProvider, inAppProvider, child) {
-      final recruitments = boardProvider.invitations;
-      final sentRecruitments = boardProvider.sentInvitations;
-      final applications = boardProvider.joinRequests;
+  return Consumer<InAppNotificationProvider>(
+    builder: (context, inAppProvider, child) {
       var inAppNotifs = inAppProvider.notifications;
 
       final hasActiveFilter = selectedFilters.isNotEmpty;
@@ -60,30 +55,7 @@ Widget buildAllNotificationsSection(
             .toList();
       }
 
-      final boardRequestItems = <dynamic>[
-        ...recruitments,
-        ...sentRecruitments,
-        ...applications,
-      ];
-
-      final filteredBoardRequestItems = hasActiveFilter
-          ? (selectedFilters.contains(notifFilterInvites)
-                ? boardRequestItems
-                : <dynamic>[])
-          : boardRequestItems;
-
-      final displayList = <dynamic>[
-        ...filteredBoardRequestItems,
-        ...inAppNotifs,
-      ];
-
-      final seenBoardRequestIds = <String>{};
-      displayList.removeWhere((item) {
-        if (item is! BoardRequest) return false;
-        if (seenBoardRequestIds.contains(item.boardRequestId)) return true;
-        seenBoardRequestIds.add(item.boardRequestId);
-        return false;
-      });
+      final displayList = <dynamic>[...inAppNotifs];
 
       displayList.sort((a, b) {
         DateTime dateA = getNotificationDate(a);
@@ -134,9 +106,7 @@ Widget buildAllNotificationsSection(
             );
           }
 
-          if (item is BoardRequest) {
-            return NotificationCard(notification: item);
-          } else if (item is InAppNotification) {
+          if (item is InAppNotification) {
             return NotificationCard(
               notification: item,
               inAppProvider: inAppProvider,

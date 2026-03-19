@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../../boards/datasources/providers/board_request_provider.dart';
-import '../../../boards/datasources/models/board_request_model.dart';
 import '../../datasources/providers/in_app_notif_provider.dart';
 import '../../datasources/models/in_app_notif_model.dart';
 import '../../datasources/models/push_notif_model.dart';
@@ -170,14 +168,6 @@ class _NotificationsPageState extends State<NotificationsPage> {
 
       _hasInitializedStreams = true;
 
-      // Stream board requests (invitations and join requests)
-      debugPrint('[NotificationsPage] Streaming board requests...');
-      context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
-      context.read<BoardRequestProvider>().streamInvitationsSentByManager(
-        userId,
-      );
-      context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
-
       // Stream in-app notifications
       debugPrint('[NotificationsPage] Streaming in-app notifications...');
       context.read<InAppNotificationProvider>().streamNotificationsByUser(
@@ -202,9 +192,7 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   DateTime _getNotificationDate(dynamic notification) {
-    if (notification is BoardRequest) {
-      return notification.boardReqCreatedAt;
-    } else if (notification is InAppNotification) {
+    if (notification is InAppNotification) {
       return notification.createdAt;
     } else if (notification is PushNotification) {
       return notification.createdAt;
