@@ -68,9 +68,10 @@ class NotificationCard extends StatelessWidget {
       if (category == 'task_assigned') {
         return NavigationProvider.memoryBankThoughtTaskAssignments;
       }
-      if (category == 'approval' ||
-          type.startsWith('suggestion_') ||
-          title.contains('suggestion')) {
+      if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+        return NavigationProvider.memoryBankThoughtSuggestions;
+      }
+      if (category == 'approval') {
         return NavigationProvider.memoryBankThoughtFeedback;
       }
       if (category == 'task_deadline' ||
@@ -82,11 +83,17 @@ class NotificationCard extends StatelessWidget {
     }
     if (item is PushNotification) {
       final category = (item.category ?? '').trim().toLowerCase();
+      final data = item.data ?? const <String, dynamic>{};
+      final type = (data['type']?.toString() ?? '').trim().toLowerCase();
+      final title = item.title.toLowerCase();
       if (category == 'invitation') {
         return NavigationProvider.memoryBankThoughtBoardInvites;
       }
       if (category == 'task_assigned') {
         return NavigationProvider.memoryBankThoughtTaskAssignments;
+      }
+      if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+        return NavigationProvider.memoryBankThoughtSuggestions;
       }
       if (category == 'approval') {
         return NavigationProvider.memoryBankThoughtFeedback;

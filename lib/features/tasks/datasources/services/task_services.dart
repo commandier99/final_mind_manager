@@ -8,6 +8,7 @@ import '../models/task_stats_model.dart'; // Ensure TaskStats is imported
 import 'task_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
 import '../../../notifications/datasources/helpers/notification_helper.dart';
+import '../../../boards/datasources/models/board_roles.dart';
 
 class TaskService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -402,6 +403,15 @@ class TaskService {
               'boardTitle': (task.taskBoardTitle ?? '').trim(),
           },
         );
+        try {
+          await _notifyTaskSubmissionReviewers(
+            task: task,
+            submitterId: user.uid,
+            submitterName: user.displayName ?? 'Unknown User',
+          );
+        } catch (e) {
+          debugPrint('⚠️ Failed to notify task reviewers: $e');
+        }
       } else if (user != null && effectiveIsDone) {
         await _activityEventService.logEvent(
           userId: user.uid,
@@ -663,12 +673,23 @@ class TaskService {
   /// Accept a task (user indicates "I got this")
   Future<void> acceptTask(String taskId, String userId, String userName) async {
     try {
+      String assignerId = '';
+      String assignerName = '';
+      String taskTitle = '';
+      String boardId = '';
+      String boardTitle = '';
+
       await _firestore.runTransaction((transaction) async {
         final taskRef = _tasks.doc(taskId);
         final snapshot = await transaction.get(taskRef);
         if (!snapshot.exists) return;
 
         final data = snapshot.data() as Map<String, dynamic>;
+        assignerId = (data['taskAssignedBy'] as String? ?? '').trim();
+        assignerName = (data['taskAssignedByName'] as String? ?? '').trim();
+        taskTitle = (data['taskTitle'] as String? ?? '').trim();
+        boardId = (data['taskBoardId'] as String? ?? '').trim();
+        boardTitle = (data['taskBoardTitle'] as String? ?? '').trim();
         final proposedId = (data['taskProposedAssigneeId'] as String?)?.trim();
         final proposedName = (data['taskProposedAssigneeName'] as String?)
             ?.trim();
@@ -703,6 +724,42 @@ class TaskService {
         metadata: {'taskTitle': task?.taskTitle ?? ''},
       );
 
+      if (assignerId.isNotEmpty && assignerId != userId) {
+        try {
+          final resolvedTaskTitle = task?.taskTitle.trim().isNotEmpty == true
+              ? task!.taskTitle.trim()
+              : (taskTitle.isNotEmpty ? taskTitle : 'Untitled Task');
+          final resolvedBoardId = task?.taskBoardId.trim().isNotEmpty == true
+              ? task!.taskBoardId.trim()
+              : boardId;
+          final resolvedBoardTitle =
+              (task?.taskBoardTitle ?? '').trim().isNotEmpty
+              ? (task?.taskBoardTitle ?? '').trim()
+              : boardTitle;
+
+          await NotificationHelper.createInAppOnly(
+            userId: assignerId,
+            title: 'Task Assignment Accepted',
+            message: '$userName accepted "$resolvedTaskTitle".',
+            category: NotificationHelper.categoryTaskAssigned,
+            relatedId: taskId,
+            metadata: {
+              'taskId': taskId,
+              'taskTitle': resolvedTaskTitle,
+              if (resolvedBoardId.isNotEmpty) 'boardId': resolvedBoardId,
+              if (resolvedBoardTitle.isNotEmpty) 'boardTitle': resolvedBoardTitle,
+              'assignmentDecision': 'accepted',
+              'assignmentRespondedBy': userId,
+              'assignmentRespondedByName': userName,
+              'assignedById': assignerId,
+              if (assignerName.isNotEmpty) 'assignedByName': assignerName,
+            },
+          );
+        } catch (e) {
+          debugPrint('[TaskService] Notification error (acceptTask): $e');
+        }
+      }
+
       debugPrint('Task $taskId accepted by $userName');
     } catch (e) {
       debugPrint('Error accepting task: $e');
@@ -717,12 +774,23 @@ class TaskService {
     String userName,
   ) async {
     try {
+      String assignerId = '';
+      String assignerName = '';
+      String taskTitle = '';
+      String boardId = '';
+      String boardTitle = '';
+
       await _firestore.runTransaction((transaction) async {
         final taskRef = _tasks.doc(taskId);
         final snapshot = await transaction.get(taskRef);
         if (!snapshot.exists) return;
 
         final data = snapshot.data() as Map<String, dynamic>;
+        assignerId = (data['taskAssignedBy'] as String? ?? '').trim();
+        assignerName = (data['taskAssignedByName'] as String? ?? '').trim();
+        taskTitle = (data['taskTitle'] as String? ?? '').trim();
+        boardId = (data['taskBoardId'] as String? ?? '').trim();
+        boardTitle = (data['taskBoardTitle'] as String? ?? '').trim();
         final proposedId = (data['taskProposedAssigneeId'] as String?)?.trim();
         if (proposedId == null || proposedId.isEmpty || proposedId != userId) {
           throw StateError('No pending assignment found for this user.');
@@ -750,6 +818,42 @@ class TaskService {
         description: 'declined a task assignment',
         metadata: {'taskTitle': task?.taskTitle ?? ''},
       );
+
+      if (assignerId.isNotEmpty && assignerId != userId) {
+        try {
+          final resolvedTaskTitle = task?.taskTitle.trim().isNotEmpty == true
+              ? task!.taskTitle.trim()
+              : (taskTitle.isNotEmpty ? taskTitle : 'Untitled Task');
+          final resolvedBoardId = task?.taskBoardId.trim().isNotEmpty == true
+              ? task!.taskBoardId.trim()
+              : boardId;
+          final resolvedBoardTitle =
+              (task?.taskBoardTitle ?? '').trim().isNotEmpty
+              ? (task?.taskBoardTitle ?? '').trim()
+              : boardTitle;
+
+          await NotificationHelper.createInAppOnly(
+            userId: assignerId,
+            title: 'Task Assignment Declined',
+            message: '$userName declined "$resolvedTaskTitle".',
+            category: NotificationHelper.categoryTaskAssigned,
+            relatedId: taskId,
+            metadata: {
+              'taskId': taskId,
+              'taskTitle': resolvedTaskTitle,
+              if (resolvedBoardId.isNotEmpty) 'boardId': resolvedBoardId,
+              if (resolvedBoardTitle.isNotEmpty) 'boardTitle': resolvedBoardTitle,
+              'assignmentDecision': 'declined',
+              'assignmentRespondedBy': userId,
+              'assignmentRespondedByName': userName,
+              'assignedById': assignerId,
+              if (assignerName.isNotEmpty) 'assignedByName': assignerName,
+            },
+          );
+        } catch (e) {
+          debugPrint('[TaskService] Notification error (declineTask): $e');
+        }
+      }
 
       debugPrint('Task $taskId declined by $userName');
     } catch (e) {
@@ -910,6 +1014,61 @@ class TaskService {
     if (text.isEmpty) return '';
     if (text.length <= 180) return text;
     return '${text.substring(0, 177)}...';
+  }
+
+  Future<void> _notifyTaskSubmissionReviewers({
+    required Task task,
+    required String submitterId,
+    required String submitterName,
+  }) async {
+    final taskTitle = task.taskTitle.trim().isEmpty ? 'Task' : task.taskTitle.trim();
+    final boardId = task.taskBoardId.trim();
+    final boardTitle = (task.taskBoardTitle ?? '').trim();
+    final recipients = <String>{};
+
+    final ownerId = task.taskOwnerId.trim();
+    if (ownerId.isNotEmpty && ownerId != submitterId) {
+      recipients.add(ownerId);
+    }
+
+    if (boardId.isNotEmpty) {
+      final boardDoc = await _firestore.collection('boards').doc(boardId).get();
+      if (boardDoc.exists) {
+        final boardData = boardDoc.data() as Map<String, dynamic>;
+        final managerId = (boardData['boardManagerId'] as String? ?? '').trim();
+        if (managerId.isNotEmpty && managerId != submitterId) {
+          recipients.add(managerId);
+        }
+        final memberRoles = Map<String, dynamic>.from(
+          boardData['memberRoles'] ?? const <String, dynamic>{},
+        );
+        memberRoles.forEach((memberId, rawRole) {
+          final role = BoardRoles.normalize(rawRole?.toString());
+          if (role == BoardRoles.supervisor && memberId != submitterId) {
+            recipients.add(memberId);
+          }
+        });
+      }
+    }
+
+    for (final recipientId in recipients) {
+      await NotificationHelper.createInAppOnly(
+        userId: recipientId,
+        title: 'Task Submitted',
+        message: '$submitterName submitted "$taskTitle" for review.',
+        category: NotificationHelper.categoryApproval,
+        relatedId: task.taskId,
+        metadata: {
+          'taskId': task.taskId,
+          'taskTitle': taskTitle,
+          if (boardId.isNotEmpty) 'boardId': boardId,
+          if (boardTitle.isNotEmpty) 'boardTitle': boardTitle,
+          'type': 'task_submitted',
+          'submitterId': submitterId,
+          'submitterName': submitterName,
+        },
+      );
+    }
   }
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/board_model.dart';
 import '../models/board_stats_model.dart';
 import '../services/board_services.dart';
@@ -12,6 +13,7 @@ class BoardProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
+  StreamSubscription<List<Board>>? _boardsSubscription;
 
   BoardProvider() {
     _init();
@@ -26,10 +28,18 @@ class BoardProvider extends ChangeNotifier {
     final userId = _boardService.currentUserId;
     if (userId != null) {
       // Stream all boards where user is either manager or member
-      _boardService.streamUserBoardsWithMembership(userId).listen((boardList) {
-        _boards = boardList;
-        notifyListeners();
-      });
+      _boardsSubscription?.cancel();
+      _boardsSubscription = _boardService
+          .streamUserBoardsWithMembership(userId)
+          .listen(
+            (boardList) {
+              _boards = boardList;
+              notifyListeners();
+            },
+            onError: (error) {
+              debugPrint('[BoardProvider] Error streaming boards: $error');
+            },
+          );
     }
   }
 
@@ -234,5 +244,11 @@ class BoardProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  @override
+  void dispose() {
+    _boardsSubscription?.cancel();
+    super.dispose();
   }
 }

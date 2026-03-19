@@ -165,13 +165,20 @@ class TaskProvider extends ChangeNotifier {
 
     _setLoading(true);
     _taskStream = _taskService.streamTasks(boardId: boardId);
-    _taskSubscription = _taskStream!.listen((tasks) {
-      debugPrint(
-        '[DEBUG] TaskProvider: streamTasksByBoard received ${tasks.length} tasks',
-      );
-      _updateTasks(tasks);
-      _setLoading(false);
-    });
+    _taskSubscription = _taskStream!.listen(
+      (tasks) {
+        debugPrint(
+          '[DEBUG] TaskProvider: streamTasksByBoard received ${tasks.length} tasks',
+        );
+        _updateTasks(tasks);
+        _setLoading(false);
+      },
+      onError: (error) {
+        debugPrint('[DEBUG] TaskProvider: streamTasksByBoard error: $error');
+        _updateTasks([]);
+        _setLoading(false);
+      },
+    );
   }
 
   /// Stream active tasks assigned to a user
@@ -187,19 +194,26 @@ class TaskProvider extends ChangeNotifier {
 
     _setLoading(true);
     _taskStream = _taskService.streamTasksAssignedTo(userId);
-    _taskSubscription = _taskStream!.listen((tasks) {
-      debugPrint(
-        '[DEBUG] TaskProvider: streamUserActiveTasks received ${tasks.length} tasks, filtering active ones',
-      );
-      final filteredTasks = tasks
-          .where((t) => !t.taskIsDone && !t.taskIsDeleted)
-          .toList();
-      debugPrint(
-        '[DEBUG] TaskProvider: after filtering, ${filteredTasks.length} active tasks remain',
-      );
-      _updateTasks(filteredTasks);
-      _setLoading(false);
-    });
+    _taskSubscription = _taskStream!.listen(
+      (tasks) {
+        debugPrint(
+          '[DEBUG] TaskProvider: streamUserActiveTasks received ${tasks.length} tasks, filtering active ones',
+        );
+        final filteredTasks = tasks
+            .where((t) => !t.taskIsDone && !t.taskIsDeleted)
+            .toList();
+        debugPrint(
+          '[DEBUG] TaskProvider: after filtering, ${filteredTasks.length} active tasks remain',
+        );
+        _updateTasks(filteredTasks);
+        _setLoading(false);
+      },
+      onError: (error) {
+        debugPrint('[DEBUG] TaskProvider: streamUserActiveTasks error: $error');
+        _updateTasks([]);
+        _setLoading(false);
+      },
+    );
   }
 
   /// Stream ALL tasks for a user (including completed) - for statistics
@@ -224,17 +238,24 @@ class TaskProvider extends ChangeNotifier {
 
     _setLoading(true);
     _taskStream = _taskService.streamTasksAssignedTo(userId);
-    _taskSubscription = _taskStream!.listen((tasks) {
-      debugPrint(
-        '[DEBUG] TaskProvider: streamAllUserTasks received ${tasks.length} tasks',
-      );
-      final filteredTasks = tasks.where((t) => !t.taskIsDeleted).toList();
-      debugPrint(
-        '[DEBUG] TaskProvider: after filtering deleted, ${filteredTasks.length} tasks remain',
-      );
-      _updateTasks(filteredTasks);
-      _setLoading(false);
-    });
+    _taskSubscription = _taskStream!.listen(
+      (tasks) {
+        debugPrint(
+          '[DEBUG] TaskProvider: streamAllUserTasks received ${tasks.length} tasks',
+        );
+        final filteredTasks = tasks.where((t) => !t.taskIsDeleted).toList();
+        debugPrint(
+          '[DEBUG] TaskProvider: after filtering deleted, ${filteredTasks.length} tasks remain',
+        );
+        _updateTasks(filteredTasks);
+        _setLoading(false);
+      },
+      onError: (error) {
+        debugPrint('[DEBUG] TaskProvider: streamAllUserTasks error: $error');
+        _updateTasks([]);
+        _setLoading(false);
+      },
+    );
   }
 
   /// Stream tasks by a list of task IDs (for plans)
@@ -257,13 +278,20 @@ class TaskProvider extends ChangeNotifier {
 
     _setLoading(true);
     _taskStream = _taskService.streamTasksByIds(taskIds);
-    _taskSubscription = _taskStream!.listen((tasks) {
-      debugPrint(
-        '[DEBUG] TaskProvider: streamTasksByIds received ${tasks.length} tasks',
-      );
-      _updateTasks(tasks);
-      _setLoading(false);
-    });
+    _taskSubscription = _taskStream!.listen(
+      (tasks) {
+        debugPrint(
+          '[DEBUG] TaskProvider: streamTasksByIds received ${tasks.length} tasks',
+        );
+        _updateTasks(tasks);
+        _setLoading(false);
+      },
+      onError: (error) {
+        debugPrint('[DEBUG] TaskProvider: streamTasksByIds error: $error');
+        _updateTasks([]);
+        _setLoading(false);
+      },
+    );
   }
 
   // ------------------------

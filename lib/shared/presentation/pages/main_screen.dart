@@ -19,7 +19,7 @@ import '../pages/settings_page.dart';
 import '../pages/help_page.dart';
 import '../pages/about_page.dart';
 import '../../../features/mind_set/presentation/pages/mind_set_page.dart';
-import '../../features/poke/presentation/pages/memory_page.dart';
+import '../../features/memory/presentation/pages/memory_page.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -177,7 +177,6 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     final navigation = context.watch<NavigationProvider>();
     final selectedIndex = navigation.selectedIndex;
     final isNotificationsPage = selectedIndex == 5;
-    _deadlineReminderService.startPeriodicReminders();
     final showNotificationButton =
         !isNotificationsPage &&
         (selectedIndex == 0 || navigation.sideMenuIndex != null);
@@ -319,3 +318,4 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     );
   }
 }
+

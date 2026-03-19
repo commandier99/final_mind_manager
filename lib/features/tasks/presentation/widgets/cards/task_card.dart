@@ -8,6 +8,7 @@ import '../../../datasources/services/task_application_service.dart';
 import '../../pages/task_details_page.dart';
 import '../dialogs/edit_task_dialog.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
+import '../../../../../shared/datasources/providers/navigation_provider.dart';
 
 class TaskCard extends StatefulWidget {
   final Task task;
@@ -547,6 +548,7 @@ class _TaskCardState extends State<TaskCard> {
               : null,
           child: GestureDetector(
             onTap: () {
+              context.read<NavigationProvider>().selectFromBottomNav(1);
               Navigator.push(
                 context,
                 MaterialPageRoute(

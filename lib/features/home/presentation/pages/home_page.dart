@@ -995,6 +995,7 @@ class _HomePageState extends State<HomePage> {
         _showSnack('Board is unavailable.');
         return;
       }
+      context.read<NavigationProvider>().selectFromBottomNav(1);
       await Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => BoardDetailsPage(board: board!)));
@@ -1014,6 +1015,7 @@ class _HomePageState extends State<HomePage> {
       _showSnack('Task is unavailable.');
       return;
     }
+    context.read<NavigationProvider>().selectFromBottomNav(1);
     await Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => TaskDetailsPage(task: task!)));

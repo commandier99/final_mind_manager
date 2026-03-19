@@ -5,6 +5,7 @@ import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../../boards/presentation/widgets/cards/board_task_card.dart';
+import '../../../../../shared/datasources/providers/navigation_provider.dart';
 
 class PlanTasksSection extends StatelessWidget {
   final Plan plan;
@@ -53,6 +54,7 @@ class PlanTasksSection extends StatelessWidget {
       );
       if (action == 'upload') {
         if (!context.mounted) return;
+        context.read<NavigationProvider>().selectFromBottomNav(1);
         await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => TaskDetailsPage(task: task)),
@@ -93,6 +95,7 @@ class PlanTasksSection extends StatelessWidget {
       if (action == null || action == 'cancel') return;
       if (action == 'upload') {
         if (!context.mounted) return;
+        context.read<NavigationProvider>().selectFromBottomNav(1);
         await Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => TaskDetailsPage(task: task)),

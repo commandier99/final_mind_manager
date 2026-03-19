@@ -5,6 +5,7 @@ import '../models/board_roles.dart';
 import 'board_services.dart';
 import 'package:flutter/foundation.dart';
 import '../../../../shared/features/users/datasources/services/activity_event_services.dart';
+import '../../../notifications/datasources/helpers/notification_helper.dart';
 
 class BoardRequestService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -14,6 +15,78 @@ class BoardRequestService {
 
   CollectionReference get _requestsCollection =>
       _firestore.collection('board_requests');
+
+  Future<void> _notifyRecruitmentDecision({
+    required BoardRequest request,
+    required bool approved,
+    required String responderId,
+    required String responderName,
+  }) async {
+    final managerId = request.boardManagerId.trim();
+    if (managerId.isEmpty || managerId == responderId) return;
+
+    final decisionWord = approved ? 'accepted' : 'declined';
+    final title = approved
+        ? 'Board Invitation Accepted'
+        : 'Board Invitation Declined';
+    final message =
+        '$responderName $decisionWord your invitation to "${request.boardTitle}".';
+
+    await NotificationHelper.createInAppOnly(
+      userId: managerId,
+      title: title,
+      message: message,
+      category: NotificationHelper.categoryInvitation,
+      relatedId: request.boardRequestId,
+      metadata: {
+        'boardRequestId': request.boardRequestId,
+        'boardId': request.boardId,
+        'boardTitle': request.boardTitle,
+        'boardReqType': BoardRequest.typeRecruitment,
+        'boardReqStatus': approved ? 'approved' : 'rejected',
+        'decision': decisionWord,
+        'respondedBy': responderId,
+        'respondedByName': responderName,
+        'targetUserId': request.userId,
+        'targetUserName': request.userName,
+      },
+    );
+  }
+
+  Future<void> _notifyApplicationDecision({
+    required BoardRequest request,
+    required bool approved,
+    required String responderId,
+    required String responderName,
+  }) async {
+    final requesterId = request.userId.trim();
+    if (requesterId.isEmpty || requesterId == responderId) return;
+
+    final decisionWord = approved ? 'approved' : 'rejected';
+    final title = approved ? 'Join Request Approved' : 'Join Request Declined';
+    final message =
+        '$responderName $decisionWord your request for "${request.boardTitle}".';
+
+    await NotificationHelper.createInAppOnly(
+      userId: requesterId,
+      title: title,
+      message: message,
+      category: NotificationHelper.categoryInvitation,
+      relatedId: request.boardRequestId,
+      metadata: {
+        'boardRequestId': request.boardRequestId,
+        'boardId': request.boardId,
+        'boardTitle': request.boardTitle,
+        'boardReqType': BoardRequest.typeApplication,
+        'boardReqStatus': approved ? 'approved' : 'rejected',
+        'decision': decisionWord,
+        'respondedBy': responderId,
+        'respondedByName': responderName,
+        'boardManagerId': request.boardManagerId,
+        'boardManagerName': request.boardManagerName,
+      },
+    );
+  }
 
   // ========================
   // CREATE REQUEST
@@ -65,6 +138,33 @@ class BoardRequestService {
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
+
+      try {
+        if (userId != currentUser.uid) {
+          await NotificationHelper.createInAppOnly(
+            userId: userId,
+            title: 'Board Invitation',
+            message:
+                '${boardData?['boardManagerName'] ?? 'A manager'} invited you to join "$boardTitle".',
+            category: NotificationHelper.categoryInvitation,
+            relatedId: requestId,
+            metadata: {
+              'boardRequestId': requestId,
+              'boardId': boardId,
+              'boardTitle': boardTitle,
+              'boardReqType': BoardRequest.typeRecruitment,
+              'boardReqStatus': 'pending',
+              'boardManagerId': boardData?['boardManagerId'] ?? '',
+              'boardManagerName': boardData?['boardManagerName'] ?? 'Unknown',
+              'targetUserId': userId,
+              'targetUserName': userData?['userName'] ?? 'Unknown User',
+              'requestedRole': requestedRole,
+            },
+          );
+        }
+      } catch (e) {
+        debugPrint('[BoardRequestService] Notification error (createInvitation): $e');
+      }
 
       await _activityEventService.logEvent(
         userId: currentUser.uid,
@@ -134,6 +234,33 @@ class BoardRequestService {
       );
 
       await _requestsCollection.doc(requestId).set(request.toMap());
+
+      try {
+        final managerId = (boardData?['boardManagerId'] as String? ?? '').trim();
+        if (managerId.isNotEmpty && managerId != currentUser.uid) {
+          await NotificationHelper.createInAppOnly(
+            userId: managerId,
+            title: 'New Join Request',
+            message:
+                '${userData?['userName'] ?? 'A user'} requested to join "$boardTitle".',
+            category: NotificationHelper.categoryInvitation,
+            relatedId: requestId,
+            metadata: {
+              'boardRequestId': requestId,
+              'boardId': boardId,
+              'boardTitle': boardTitle,
+              'boardReqType': BoardRequest.typeApplication,
+              'boardReqStatus': 'pending',
+              'boardManagerId': managerId,
+              'boardManagerName': boardData?['boardManagerName'] ?? 'Unknown',
+              'targetUserId': currentUser.uid,
+              'targetUserName': userData?['userName'] ?? 'Unknown User',
+            },
+          );
+        }
+      } catch (e) {
+        debugPrint('[BoardRequestService] Notification error (createJoinRequest): $e');
+      }
 
       await _activityEventService.logEvent(
         userId: currentUser.uid,
@@ -377,6 +504,26 @@ class BoardRequestService {
         },
       );
 
+      try {
+        if (requestType == BoardRequest.typeRecruitment) {
+          await _notifyRecruitmentDecision(
+            request: request,
+            approved: true,
+            responderId: currentUser.uid,
+            responderName: currentUser.displayName ?? request.userName,
+          );
+        } else {
+          await _notifyApplicationDecision(
+            request: request,
+            approved: true,
+            responderId: currentUser.uid,
+            responderName: currentUser.displayName ?? request.boardManagerName,
+          );
+        }
+      } catch (e) {
+        debugPrint('[BoardRequestService] Notification error (approve): $e');
+      }
+
       debugPrint(
         '✅ ${requestType == BoardRequest.typeRecruitment ? 'Recruitment' : 'Application'} approved for user ${request.userId}',
       );
@@ -427,6 +574,26 @@ class BoardRequestService {
           'targetUserName': request.userName,
         },
       );
+
+      try {
+        if (requestType == BoardRequest.typeRecruitment) {
+          await _notifyRecruitmentDecision(
+            request: request,
+            approved: false,
+            responderId: currentUser.uid,
+            responderName: currentUser.displayName ?? request.userName,
+          );
+        } else {
+          await _notifyApplicationDecision(
+            request: request,
+            approved: false,
+            responderId: currentUser.uid,
+            responderName: currentUser.displayName ?? request.boardManagerName,
+          );
+        }
+      } catch (e) {
+        debugPrint('[BoardRequestService] Notification error (reject): $e');
+      }
 
       debugPrint('✅ Join request rejected for user ${request.userId}');
     } catch (e) {

@@ -5,7 +5,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
 import '../../../features/authentication/datasources/providers/authentication_provider.dart';
 import '../../services/firebase_messaging_service.dart';
-import '../../services/deadline_reminder_service.dart';
 import '../../features/users/datasources/providers/user_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -15,7 +14,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   bool _showMindManager = false;
   bool _fadeOutInnovare = false;
   bool _bgIsWhite = false;
@@ -29,14 +29,14 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<void> _startAnimation() async {
     // Show Innovare logo for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
-    
+
     if (!mounted) return;
-    
+
     // Fade out Innovare logo
     setState(() {
       _fadeOutInnovare = true;
     });
-    
+
     // Wait for fade-out to finish, then switch background and fade in Mind Manager
     await Future.delayed(const Duration(milliseconds: 500));
 
@@ -57,9 +57,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     // Keep Mind Manager logo on screen for 2 seconds
     await Future.delayed(const Duration(seconds: 2));
-    
+
     if (!mounted) return;
-    
+
     _checkAuthAndNavigate();
   }
 
@@ -70,7 +70,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     unawaited(
       Permission.notification.status.then((status) {
         if (status.isDenied) {
-          debugPrint('[SplashScreen] Requesting notification permission on app startup');
+          debugPrint(
+            '[SplashScreen] Requesting notification permission on app startup',
+          );
           Permission.notification.request().then((result) {
             debugPrint('[SplashScreen] Notification permission result: $result');
           });
@@ -90,30 +92,29 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
     if (isAuthenticated) {
       final userProvider = Provider.of<UserProvider>(context, listen: false);
-      
-      // Get current Firebase user and load their data
+
+      // Get current Firebase user and load their data when needed
       final firebaseUser = FirebaseAuth.instance.currentUser;
       if (firebaseUser != null) {
-        await userProvider.loadUserData(firebaseUser.uid);
+        if (userProvider.currentUser?.userId != firebaseUser.uid) {
+          await userProvider.loadUserData(firebaseUser.uid);
+        }
 
         // Only proceed if a user document exists in the database.
         if (userProvider.currentUser != null) {
           debugPrint('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
 
           // Register FCM token only for existing users (prevents creating empty user docs)
-          FirebaseMessagingService().registerTokenForUser(userProvider.currentUser!.userId);
-
-          // Check for deadline reminders when app opens
-          final deadlineReminderService = DeadlineReminderService(
-            FirebaseMessagingService().localNotifications,
+          FirebaseMessagingService().registerTokenForUser(
+            userProvider.currentUser!.userId,
           );
-          await deadlineReminderService.checkAndSendReminders();
-          deadlineReminderService.startPeriodicReminders();
 
           if (!mounted) return;
           Navigator.pushReplacementNamed(context, '/home');
         } else {
-          debugPrint('[SplashScreen] ⚠️ User document not found in database - routing to auth');
+          debugPrint(
+            '[SplashScreen] User document not found in database - routing to auth',
+          );
           if (!mounted) return;
           Navigator.pushReplacementNamed(context, '/auth');
         }

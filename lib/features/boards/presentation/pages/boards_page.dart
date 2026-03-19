@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../datasources/models/board_model.dart';
 import '../../datasources/providers/board_provider.dart';
 import '../../datasources/providers/board_stats_provider.dart';
+import '../../../../shared/datasources/providers/navigation_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../widgets/cards/board_card.dart';
 import '../widgets/dialogs/add_board_button.dart';
@@ -392,6 +393,7 @@ class _BoardsPageState extends State<BoardsPage> {
                       BoardCard(
                         board: board,
                         onTap: () {
+                          context.read<NavigationProvider>().selectFromBottomNav(1);
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (context) =>

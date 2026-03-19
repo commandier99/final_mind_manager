@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-class PokeModel {
+class MemoryModel {
   static const String timingNow = 'now';
   static const String timingLater = 'later';
 
@@ -12,7 +12,7 @@ class PokeModel {
   static const String statusSent = 'sent';
   static const String statusScheduled = 'scheduled';
 
-  final String pokeId;
+  final String memoryId;
   final String createdByUserId;
   final String createdByUserName;
   final String targetType;
@@ -21,7 +21,7 @@ class PokeModel {
   final String? subject;
   final String message;
   final String? threadId;
-  final String? inReplyToPokeId;
+  final String? inReplyToMemoryId;
   final String timing;
   final DateTime? scheduledAt;
   final String status;
@@ -29,8 +29,8 @@ class PokeModel {
   final DateTime createdAt;
   final DateTime updatedAt;
 
-  const PokeModel({
-    required this.pokeId,
+  const MemoryModel({
+    required this.memoryId,
     required this.createdByUserId,
     required this.createdByUserName,
     required this.targetType,
@@ -39,7 +39,7 @@ class PokeModel {
     this.subject,
     required this.message,
     this.threadId,
-    this.inReplyToPokeId,
+    this.inReplyToMemoryId,
     required this.timing,
     required this.createdAt,
     required this.updatedAt,
@@ -48,9 +48,11 @@ class PokeModel {
     this.recipientUserId,
   });
 
-  factory PokeModel.fromMap(Map<String, dynamic> map, String id) {
-    return PokeModel(
-      pokeId: id,
+  factory MemoryModel.fromMap(Map<String, dynamic> map, String id) {
+    return MemoryModel(
+      memoryId: (map['memoryId'] as String?) ??
+          (map['pokeId'] as String?) ??
+          id,
       createdByUserId: map['createdByUserId'] as String? ?? '',
       createdByUserName: map['createdByUserName'] as String? ?? 'Unknown',
       targetType: map['targetType'] as String? ?? targetUser,
@@ -59,14 +61,14 @@ class PokeModel {
       subject: map['subject'] as String?,
       message: map['message'] as String? ?? '',
       threadId: map['threadId'] as String?,
-      inReplyToPokeId: map['inReplyToPokeId'] as String?,
+      inReplyToMemoryId: (map['inReplyToMemoryId'] as String?) ??
+          (map['inReplyToPokeId'] as String?),
       timing: map['timing'] as String? ?? timingNow,
       scheduledAt: (map['scheduledAt'] as Timestamp?)?.toDate(),
       status: map['status'] as String? ?? statusPending,
       recipientUserId: map['recipientUserId'] as String?,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt:
-          (map['updatedAt'] as Timestamp?)?.toDate() ??
+      updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ??
           (map['createdAt'] as Timestamp?)?.toDate() ??
           DateTime.now(),
     );
@@ -74,6 +76,9 @@ class PokeModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'memoryId': memoryId,
+      // Backward compatibility for existing consumers/data.
+      'pokeId': memoryId,
       'createdByUserId': createdByUserId,
       'createdByUserName': createdByUserName,
       'targetType': targetType,
@@ -82,8 +87,11 @@ class PokeModel {
       if (subject != null && subject!.trim().isNotEmpty) 'subject': subject,
       'message': message,
       if (threadId != null && threadId!.trim().isNotEmpty) 'threadId': threadId,
-      if (inReplyToPokeId != null && inReplyToPokeId!.trim().isNotEmpty)
-        'inReplyToPokeId': inReplyToPokeId,
+      if (inReplyToMemoryId != null && inReplyToMemoryId!.trim().isNotEmpty) ...{
+        'inReplyToMemoryId': inReplyToMemoryId,
+        // Backward compatibility for existing consumers/data.
+        'inReplyToPokeId': inReplyToMemoryId,
+      },
       'timing': timing,
       if (scheduledAt != null) 'scheduledAt': Timestamp.fromDate(scheduledAt!),
       'status': status,
@@ -94,6 +102,6 @@ class PokeModel {
   }
 
   String get effectiveThreadId => (threadId ?? '').trim().isEmpty
-      ? (pokeId.trim().isEmpty ? targetId : pokeId)
+      ? (memoryId.trim().isEmpty ? targetId : memoryId)
       : threadId!.trim();
 }

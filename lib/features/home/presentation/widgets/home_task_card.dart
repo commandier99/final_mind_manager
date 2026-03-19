@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../tasks/datasources/models/task_model.dart';
 import '../../../tasks/presentation/pages/task_details_page.dart';
+import '../../../../shared/datasources/providers/navigation_provider.dart';
 
 class HomeTaskCard extends StatefulWidget {
   final Task task;
@@ -50,6 +52,7 @@ class _HomeTaskCardState extends State<HomeTaskCard> {
       elevation: 2,
       child: InkWell(
         onTap: () {
+          context.read<NavigationProvider>().selectFromBottomNav(1);
           Navigator.push(
             context,
             MaterialPageRoute(

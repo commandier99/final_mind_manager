@@ -9,6 +9,7 @@ import '../../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../../tasks/presentation/widgets/dialogs/edit_task_dialog.dart';
 import '../../../../notifications/datasources/helpers/notification_helper.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../../../../shared/datasources/providers/navigation_provider.dart';
 import '../../../datasources/models/board_model.dart';
 
 class BoardTaskCard extends StatefulWidget {
@@ -731,6 +732,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
               builder: (context) => GestureDetector(
                 onTap: () {
                   Slidable.of(context)?.close();
+                  context.read<NavigationProvider>().selectFromBottomNav(1);
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (context) => TaskDetailsPage(task: widget.task),

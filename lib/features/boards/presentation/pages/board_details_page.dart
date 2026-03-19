@@ -19,8 +19,13 @@ import '../widgets/dialogs/board_delete_flow_dialog.dart';
 
 class BoardDetailsPage extends StatefulWidget {
   final Board board;
+  final String? initialTab;
 
-  const BoardDetailsPage({super.key, required this.board});
+  const BoardDetailsPage({
+    super.key,
+    required this.board,
+    this.initialTab,
+  });
 
   @override
   State<BoardDetailsPage> createState() => _BoardDetailsPageState();
@@ -36,6 +41,12 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
   static const String _tabPublished = 'published';
   static const String _tabStats = 'stats';
   static const String _tabSubmissions = 'submissions';
+  static const Set<String> _allowedTabs = {
+    _tabDrafts,
+    _tabPublished,
+    _tabStats,
+    _tabSubmissions,
+  };
 
   bool _isSearchExpanded = false;
   bool _isDetailsPanelExpanded = true;
@@ -45,6 +56,10 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
   @override
   void initState() {
     super.initState();
+    final requestedTab = (widget.initialTab ?? '').trim().toLowerCase();
+    if (_allowedTabs.contains(requestedTab)) {
+      _selectedTab = requestedTab;
+    }
     _persistLastVisitedBoard();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<TaskProvider>().streamTasksByBoard(widget.board.boardId);

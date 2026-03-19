@@ -20,6 +20,7 @@ class NavigationProvider extends ChangeNotifier {
   static const String memoryBankThoughtAll = 'all';
   static const String memoryBankThoughtBoardInvites = 'board_invites';
   static const String memoryBankThoughtTaskAssignments = 'task_assignments';
+  static const String memoryBankThoughtSuggestions = 'suggestions';
   static const String memoryBankThoughtFeedback = 'feedback';
   static const String memoryBankThoughtReminders = 'reminders';
 

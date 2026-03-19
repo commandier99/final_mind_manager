@@ -16,7 +16,7 @@ import 'shared/datasources/providers/navigation_provider.dart';
 import 'features/boards/datasources/providers/board_provider.dart';
 import 'features/boards/datasources/providers/board_stats_provider.dart';
 import 'shared/features/search/providers/search_provider.dart';
-import 'shared/features/poke/datasources/providers/poke_provider.dart';
+import 'shared/features/memory/datasources/providers/memory_provider.dart';
 import 'features/boards/datasources/providers/board_request_provider.dart';
 import 'shared/features/users/datasources/providers/activity_event_provider.dart';
 import 'features/tasks/datasources/providers/upload_progress_provider.dart';
@@ -62,7 +62,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BoardProvider()),
         ChangeNotifierProvider(create: (_) => BoardStatsProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
-        ChangeNotifierProvider(create: (_) => PokeProvider()),
+        ChangeNotifierProvider(create: (_) => MemoryProvider()),
         ChangeNotifierProvider(create: (_) => BoardRequestProvider()),
         ChangeNotifierProvider(create: (_) => InAppNotificationProvider()),
         ChangeNotifierProvider(create: (_) => PushNotificationProvider()),
@@ -106,3 +106,4 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+

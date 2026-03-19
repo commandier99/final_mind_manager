@@ -1,19 +1,22 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../../../features/boards/datasources/models/board_request_model.dart';
+import '../../../../../features/boards/datasources/models/board_model.dart';
 import '../../../../../features/boards/datasources/providers/board_request_provider.dart';
 import '../../../../../features/notifications/datasources/models/in_app_notif_model.dart';
 import '../../../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 import '../../../../../features/tasks/datasources/models/task_model.dart';
 import '../../../../../features/boards/datasources/providers/board_provider.dart';
 import '../../../../../features/tasks/datasources/providers/task_provider.dart';
+import '../../../../../features/boards/presentation/pages/board_details_page.dart';
+import '../../../../../features/tasks/presentation/pages/task_details_page.dart';
 import '../../../../datasources/providers/navigation_provider.dart';
 import '../../../../features/users/datasources/providers/user_provider.dart';
 import '../../../../features/users/datasources/services/user_services.dart';
-import '../../datasources/models/poke_model.dart';
-import '../../datasources/providers/poke_provider.dart';
+import '../../datasources/models/memory_model.dart';
+import '../../datasources/providers/memory_provider.dart';
 import '../../../../../features/boards/datasources/models/board_roles.dart';
 
 class MemoryPage extends StatefulWidget {
@@ -37,7 +40,7 @@ class _MemoryPageState extends State<MemoryPage> {
     'Confirm completion',
   ];
 
-  String _targetType = PokeModel.targetUser;
+  String _targetType = MemoryModel.targetUser;
   String? _selectedActionNeeded = _actionNeededOptions.first;
   String? _selectedTargetId;
   List<_TargetOption> _targetOptions = const [];
@@ -70,7 +73,7 @@ class _MemoryPageState extends State<MemoryPage> {
     if (!mounted) return;
     final userId = context.read<UserProvider>().userId;
     if (userId != null && userId.isNotEmpty) {
-      context.read<PokeProvider>().streamMailbox(userId);
+      context.read<MemoryProvider>().streamMailbox(userId);
       context.read<BoardRequestProvider>().streamInvitationsByUser(userId);
       context.read<BoardRequestProvider>().streamInvitationsSentByManager(userId);
       context.read<BoardRequestProvider>().streamJoinRequestsByUser(userId);
@@ -146,7 +149,7 @@ class _MemoryPageState extends State<MemoryPage> {
 
     List<_TargetOption> options = const [];
 
-    if (_targetType == PokeModel.targetUser) {
+    if (_targetType == MemoryModel.targetUser) {
       final managedBoards = boardProvider.boards
           .where((board) => board.boardManagerId == userId && !board.boardIsDeleted)
           .toList();
@@ -180,7 +183,7 @@ class _MemoryPageState extends State<MemoryPage> {
         );
       }
       options = loaded;
-    } else if (_targetType == PokeModel.targetBoard) {
+    } else if (_targetType == MemoryModel.targetBoard) {
       options = boardProvider.boards
           .where((board) => !board.boardIsDeleted && board.boardManagerId == userId)
           .map(
@@ -232,7 +235,7 @@ class _MemoryPageState extends State<MemoryPage> {
     });
   }
 
-  bool get _isUserTarget => _targetType == PokeModel.targetUser;
+  bool get _isUserTarget => _targetType == MemoryModel.targetUser;
 
   DateTime _composeScheduledDateTime() {
     final now = DateTime.now();
@@ -312,7 +315,7 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _submitPoke() async {
-    final pokeProvider = context.read<PokeProvider>();
+    final pokeProvider = context.read<MemoryProvider>();
     setState(() {
       _subjectFieldError = null;
       _messageFieldError = null;
@@ -340,10 +343,10 @@ class _MemoryPageState extends State<MemoryPage> {
 
     final scheduledAt = _composeScheduledDateTime();
     final isLater = _isScheduledForLater(scheduledAt);
-    final timing = isLater ? PokeModel.timingLater : PokeModel.timingNow;
+    final timing = isLater ? MemoryModel.timingLater : MemoryModel.timingNow;
 
-    if (_targetType == PokeModel.targetTask &&
-        timing == PokeModel.timingNow &&
+    if (_targetType == MemoryModel.targetTask &&
+        timing == MemoryModel.timingNow &&
         (selected.recipientUserId == null || selected.recipientUserId == 'None')) {
       setState(() => _formErrorText = 'This task has no assigned member yet.');
       return;
@@ -383,14 +386,14 @@ class _MemoryPageState extends State<MemoryPage> {
       return;
     }
 
-    if (timing == PokeModel.timingNow) {
+    if (timing == MemoryModel.timingNow) {
       final confirmed = await _confirmSendNow();
       if (!confirmed) return;
     }
 
     final createdAt = DateTime.now();
-    final poke = PokeModel(
-      pokeId: '',
+    final poke = MemoryModel(
+      memoryId: '',
       createdByUserId: creatorId,
       createdByUserName:
           userProvider.currentUser?.userName.isNotEmpty == true
@@ -403,17 +406,17 @@ class _MemoryPageState extends State<MemoryPage> {
       message: message,
       timing: timing,
       scheduledAt: isLater ? scheduledAt : null,
-      status: timing == PokeModel.timingNow
-          ? PokeModel.statusSent
-          : PokeModel.statusScheduled,
+      status: timing == MemoryModel.timingNow
+          ? MemoryModel.statusSent
+          : MemoryModel.statusScheduled,
       recipientUserId: selected.recipientUserId,
       createdAt: createdAt,
       updatedAt: createdAt,
     );
 
-    await pokeProvider.createPoke(
-      poke: poke,
-      notificationUserId: timing == PokeModel.timingNow
+    await pokeProvider.createMemoryEntry(
+      memory: poke,
+      notificationUserId: timing == MemoryModel.timingNow
           ? selected.recipientUserId
           : null,
       notificationTitle: subject,
@@ -441,14 +444,14 @@ class _MemoryPageState extends State<MemoryPage> {
     _formErrorText = null;
 
     if (!mounted) return;
-    final timingLabel = timing == PokeModel.timingNow ? 'now' : 'for later';
+    final timingLabel = timing == MemoryModel.timingNow ? 'now' : 'for later';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Thought queued $timingLabel for ${selected.label}.')),
     );
   }
 
   String _buildStructuredSubject(String targetLabel) {
-    final normalizedTarget = _targetType == PokeModel.targetTask ? 'Task' : 'Board';
+    final normalizedTarget = _targetType == MemoryModel.targetTask ? 'Task' : 'Board';
     return '$normalizedTarget Reminder: $targetLabel';
   }
 
@@ -458,7 +461,7 @@ class _MemoryPageState extends State<MemoryPage> {
     return 'Action needed: $action\nDetails: $details';
   }
 
-  Future<void> _openComposeSheet(PokeProvider pokeProvider) async {
+  Future<void> _openComposeSheet(MemoryProvider pokeProvider) async {
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -483,13 +486,13 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  Future<void> _openThread(PokeThreadSummary summary) async {
+  Future<void> _openThread(MemoryThreadSummary summary) async {
     final userId = context.read<UserProvider>().userId;
     if (userId == null) return;
 
-    final messages = context.read<PokeProvider>().getThreadMessages(summary.threadId);
+    final messages = context.read<MemoryProvider>().getThreadMessages(summary.threadId);
     final latest = summary.latestMessage;
-    final isUserThread = latest.targetType == PokeModel.targetUser;
+    final isUserThread = latest.targetType == MemoryModel.targetUser;
 
     final replyTargetUserId = _resolveReplyTargetUserId(messages, userId);
     final canReply = replyTargetUserId != null && replyTargetUserId.isNotEmpty;
@@ -635,7 +638,7 @@ class _MemoryPageState extends State<MemoryPage> {
     return 'Re: $cleaned';
   }
 
-  String? _resolveReplyTargetUserId(List<PokeModel> messages, String currentUserId) {
+  String? _resolveReplyTargetUserId(List<MemoryModel> messages, String currentUserId) {
     if (messages.isEmpty) return null;
     final latest = messages.last;
     if ((latest.recipientUserId ?? '').trim().isNotEmpty &&
@@ -653,7 +656,7 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Future<void> _sendReply({
-    required PokeThreadSummary thread,
+    required MemoryThreadSummary thread,
     required String recipientUserId,
     required String subject,
     required String message,
@@ -664,8 +667,8 @@ class _MemoryPageState extends State<MemoryPage> {
 
     final latest = thread.latestMessage;
     final now = DateTime.now();
-    final reply = PokeModel(
-      pokeId: '',
+    final reply = MemoryModel(
+      memoryId: '',
       createdByUserId: creatorId,
       createdByUserName:
           userProvider.currentUser?.userName.isNotEmpty == true
@@ -677,16 +680,16 @@ class _MemoryPageState extends State<MemoryPage> {
       subject: subject,
       message: message,
       threadId: thread.threadId,
-      inReplyToPokeId: latest.pokeId,
-      timing: PokeModel.timingNow,
-      status: PokeModel.statusSent,
+      inReplyToMemoryId: latest.memoryId,
+      timing: MemoryModel.timingNow,
+      status: MemoryModel.statusSent,
       recipientUserId: recipientUserId,
       createdAt: now,
       updatedAt: now,
     );
 
-    await context.read<PokeProvider>().createPoke(
-      poke: reply,
+    await context.read<MemoryProvider>().createMemoryEntry(
+      memory: reply,
       notificationUserId: recipientUserId,
       notificationTitle: subject,
       relatedId: latest.targetId,
@@ -700,14 +703,14 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  String _threadTitle(PokeThreadSummary thread) {
+  String _threadTitle(MemoryThreadSummary thread) {
     final latest = thread.latestMessage;
     final subject = (latest.subject ?? '').trim();
     if (subject.isNotEmpty) return subject;
     return '${_formatTargetType(latest.targetType)}: ${latest.targetLabel}';
   }
 
-  String _threadSubtitle(PokeThreadSummary thread) {
+  String _threadSubtitle(MemoryThreadSummary thread) {
     final latest = thread.latestMessage;
     final sender = latest.createdByUserName.trim().isEmpty
         ? 'Unknown'
@@ -717,9 +720,9 @@ class _MemoryPageState extends State<MemoryPage> {
 
   String _formatTargetType(String value) {
     switch (value) {
-      case PokeModel.targetTask:
+      case MemoryModel.targetTask:
         return 'Task';
-      case PokeModel.targetBoard:
+      case MemoryModel.targetBoard:
         return 'Board';
       default:
         return 'User';
@@ -732,12 +735,14 @@ class _MemoryPageState extends State<MemoryPage> {
         return 'Board Invites';
       case NavigationProvider.memoryBankThoughtTaskAssignments:
         return 'Task Assignments';
+      case NavigationProvider.memoryBankThoughtSuggestions:
+        return 'Suggestions';
       case NavigationProvider.memoryBankThoughtFeedback:
         return 'Feedback';
       case NavigationProvider.memoryBankThoughtReminders:
         return 'Reminders';
       default:
-        return 'All Thoughts';
+        return 'Thoughts';
     }
   }
 
@@ -754,9 +759,10 @@ class _MemoryPageState extends State<MemoryPage> {
     if (category == 'task_assigned') {
       return NavigationProvider.memoryBankThoughtTaskAssignments;
     }
-    if (category == 'approval' ||
-        type.startsWith('suggestion_') ||
-        title.contains('suggestion')) {
+    if (type.startsWith('suggestion_') || title.contains('suggestion')) {
+      return NavigationProvider.memoryBankThoughtSuggestions;
+    }
+    if (category == 'approval') {
       return NavigationProvider.memoryBankThoughtFeedback;
     }
     if (category == 'task_deadline' ||
@@ -765,7 +771,7 @@ class _MemoryPageState extends State<MemoryPage> {
         kind == 'poke_reminder') {
       return NavigationProvider.memoryBankThoughtReminders;
     }
-    return NavigationProvider.memoryBankThoughtAll;
+    return NavigationProvider.memoryBankThoughtFeedback;
   }
 
   List<InAppNotification> _thoughtNotifications(
@@ -781,7 +787,12 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   void _syncThoughtFromNavigation(NavigationProvider navigation) {
-    _selectedThought = navigation.memoryBankThoughtKey;
+    final requestedThought = navigation.memoryBankThoughtKey;
+    if (requestedThought == NavigationProvider.memoryBankThoughtAll) {
+      _selectedThought = NavigationProvider.memoryBankThoughtBoardInvites;
+      return;
+    }
+    _selectedThought = requestedThought;
   }
 
   bool _isPendingBoardInvite(BoardRequest request) {
@@ -852,10 +863,47 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   String _taskIdFromNotification(InAppNotification notif) {
-    final relatedId = (notif.relatedId ?? '').trim();
-    if (relatedId.isNotEmpty) return relatedId;
     final metadata = notif.metadata ?? const <String, dynamic>{};
-    return (metadata['taskId']?.toString() ?? '').trim();
+    final metadataTaskId = (metadata['taskId']?.toString() ?? '').trim();
+    if (metadataTaskId.isNotEmpty) return metadataTaskId;
+
+    // Only treat relatedId as taskId for task-centric notifications.
+    final category = (notif.category ?? '').trim().toLowerCase();
+    if (category == 'task_assigned' ||
+        category == 'task_deadline' ||
+        category == 'approval') {
+      return (notif.relatedId ?? '').trim();
+    }
+    return '';
+  }
+
+  bool _isSuggestionNotification(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final type = (metadata['type']?.toString() ?? '').trim().toLowerCase();
+    final title = notif.title.toLowerCase();
+    return type.startsWith('suggestion_') || title.contains('suggestion');
+  }
+
+  String _suggestionIdFromNotification(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final metadataSuggestionId =
+        (metadata['suggestionId']?.toString() ?? '').trim();
+    if (metadataSuggestionId.isNotEmpty) return metadataSuggestionId;
+    if (_isSuggestionNotification(notif)) {
+      return (notif.relatedId ?? '').trim();
+    }
+    return '';
+  }
+
+  Future<Map<String, dynamic>?> _resolveSuggestionById(String suggestionId) async {
+    final normalized = suggestionId.trim();
+    if (normalized.isEmpty) return null;
+    final doc = await FirebaseFirestore.instance
+        .collection('suggestions')
+        .doc(normalized)
+        .get();
+    if (!doc.exists) return null;
+    return doc.data();
   }
 
   bool _isTaskAssignmentNotification(InAppNotification notif) {
@@ -955,6 +1003,175 @@ class _MemoryPageState extends State<MemoryPage> {
     }
   }
 
+  String _boardIdFromNotification(InAppNotification notif) {
+    final metadata = notif.metadata ?? const <String, dynamic>{};
+    final metadataBoardId = (metadata['boardId']?.toString() ?? '').trim();
+    if (metadataBoardId.isNotEmpty) return metadataBoardId;
+
+    final category = (notif.category ?? '').trim().toLowerCase();
+    final relatedId = (notif.relatedId ?? '').trim();
+    if (category == 'invitation' && relatedId.isNotEmpty) {
+      return relatedId;
+    }
+    return '';
+  }
+
+  Future<Board?> _resolveBoardById(String boardId) async {
+    final normalized = boardId.trim();
+    if (normalized.isEmpty) return null;
+
+    final providerBoard = context.read<BoardProvider>().getBoardById(normalized);
+    if (providerBoard != null) return providerBoard;
+
+    final doc = await FirebaseFirestore.instance.collection('boards').doc(normalized).get();
+    final data = doc.data();
+    if (!doc.exists || data == null) return null;
+    return Board.fromMap(data, doc.id);
+  }
+
+  Future<Task?> _resolveTaskById(String taskId) async {
+    final normalized = taskId.trim();
+    if (normalized.isEmpty) return null;
+
+    final localTask = context.read<TaskProvider>().tasks.where((t) => t.taskId == normalized);
+    if (localTask.isNotEmpty) return localTask.first;
+
+    final doc = await FirebaseFirestore.instance.collection('tasks').doc(normalized).get();
+    final data = doc.data();
+    if (!doc.exists || data == null) return null;
+    return Task.fromMap(data, doc.id);
+  }
+
+  Future<void> _openBoardFromInvite(BoardRequest invite) async {
+    final status = invite.boardReqStatus.trim().toLowerCase();
+    if (status != 'approved') {
+      if (!mounted) return;
+      final message = status == 'rejected'
+          ? 'This invite was declined.'
+          : 'Accept this invite first to open the board.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      return;
+    }
+
+    try {
+      final board = await _resolveBoardById(invite.boardId);
+      if (!mounted) return;
+      if (board == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Board not found.')),
+        );
+        return;
+      }
+      context.read<NavigationProvider>().selectFromBottomNav(1);
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => BoardDetailsPage(board: board)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open board right now.')),
+      );
+    }
+  }
+
+  Future<void> _openTargetFromThought(InAppNotification notif) async {
+    try {
+      if (_isSuggestionNotification(notif)) {
+        final metadata = notif.metadata ?? const <String, dynamic>{};
+        var boardId = (metadata['boardId']?.toString() ?? '').trim();
+        var taskId = (metadata['convertedTaskId']?.toString() ?? '').trim();
+
+        if (boardId.isEmpty && taskId.isEmpty) {
+          final suggestionId = _suggestionIdFromNotification(notif);
+          if (suggestionId.isNotEmpty) {
+            final suggestionData = await _resolveSuggestionById(suggestionId);
+            if (suggestionData != null) {
+              boardId =
+                  (suggestionData['suggestionBoardId']?.toString() ?? '').trim();
+              taskId = (suggestionData['suggestionConvertedTaskId']?.toString() ??
+                      '')
+                  .trim();
+            }
+          }
+        }
+
+        if (taskId.isNotEmpty) {
+          final task = await _resolveTaskById(taskId);
+          if (!mounted) return;
+          if (task != null) {
+            context.read<NavigationProvider>().selectFromBottomNav(1);
+            await Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => TaskDetailsPage(task: task)),
+            );
+            return;
+          }
+        }
+
+        if (boardId.isNotEmpty) {
+          final board = await _resolveBoardById(boardId);
+          if (!mounted) return;
+          if (board != null) {
+            context.read<NavigationProvider>().selectFromBottomNav(1);
+            await Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => BoardDetailsPage(
+                  board: board,
+                  initialTab: 'drafts',
+                ),
+              ),
+            );
+            return;
+          }
+        }
+      }
+
+      final taskId = _taskIdFromNotification(notif);
+      if (taskId.isNotEmpty) {
+        final task = await _resolveTaskById(taskId);
+        if (!mounted) return;
+        if (task == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Task not found.')),
+          );
+          return;
+        }
+        context.read<NavigationProvider>().selectFromBottomNav(1);
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => TaskDetailsPage(task: task)),
+        );
+        return;
+      }
+
+      final boardId = _boardIdFromNotification(notif);
+      if (boardId.isNotEmpty) {
+        final board = await _resolveBoardById(boardId);
+        if (!mounted) return;
+        if (board == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Board not found.')),
+          );
+          return;
+        }
+        context.read<NavigationProvider>().selectFromBottomNav(1);
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => BoardDetailsPage(board: board)),
+        );
+      }
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Unable to open this thought target.')),
+      );
+    }
+  }
+
   Widget _buildSelectCard({
     required String label,
     required IconData icon,
@@ -1017,6 +1234,67 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
+  Widget _buildThoughtTab({
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required VoidCallback onTap,
+    int unreadCount = 0,
+  }) {
+    final borderColor = selected ? Colors.blue.shade400 : Colors.grey.shade300;
+    final backgroundColor = selected ? Colors.blue.shade50 : Colors.grey.shade100;
+    final textColor = selected ? Colors.blue.shade700 : Colors.grey.shade800;
+    final iconColor = selected ? Colors.blue.shade700 : Colors.grey.shade700;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: backgroundColor,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderColor, width: selected ? 1.4 : 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: iconColor),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: textColor,
+                ),
+              ),
+              if (unreadCount > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: selected ? Colors.blue.shade700 : Colors.grey.shade700,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$unreadCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   int _unreadThoughtCount({
     required String thoughtKey,
     required List<InAppNotification> notifications,
@@ -1042,15 +1320,10 @@ class _MemoryPageState extends State<MemoryPage> {
   Widget build(BuildContext context) {
     final navigation = context.watch<NavigationProvider>();
     _syncThoughtFromNavigation(navigation);
-    final pokeProvider = context.watch<PokeProvider>();
+    final pokeProvider = context.watch<MemoryProvider>();
     final boardRequestProvider = context.watch<BoardRequestProvider>();
     final inAppProvider = context.watch<InAppNotificationProvider>();
     final unreadCountByThought = <String, int>{
-      NavigationProvider.memoryBankThoughtAll: _unreadThoughtCount(
-        thoughtKey: NavigationProvider.memoryBankThoughtAll,
-        notifications: inAppProvider.notifications,
-        incomingInvites: boardRequestProvider.invitations,
-      ),
       NavigationProvider.memoryBankThoughtBoardInvites: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtBoardInvites,
         notifications: inAppProvider.notifications,
@@ -1063,6 +1336,11 @@ class _MemoryPageState extends State<MemoryPage> {
       ),
       NavigationProvider.memoryBankThoughtFeedback: _unreadThoughtCount(
         thoughtKey: NavigationProvider.memoryBankThoughtFeedback,
+        notifications: inAppProvider.notifications,
+        incomingInvites: boardRequestProvider.invitations,
+      ),
+      NavigationProvider.memoryBankThoughtSuggestions: _unreadThoughtCount(
+        thoughtKey: NavigationProvider.memoryBankThoughtSuggestions,
         notifications: inAppProvider.notifications,
         incomingInvites: boardRequestProvider.invitations,
       ),
@@ -1122,83 +1400,91 @@ class _MemoryPageState extends State<MemoryPage> {
                 const SizedBox(height: 10),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      _buildSelectCard(
-                        label: 'All Thoughts',
-                        icon: Icons.all_inbox_outlined,
-                        selected: _selectedThought == NavigationProvider.memoryBankThoughtAll,
-                        unreadCount:
-                            unreadCountByThought[NavigationProvider.memoryBankThoughtAll] ?? 0,
-                        onTap: () {
-                          context.read<NavigationProvider>().setMemoryBankThought(
-                            NavigationProvider.memoryBankThoughtAll,
-                          );
-                        },
-                      ),
-                      _buildSelectCard(
-                        label: 'Board Invites',
-                        icon: Icons.mail_outline,
-                        selected:
-                            _selectedThought ==
-                            NavigationProvider.memoryBankThoughtBoardInvites,
-                        unreadCount: unreadCountByThought[
-                                NavigationProvider.memoryBankThoughtBoardInvites] ??
-                            0,
-                        onTap: () {
-                          context.read<NavigationProvider>().setMemoryBankThought(
-                            NavigationProvider.memoryBankThoughtBoardInvites,
-                          );
-                        },
-                      ),
-                      _buildSelectCard(
-                        label: 'Task Assignments',
-                        icon: Icons.assignment_ind_outlined,
-                        selected:
-                            _selectedThought ==
-                            NavigationProvider.memoryBankThoughtTaskAssignments,
-                        unreadCount: unreadCountByThought[
-                                NavigationProvider.memoryBankThoughtTaskAssignments] ??
-                            0,
-                        onTap: () {
-                          context.read<NavigationProvider>().setMemoryBankThought(
-                            NavigationProvider.memoryBankThoughtTaskAssignments,
-                          );
-                        },
-                      ),
-                      _buildSelectCard(
-                        label: 'Feedback',
-                        icon: Icons.feedback_outlined,
-                        selected:
-                            _selectedThought ==
-                            NavigationProvider.memoryBankThoughtFeedback,
-                        unreadCount:
-                            unreadCountByThought[NavigationProvider.memoryBankThoughtFeedback] ??
-                                0,
-                        onTap: () {
-                          context.read<NavigationProvider>().setMemoryBankThought(
-                            NavigationProvider.memoryBankThoughtFeedback,
-                          );
-                        },
-                      ),
-                      _buildSelectCard(
-                        label: 'Reminders',
-                        icon: Icons.alarm_outlined,
-                        selected:
-                            _selectedThought ==
-                            NavigationProvider.memoryBankThoughtReminders,
-                        unreadCount:
-                            unreadCountByThought[NavigationProvider.memoryBankThoughtReminders] ??
-                                0,
-                        onTap: () {
-                          context.read<NavigationProvider>().setMemoryBankThought(
-                            NavigationProvider.memoryBankThoughtReminders,
-                          );
-                        },
-                      ),
-                    ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildThoughtTab(
+                          label: 'Board Invites',
+                          icon: Icons.mail_outline,
+                          selected:
+                              _selectedThought ==
+                              NavigationProvider.memoryBankThoughtBoardInvites,
+                          unreadCount: unreadCountByThought[
+                                  NavigationProvider.memoryBankThoughtBoardInvites] ??
+                              0,
+                          onTap: () {
+                            context.read<NavigationProvider>().setMemoryBankThought(
+                              NavigationProvider.memoryBankThoughtBoardInvites,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildThoughtTab(
+                          label: 'Task Assignments',
+                          icon: Icons.assignment_ind_outlined,
+                          selected:
+                              _selectedThought ==
+                              NavigationProvider.memoryBankThoughtTaskAssignments,
+                          unreadCount: unreadCountByThought[
+                                  NavigationProvider.memoryBankThoughtTaskAssignments] ??
+                              0,
+                          onTap: () {
+                            context.read<NavigationProvider>().setMemoryBankThought(
+                              NavigationProvider.memoryBankThoughtTaskAssignments,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildThoughtTab(
+                          label: 'Feedback',
+                          icon: Icons.feedback_outlined,
+                          selected:
+                              _selectedThought ==
+                              NavigationProvider.memoryBankThoughtFeedback,
+                          unreadCount: unreadCountByThought[
+                                  NavigationProvider.memoryBankThoughtFeedback] ??
+                              0,
+                          onTap: () {
+                            context.read<NavigationProvider>().setMemoryBankThought(
+                              NavigationProvider.memoryBankThoughtFeedback,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildThoughtTab(
+                          label: 'Suggestions',
+                          icon: Icons.lightbulb_outline,
+                          selected:
+                              _selectedThought ==
+                              NavigationProvider.memoryBankThoughtSuggestions,
+                          unreadCount: unreadCountByThought[
+                                  NavigationProvider.memoryBankThoughtSuggestions] ??
+                              0,
+                          onTap: () {
+                            context.read<NavigationProvider>().setMemoryBankThought(
+                              NavigationProvider.memoryBankThoughtSuggestions,
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 8),
+                        _buildThoughtTab(
+                          label: 'Reminders',
+                          icon: Icons.alarm_outlined,
+                          selected:
+                              _selectedThought ==
+                              NavigationProvider.memoryBankThoughtReminders,
+                          unreadCount: unreadCountByThought[
+                                  NavigationProvider.memoryBankThoughtReminders] ??
+                              0,
+                          onTap: () {
+                            context.read<NavigationProvider>().setMemoryBankThought(
+                              NavigationProvider.memoryBankThoughtReminders,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -1298,7 +1584,7 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Widget _buildThoughtsSection({
-    required PokeProvider pokeProvider,
+    required MemoryProvider pokeProvider,
     required BoardRequestProvider boardRequestProvider,
     required InAppNotificationProvider inAppProvider,
   }) {
@@ -1328,66 +1614,70 @@ class _MemoryPageState extends State<MemoryPage> {
           final isBusy = _processingInviteIds.contains(invite.boardRequestId);
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 6),
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(Icons.mail_outline),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Board invite: ${invite.boardTitle}',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'From ${invite.boardManagerName}',
-                              style: TextStyle(color: Colors.grey.shade700),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              timeago.format(invite.boardReqCreatedAt),
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      _buildRequestStatusChip(invite.boardReqStatus),
-                    ],
-                  ),
-                  if (isPending) ...[
-                    const SizedBox(height: 10),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: () => _openBoardFromInvite(invite),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        const Icon(Icons.mail_outline),
+                        const SizedBox(width: 10),
                         Expanded(
-                          child: FilledButton(
-                            onPressed: isBusy ? null : () => _acceptBoardInvite(invite),
-                            child: Text(isBusy ? 'Working...' : 'Accept'),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Board invite: ${invite.boardTitle}',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'From ${invite.boardManagerName}',
+                                style: TextStyle(color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                timeago.format(invite.boardReqCreatedAt),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: isBusy ? null : () => _declineBoardInvite(invite),
-                            child: const Text('Decline'),
-                          ),
-                        ),
+                        _buildRequestStatusChip(invite.boardReqStatus),
                       ],
                     ),
+                    if (isPending) ...[
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton(
+                              onPressed: isBusy ? null : () => _acceptBoardInvite(invite),
+                              child: Text(isBusy ? 'Working...' : 'Accept'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton(
+                              onPressed: isBusy ? null : () => _declineBoardInvite(invite),
+                              child: const Text('Decline'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
           );
@@ -1424,69 +1714,73 @@ class _MemoryPageState extends State<MemoryPage> {
 
         return Card(
           margin: const EdgeInsets.symmetric(vertical: 6),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(Icons.lightbulb_outline),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _detailedNotificationTitle(notif),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                          if (subtitle.isNotEmpty) ...[
-                            const SizedBox(height: 2),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _openTargetFromThought(notif),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.lightbulb_outline),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              subtitle,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.grey.shade700,
+                              _detailedNotificationTitle(notif),
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            if (subtitle.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey.shade700,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                            ],
+                            const SizedBox(height: 4),
+                            Text(
+                              timeago.format(notif.createdAt),
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                             ),
                           ],
-                          const SizedBox(height: 4),
-                          Text(
-                            timeago.format(notif.createdAt),
-                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (hasDecision)
-                      _buildDecisionChip(decision),
-                  ],
-                ),
-                if (isTaskAssignment && !hasDecision) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton(
-                          onPressed: isBusy ? null : () => _acceptTaskAssignment(notif),
-                          child: Text(isBusy ? 'Working...' : 'Accept'),
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: isBusy ? null : () => _declineTaskAssignment(notif),
-                          child: const Text('Decline'),
-                        ),
-                      ),
+                      if (hasDecision)
+                        _buildDecisionChip(decision),
                     ],
                   ),
+                  if (isTaskAssignment && !hasDecision) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: isBusy ? null : () => _acceptTaskAssignment(notif),
+                            child: Text(isBusy ? 'Working...' : 'Accept'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: isBusy ? null : () => _declineTaskAssignment(notif),
+                            child: const Text('Decline'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
         );
@@ -1539,7 +1833,7 @@ class _MemoryPageState extends State<MemoryPage> {
     );
   }
 
-  Widget _buildMailboxSection(PokeProvider provider) {
+  Widget _buildMailboxSection(MemoryProvider provider) {
     final threads = provider.threadSummaries;
     if (threads.isEmpty) {
       return Center(
@@ -1621,7 +1915,7 @@ class _MemoryPageState extends State<MemoryPage> {
   }
 
   Widget _buildComposeSection(
-    PokeProvider pokeProvider, {
+    MemoryProvider pokeProvider, {
     required void Function(VoidCallback fn) updater,
   }) {
     return Column(
@@ -1649,9 +1943,9 @@ class _MemoryPageState extends State<MemoryPage> {
                 _buildSelectCard(
                   label: 'User',
                   icon: Icons.person_outline,
-                  selected: _targetType == PokeModel.targetUser,
+                  selected: _targetType == MemoryModel.targetUser,
                   onTap: () {
-                    _onTargetTypeChanged(PokeModel.targetUser).then((_) {
+                    _onTargetTypeChanged(MemoryModel.targetUser).then((_) {
                       updater(() {});
                     });
                   },
@@ -1659,9 +1953,9 @@ class _MemoryPageState extends State<MemoryPage> {
                 _buildSelectCard(
                   label: 'Board',
                   icon: Icons.view_kanban_outlined,
-                  selected: _targetType == PokeModel.targetBoard,
+                  selected: _targetType == MemoryModel.targetBoard,
                   onTap: () {
-                    _onTargetTypeChanged(PokeModel.targetBoard).then((_) {
+                    _onTargetTypeChanged(MemoryModel.targetBoard).then((_) {
                       updater(() {});
                     });
                   },
@@ -1669,9 +1963,9 @@ class _MemoryPageState extends State<MemoryPage> {
                 _buildSelectCard(
                   label: 'Task',
                   icon: Icons.task_alt_outlined,
-                  selected: _targetType == PokeModel.targetTask,
+                  selected: _targetType == MemoryModel.targetTask,
                   onTap: () {
-                    _onTargetTypeChanged(PokeModel.targetTask).then((_) {
+                    _onTargetTypeChanged(MemoryModel.targetTask).then((_) {
                       updater(() {});
                     });
                   },
@@ -1694,7 +1988,7 @@ class _MemoryPageState extends State<MemoryPage> {
                       child: Text(
                         option.subtitle == null
                             ? option.label
-                            : '${option.label} · ${option.subtitle!}',
+                            : '${option.label} Â· ${option.subtitle!}',
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -1875,4 +2169,5 @@ class _TargetOption {
     this.relatedId,
   });
 }
+
 
