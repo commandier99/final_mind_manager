@@ -759,6 +759,9 @@ class _MemoryPageState extends State<MemoryPage> {
     if (category == 'task_assigned') {
       return NavigationProvider.memoryBankThoughtTaskAssignments;
     }
+    if (category == 'approval' && kind == 'task_application') {
+      return NavigationProvider.memoryBankThoughtTaskAssignments;
+    }
     if (type.startsWith('suggestion_') || title.contains('suggestion')) {
       return NavigationProvider.memoryBankThoughtSuggestions;
     }
@@ -864,15 +867,22 @@ class _MemoryPageState extends State<MemoryPage> {
 
   String _taskIdFromNotification(InAppNotification notif) {
     final metadata = notif.metadata ?? const <String, dynamic>{};
+    final relatedId = (notif.relatedId ?? '').trim();
+
+    // For task assignment requests, relatedId is the canonical task id.
+    final category = (notif.category ?? '').trim().toLowerCase();
+    if (category == 'task_assigned' && relatedId.isNotEmpty) {
+      return relatedId;
+    }
+
     final metadataTaskId = (metadata['taskId']?.toString() ?? '').trim();
     if (metadataTaskId.isNotEmpty) return metadataTaskId;
 
-    // Only treat relatedId as taskId for task-centric notifications.
-    final category = (notif.category ?? '').trim().toLowerCase();
+    // Only treat relatedId as taskId for other task-centric notifications.
     if (category == 'task_assigned' ||
         category == 'task_deadline' ||
         category == 'approval') {
-      return (notif.relatedId ?? '').trim();
+      return relatedId;
     }
     return '';
   }
@@ -937,7 +947,16 @@ class _MemoryPageState extends State<MemoryPage> {
     final notificationId = notif.notificationId;
     if (_processingAssignmentNotifIds.contains(notificationId)) return;
     final taskId = _taskIdFromNotification(notif);
-    if (taskId.isEmpty) return;
+    if (taskId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task reference is missing for this request.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _processingAssignmentNotifIds.add(notificationId));
     try {
@@ -961,6 +980,26 @@ class _MemoryPageState extends State<MemoryPage> {
           backgroundColor: Colors.red,
         ),
       );
+
+      final errorText = e.toString().toLowerCase();
+      final alreadyHandled = errorText.contains('no pending assignment');
+      if (alreadyHandled) {
+        try {
+          await _markAssignmentDecision(
+            notificationId: notificationId,
+            decision: 'accepted',
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Assignment already handled. Marked as accepted.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } catch (_) {
+          // Keep original error feedback if metadata update also fails.
+        }
+      }
     } finally {
       if (mounted) {
         setState(() => _processingAssignmentNotifIds.remove(notificationId));
@@ -972,7 +1011,16 @@ class _MemoryPageState extends State<MemoryPage> {
     final notificationId = notif.notificationId;
     if (_processingAssignmentNotifIds.contains(notificationId)) return;
     final taskId = _taskIdFromNotification(notif);
-    if (taskId.isEmpty) return;
+    if (taskId.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Task reference is missing for this request.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     setState(() => _processingAssignmentNotifIds.add(notificationId));
     try {
@@ -996,6 +1044,26 @@ class _MemoryPageState extends State<MemoryPage> {
           backgroundColor: Colors.red,
         ),
       );
+
+      final errorText = e.toString().toLowerCase();
+      final alreadyHandled = errorText.contains('no pending assignment');
+      if (alreadyHandled) {
+        try {
+          await _markAssignmentDecision(
+            notificationId: notificationId,
+            decision: 'declined',
+          );
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Assignment already handled. Marked as declined.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        } catch (_) {
+          // Keep original error feedback if metadata update also fails.
+        }
+      }
     } finally {
       if (mounted) {
         setState(() => _processingAssignmentNotifIds.remove(notificationId));

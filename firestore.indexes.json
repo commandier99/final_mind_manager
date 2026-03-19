@@ -1,6 +1,96 @@
 {
   "indexes": [
     {
+      "collectionGroup": "board_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqCreatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "board_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "userId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqCreatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "board_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "boardManagerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqCreatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "board_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "boardId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqCreatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "board_requests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "boardId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqStatus",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqType",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "boardReqCreatedAt",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "steps",
       "queryScope": "COLLECTION",
       "fields": [

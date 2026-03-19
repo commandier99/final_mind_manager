@@ -5,8 +5,13 @@ import '../../../datasources/providers/task_provider.dart';
 
 class TaskDetailsSection extends StatefulWidget {
   final String taskId;
+  final Task? fallbackTask;
 
-  const TaskDetailsSection({super.key, required this.taskId});
+  const TaskDetailsSection({
+    super.key,
+    required this.taskId,
+    this.fallbackTask,
+  });
 
   @override
   State<TaskDetailsSection> createState() => _TaskDetailsSectionState();
@@ -25,7 +30,7 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
             (t) => t.taskId == widget.taskId,
           );
         } catch (_) {
-          task = null;
+          task = widget.fallbackTask;
         }
 
         if (task == null) {

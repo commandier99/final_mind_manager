@@ -406,10 +406,6 @@ class StepService {
   }
 
   int _stepSortComparator(TaskStep a, TaskStep b) {
-    if (a.stepIsDone != b.stepIsDone) {
-      return a.stepIsDone ? 1 : -1;
-    }
-
     final orderCompare = _resolveStepOrder(
       a,
     ).compareTo(_resolveStepOrder(b));

@@ -160,34 +160,6 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
   Future<void> _submit() async {
     setState(() => _isLoading = true);
 
-    var loadingShown = false;
-    if (mounted) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => PopScope(
-          canPop: false,
-          child: Dialog(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Creating task...',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      );
-      loadingShown = true;
-    }
-
     try {
       final taskProvider = context.read<TaskProvider>();
 
@@ -246,9 +218,6 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {
-        if (loadingShown && Navigator.of(context, rootNavigator: true).canPop()) {
-          Navigator.of(context, rootNavigator: true).pop();
-        }
         final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
         messenger.showSnackBar(
@@ -261,9 +230,6 @@ class _AddTaskToSessionDialogState extends State<AddTaskToSessionDialog> {
       }
     } catch (e) {
       if (mounted) {
-        if (loadingShown && Navigator.of(context, rootNavigator: true).canPop()) {
-          Navigator.of(context, rootNavigator: true).pop();
-        }
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error creating task: $e')),

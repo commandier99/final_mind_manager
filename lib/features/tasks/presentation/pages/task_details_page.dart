@@ -253,7 +253,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                         duration: const Duration(milliseconds: 220),
                         curve: Curves.easeInOut,
                         child: _isDetailsPanelExpanded
-                            ? TaskDetailsSection(taskId: currentTask.taskId)
+                            ? TaskDetailsSection(
+                                taskId: currentTask.taskId,
+                                fallbackTask: currentTask,
+                              )
                             : const SizedBox.shrink(),
                       ),
                       GestureDetector(
@@ -373,7 +376,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                     _selectedTab == _tabApplications)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: TaskApplicationsSection(taskId: currentTask.taskId),
+                    child: TaskApplicationsSection(
+                      taskId: currentTask.taskId,
+                      initialTask: currentTask,
+                    ),
                   )
                 else
                   Padding(

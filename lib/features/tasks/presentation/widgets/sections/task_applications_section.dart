@@ -9,8 +9,13 @@ import '../../../../../shared/features/users/datasources/services/user_services.
 
 class TaskApplicationsSection extends StatelessWidget {
   final String taskId;
+  final Task? initialTask;
 
-  const TaskApplicationsSection({super.key, required this.taskId});
+  const TaskApplicationsSection({
+    super.key,
+    required this.taskId,
+    this.initialTask,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -20,7 +25,7 @@ class TaskApplicationsSection extends StatelessWidget {
         try {
           task = taskProvider.tasks.firstWhere((t) => t.taskId == taskId);
         } catch (_) {
-          task = null;
+          task = initialTask;
         }
 
         if (task == null) {
