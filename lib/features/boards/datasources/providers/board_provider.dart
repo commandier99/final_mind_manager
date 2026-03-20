@@ -14,9 +14,10 @@ class BoardProvider extends ChangeNotifier {
   bool _isLoading = false;
   bool get isLoading => _isLoading;
   StreamSubscription<List<Board>>? _boardsSubscription;
+  String? _activeUserId;
 
   BoardProvider() {
-    _init();
+    syncForCurrentUser();
   }
 
   void _setLoading(bool value) {
@@ -24,23 +25,42 @@ class BoardProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void _init() {
+  void syncForCurrentUser() {
     final userId = _boardService.currentUserId;
-    if (userId != null) {
-      // Stream all boards where user is either manager or member
-      _boardsSubscription?.cancel();
-      _boardsSubscription = _boardService
-          .streamUserBoardsWithMembership(userId)
-          .listen(
-            (boardList) {
-              _boards = boardList;
-              notifyListeners();
-            },
-            onError: (error) {
-              debugPrint('[BoardProvider] Error streaming boards: $error');
-            },
-          );
+    if (_activeUserId == userId) return;
+
+    _boardsSubscription?.cancel();
+    _activeUserId = userId;
+
+    if (userId == null || userId.isEmpty) {
+      _boards = [];
+      notifyListeners();
+      return;
     }
+
+    _boardsSubscription = _boardService
+        .streamUserBoardsWithMembership(userId)
+        .listen(
+          (boardList) {
+            debugPrint(
+              '[BoardProvider] Stream received boards for $userId: ${boardList.map((board) => board.boardId).toList()}',
+            );
+            _boards = boardList;
+            notifyListeners();
+          },
+          onError: (error) {
+            debugPrint('[BoardProvider] Error streaming boards: $error');
+          },
+        );
+  }
+
+  void clear() {
+    _boardsSubscription?.cancel();
+    _boardsSubscription = null;
+    _activeUserId = null;
+    _boards = [];
+    _isLoading = false;
+    notifyListeners();
   }
 
   /// ------------------------
@@ -52,6 +72,9 @@ class BoardProvider extends ChangeNotifier {
       final userId = _boardService.currentUserId;
       if (userId != null) {
         _boards = await _boardService.getBoardsForUserWithMembership(userId);
+        debugPrint(
+          '[BoardProvider] Refresh received boards for $userId: ${_boards.map((board) => board.boardId).toList()}',
+        );
       } else {
         _boards = [];
       }
@@ -136,10 +159,51 @@ class BoardProvider extends ChangeNotifier {
   Future<void> addMemberToBoard({
     required String boardId,
     required String userId,
+    String role = 'member',
+    String? invitationThoughtId,
   }) async {
     _setLoading(true);
     try {
-      await _boardService.addMemberToBoard(boardId: boardId, userId: userId);
+      await _boardService.addMemberToBoard(
+        boardId: boardId,
+        userId: userId,
+        role: role,
+        invitationThoughtId: invitationThoughtId,
+      );
+      await refreshBoards();
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> markPendingBoardInvite({
+    required String boardId,
+    required String userId,
+    String? invitationThoughtId,
+  }) async {
+    _setLoading(true);
+    try {
+      await _boardService.markPendingBoardInvite(
+        boardId: boardId,
+        userId: userId,
+        invitationThoughtId: invitationThoughtId,
+      );
+      await refreshBoards();
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> clearPendingBoardInvite({
+    required String boardId,
+    required String userId,
+  }) async {
+    _setLoading(true);
+    try {
+      await _boardService.clearPendingBoardInvite(
+        boardId: boardId,
+        userId: userId,
+      );
       await refreshBoards();
     } finally {
       _setLoading(false);
@@ -248,7 +312,7 @@ class BoardProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _boardsSubscription?.cancel();
+    clear();
     super.dispose();
   }
 }

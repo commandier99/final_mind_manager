@@ -12,6 +12,7 @@ import '../../../datasources/services/mind_set_session_service.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
 import '../../../../../shared/features/query/task_query_controller.dart';
+import '../../utils/session_task_submission_helper.dart';
 
 class GoWithFlowTaskStream extends StatefulWidget {
   final String userId;
@@ -252,6 +253,10 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     if (base == null) return Duration.zero;
     final elapsed = DateTime.now().difference(base);
     return elapsed.isNegative ? Duration.zero : elapsed;
+  }
+
+  Future<void> _openSubmissionFlow(Task task) async {
+    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
   String _formatElapsedDuration(Duration duration) {
@@ -898,9 +903,16 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                       onPause: canPause
                                           ? () => _pauseTask(task)
                                           : null,
-                                      onToggleDone: canToggleDone
+                                      onToggleDone:
+                                          canToggleDone &&
+                                              !task.taskRequiresSubmission
                                           ? (isDone) =>
                                                 _toggleDoneForTask(task, isDone)
+                                          : null,
+                                      onSubmitThought:
+                                          canToggleDone &&
+                                              task.taskRequiresSubmission
+                                          ? () => _openSubmissionFlow(task)
                                           : null,
                                     ),
                                   ],

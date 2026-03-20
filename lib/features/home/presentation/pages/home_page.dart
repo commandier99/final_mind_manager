@@ -25,6 +25,8 @@ import '../../../steps/datasources/providers/step_provider.dart';
 import '../../../steps/presentation/widgets/dialogs/add_step_dialog.dart';
 import '../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../tasks/datasources/models/task_model.dart';
+import '../../../thoughts/datasources/models/thought_model.dart';
+import '../../../thoughts/presentation/widgets/dialogs/create_thought_dialog.dart';
 
 class HomePage extends StatefulWidget {
   final void Function(VoidCallback)? onSettingsPressedReady;
@@ -53,15 +55,15 @@ class _HomePageState extends State<HomePage> {
   static const String _actionCreateBoard = 'boards_create_board';
   static const String _actionCreateTask = 'boards_create_task';
   static const String _actionCreateStep = 'boards_create_step';
+  static const String _actionCreateThought = 'thoughts_create_thought';
   static const String _actionCreatePlan = 'plans_create_plan';
   static const String _actionMindSet = 'mindset_home';
   static const String _actionOnTheSpot = 'mindset_on_the_spot';
   static const String _actionGoWithFlow = 'mindset_go_with_flow';
   static const String _actionFollowThrough = 'mindset_follow_through';
-  static const String _actionPoke = 'poke_view';
   static const Set<String> _pinnedPrimaryActions = {
     _actionMindSet,
-    _actionPoke,
+    _actionCreateThought,
   };
 
   final List<_QuickLaunchAction> _allQuickActions = const [
@@ -72,10 +74,10 @@ class _HomePageState extends State<HomePage> {
       icon: Icons.psychology,
     ),
     _QuickLaunchAction(
-      id: _actionPoke,
-      feature: 'Memory Bank',
-      label: 'Memory Bank',
-      icon: Icons.memory_outlined,
+      id: _actionCreateThought,
+      feature: 'Thoughts',
+      label: 'Create Thought',
+      icon: Icons.lightbulb_outline,
     ),
     _QuickLaunchAction(
       id: _actionCreateBoard,
@@ -136,7 +138,6 @@ class _HomePageState extends State<HomePage> {
   bool _showQuickLaunch = true;
   Set<String> _includedQuickActions = {
     _actionMindSet,
-    _actionPoke,
   };
 
   @override
@@ -449,6 +450,12 @@ class _HomePageState extends State<HomePage> {
       case _actionCreateStep:
         await _openCreateStepPicker();
         return;
+      case _actionCreateThought:
+        await CreateThoughtDialog.show(
+          context,
+          initialType: Thought.typeReminder,
+        );
+        return;
       case _actionCreatePlan:
         await Navigator.of(context).push(
           MaterialPageRoute(builder: (context) => const CreatePlanPage()),
@@ -467,9 +474,6 @@ class _HomePageState extends State<HomePage> {
         return;
       case _actionFollowThrough:
         await _openMindSetCreateShortcut('follow_through');
-        return;
-      case _actionPoke:
-        context.read<NavigationProvider>().openMemoryBank();
         return;
       default:
         return;
@@ -1058,7 +1062,7 @@ class _HomePageState extends State<HomePage> {
     final savedActionIds = prefs.getStringList(_quickActionsKey);
     final validIds = _allQuickActions.map((action) => action.id).toSet();
     final loadedActions = savedActionIds == null
-        ? <String>{_actionMindSet, _actionPoke}
+        ? <String>{_actionMindSet, _actionCreateThought}
         : savedActionIds.where(validIds.contains).toSet();
 
     setState(() {
@@ -1355,7 +1359,7 @@ class _HomePageState extends State<HomePage> {
     switch (id) {
       case _actionMindSet:
         return 0;
-      case _actionPoke:
+      case _actionCreateThought:
         return 1;
       default:
         return 10;

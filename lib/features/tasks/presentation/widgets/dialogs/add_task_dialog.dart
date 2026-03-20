@@ -300,24 +300,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
       // Determine the assigned to name and ID
       final isTeamBoard = selectedBoard.boardType == 'team';
-      final proposedAssigneeId = isTeamBoard ? _assignedToUserId : null;
-      final proposedAssigneeName = isTeamBoard ? _assignedToUserName : null;
-      final isPendingExternalAssignment =
-          isTeamBoard &&
-          proposedAssigneeId != null &&
-          proposedAssigneeId.isNotEmpty &&
-          proposedAssigneeId != 'None' &&
-          proposedAssigneeId != widget.userId;
-
       String assignedToId = isTeamBoard
-          ? (isPendingExternalAssignment
-                ? 'None'
-                : (_assignedToUserId ?? 'None'))
+          ? (_assignedToUserId ?? 'None')
           : widget.userId;
       String assignedToName = isTeamBoard
-          ? (isPendingExternalAssignment
-                ? 'Unassigned'
-                : (_assignedToUserName ?? 'Unassigned'))
+          ? (_assignedToUserName ?? 'Unassigned')
           : _currentUserName;
 
       if (isTeamBoard &&
@@ -390,7 +377,8 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskStats: TaskStats(), // Always initialize as empty
         taskPriorityLevel: _priorityLevel,
         taskStatus: Task.statusToDo,
-        taskAllowsSubmissions: true,
+        taskAllowsSubmissions:
+            _taskRequiresSubmission || _taskRequiresApproval,
         taskRequiresSubmission: _taskRequiresSubmission,
         taskRequiresApproval: _taskRequiresApproval,
         taskIsRepeating: isRepeating,
@@ -400,14 +388,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: isRepeating ? repeatTimeStr : null,
-        // Set acceptance status to 'pending' if assigning to someone else
-        taskAssignmentStatus: isPendingExternalAssignment ? 'pending' : null,
-        taskProposedAssigneeId: isPendingExternalAssignment
-            ? proposedAssigneeId
-            : null,
-        taskProposedAssigneeName: isPendingExternalAssignment
-            ? proposedAssigneeName
-            : null,
+        taskAssignmentStatus: null,
+        taskProposedAssigneeId: null,
+        taskProposedAssigneeName: null,
         taskBoardLane: selectedBoard.boardType == 'personal'
             ? _lanePublished
             : _laneDrafts,
@@ -416,11 +399,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         ),
       );
 
-      await taskProvider.addTask(
-        newTask,
-        selectedAssigneeId: _assignedToUserId,
-        selectedAssigneeName: _assignedToUserName,
-      );
+      await taskProvider.addTask(newTask);
 
       if (mounted) {
         Navigator.pop(context); // Close loading modal
@@ -1019,10 +998,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
               ),
             const SizedBox(height: 8),
           ],
+          _buildDependenciesSection(context),
           const SizedBox(height: 12),
           _buildSubmissionOptionsSection(),
-          const SizedBox(height: 12),
-          _buildDependenciesSection(context),
           if (canRepeat) ...[
             SwitchListTile(
               title: const Text('Repeating Task'),

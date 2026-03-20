@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import '../../../../shared/features/users/datasources/providers/activity_event_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_daily_activity_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
-import '../../../boards/datasources/providers/board_request_provider.dart';
 import '../../../tasks/datasources/providers/task_provider.dart';
 import '../widgets/daily_check_in_streak_section.dart';
 import '../widgets/mind_set_activity_section.dart';
@@ -27,7 +26,6 @@ class _DashboardPageState extends State<DashboardPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final userId = context.read<UserProvider>().userId;
       if (userId == null) return;
-      context.read<BoardRequestProvider>().streamRequestsByUser(userId);
       context.read<TaskProvider>().streamAllUserTasks(userId);
       context.read<ActivityEventProvider>().listenToUser(userId);
       context.read<UserDailyActivityProvider>().loadRecentDays(userId, days: 14);

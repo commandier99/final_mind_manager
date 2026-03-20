@@ -11,10 +11,9 @@ class SearchService {
   // USER SEARCH
   // ========================
 
-  /// Stream all discoverable users in real-time
-  /// Returns users who have public profiles (userIsPublic = true) or allow search (userAllowSearch = true)
+  /// Stream all discoverable users in real-time.
+  /// Discoverability is controlled by `userIsPublic`.
   Stream<List<UserModel>> streamDiscoverableUsers() {
-    // First, get public users
     final publicUsersStream = _firestore
         .collection('users')
         .where('userIsPublic', isEqualTo: true)
@@ -33,9 +32,9 @@ class SearchService {
     return publicUsersStream;
   }
 
-  /// Search users by name, handle, or skills
-  /// Returns users who allow search (userAllowSearch = true) or have public profiles (userIsPublic = true)
-  /// If query is empty, returns all discoverable users
+  /// Search users by name, handle, or skills.
+  /// Discoverability is controlled by `userIsPublic`.
+  /// If query is empty, returns all discoverable users.
   Future<List<UserModel>> searchUsers(String query) async {
     final lowerQuery = query.toLowerCase().trim();
 
@@ -53,8 +52,7 @@ class SearchService {
           snapshot.docs
               .map((doc) => UserModel.fromMap(doc.data(), doc.id))
               .where((user) {
-                // Only include users who allow search OR have public profiles
-                if (!user.userAllowSearch && !user.userIsPublic) return false;
+                if (!user.userIsPublic) return false;
 
                 // If no query, include all discoverable users
                 if (lowerQuery.isEmpty) return true;

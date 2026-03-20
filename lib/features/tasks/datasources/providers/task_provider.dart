@@ -8,8 +8,6 @@ import '../services/task_services.dart';
 import '../helpers/task_dependency_helper.dart';
 import '../../../boards/datasources/services/board_stats_services.dart';
 import '../../../../shared/features/users/datasources/services/user_daily_activity_services.dart';
-import '../../../../shared/features/users/datasources/services/user_services.dart';
-import '../../../notifications/datasources/helpers/notification_helper.dart';
 
 class TaskProvider extends ChangeNotifier {
   final TaskService _taskService = TaskService();
@@ -50,95 +48,6 @@ class TaskProvider extends ChangeNotifier {
   void _updateTasks(List<Task> tasks) {
     _tasks = tasks;
     notifyListeners();
-  }
-
-  String? _notificationTargetAssigneeId(Task task) {
-    final assignedId = task.taskAssignedTo.trim();
-    if (assignedId.isNotEmpty &&
-        assignedId != 'None' &&
-        assignedId != task.taskOwnerId) {
-      return assignedId;
-    }
-
-    final proposedId = (task.taskProposedAssigneeId ?? '').trim();
-    if (task.taskAssignmentStatus == 'pending' &&
-        proposedId.isNotEmpty &&
-        proposedId != task.taskOwnerId) {
-      return proposedId;
-    }
-    return null;
-  }
-
-  Future<void> _sendTaskAssignmentNotification({
-    required Task task,
-    required String assigneeId,
-    String? assigneeName,
-  }) async {
-    final assignedById = task.taskAssignedBy.trim();
-    final assignedByName = await _resolveAssignerName(
-      assignedById: assignedById,
-      fallbackName: task.taskOwnerName,
-    );
-    final deadlineInfo = task.taskDeadline != null
-        ? ' with a deadline on ${task.taskDeadline!.toString().split(' ')[0]}'
-        : '';
-    final taskSummary = task.taskDescription.trim().isEmpty
-        ? ''
-        : (task.taskDescription.trim().length <= 180
-              ? task.taskDescription.trim()
-              : '${task.taskDescription.trim().substring(0, 177)}...');
-    await NotificationHelper.createInAppOnly(
-      userId: assigneeId,
-      title: 'Task Assignment Request',
-      message:
-          '$assignedByName wants to assign you the task "${task.taskTitle}"$deadlineInfo',
-      category: NotificationHelper.categoryTaskAssigned,
-      relatedId: task.taskId,
-      metadata: {
-        'boardTitle': task.taskBoardTitle,
-        'taskTitle': task.taskTitle,
-        'assigneeName':
-            assigneeName ??
-            task.taskProposedAssigneeName ??
-            task.taskAssignedToName,
-        if (task.taskDeadline != null) 'deadline': task.taskDeadline.toString(),
-        'assignedBy': assignedByName,
-        if (assignedById.isNotEmpty) 'assignedById': assignedById,
-        'assignedByName': assignedByName,
-        'taskId': task.taskId,
-        'taskPriorityLevel': task.taskPriorityLevel,
-        if (taskSummary.isNotEmpty) 'taskSummary': taskSummary,
-      },
-    );
-  }
-
-  Future<String> _resolveAssignerName({
-    required String assignedById,
-    required String fallbackName,
-  }) async {
-    final normalizedFallback = fallbackName.trim();
-
-    final currentUser = FirebaseAuth.instance.currentUser;
-    if (assignedById.isNotEmpty &&
-        currentUser != null &&
-        currentUser.uid == assignedById) {
-      final displayName = (currentUser.displayName ?? '').trim();
-      if (displayName.isNotEmpty) return displayName;
-    }
-
-    if (assignedById.isNotEmpty) {
-      try {
-        final user = await UserService().getUserById(assignedById);
-        final userName = (user?.userName ?? '').trim();
-        if (userName.isNotEmpty) return userName;
-      } catch (_) {
-        // Best effort only for display enrichment.
-      }
-    }
-
-    if (normalizedFallback.isNotEmpty) return normalizedFallback;
-    if (assignedById.isNotEmpty) return assignedById;
-    return 'Manager';
   }
 
   // ------------------------
@@ -319,46 +228,6 @@ class TaskProvider extends ChangeNotifier {
       // Add task to Firestore using TaskService
       await _taskService.addTask(newTask);
 
-      // Send task assignment notification if a specific member was selected
-      debugPrint(
-        '[TaskNotification] selectedAssigneeId = "$selectedAssigneeId", isEmpty = ${selectedAssigneeId?.isEmpty ?? true}',
-      );
-
-      final shouldNotifyAssignment =
-          newTask.taskBoardLane == Task.lanePublished &&
-          _notificationTargetAssigneeId(newTask) != null;
-      final assigneeId =
-          (selectedAssigneeId == null ||
-              selectedAssigneeId.isEmpty ||
-              selectedAssigneeId == 'None')
-          ? _notificationTargetAssigneeId(newTask)
-          : selectedAssigneeId;
-
-      // Create task assignment notification only when task is already published.
-      if (shouldNotifyAssignment && assigneeId != null) {
-        debugPrint(
-          '[TaskNotification] published task - creating notification for userId: $assigneeId',
-        );
-        try {
-          await _sendTaskAssignmentNotification(
-            task: newTask,
-            assigneeId: assigneeId,
-            assigneeName: selectedAssigneeName,
-          );
-          debugPrint(
-            '[TaskNotification] task assignment notification created for: ${newTask.taskId}',
-          );
-        } catch (e) {
-          // Log error but don't fail task creation - notification is optional
-          debugPrint(
-            '[TaskNotification] failed to create notification (non-critical): $e',
-          );
-        }
-      } else {
-        debugPrint(
-          '[TaskNotification] notification skipped - task not published or no valid assignee',
-        );
-      }
       // Track activity
       await _userDailyActivityService.incrementToday(newTask.taskOwnerId, {
         'tasksCreatedCount': 1,
@@ -408,6 +277,7 @@ class TaskProvider extends ChangeNotifier {
       taskStatus: Task.statusToDo,
       taskApprovalStatus: 'none',
       taskSubmissionId: null,
+      taskLatestSubmissionThoughtId: null,
       taskAssignmentStatus: _duplicatedAssignmentStatus(sourceTask),
       taskDeadlineMissed: false,
       taskExtensionCount: 0,
@@ -426,11 +296,7 @@ class TaskProvider extends ChangeNotifier {
   }
 
   String? _duplicatedAssignmentStatus(Task sourceTask) {
-    final assignedTo = sourceTask.taskAssignedTo.trim();
-    if (assignedTo.isEmpty || assignedTo == 'None') {
-      return null;
-    }
-    return 'pending';
+    return null;
   }
 
   Future<void> updateTask(Task task) async {
@@ -456,36 +322,6 @@ class TaskProvider extends ChangeNotifier {
 
       // Update task in tasks collection using TaskService
       await _taskService.updateTask(updatedTask);
-
-      // Notify assignee only when task becomes published, or reassigned while published.
-      if (previousTask != null &&
-          _notificationTargetAssigneeId(updatedTask) != null) {
-        final previousNotifyTarget = _notificationTargetAssigneeId(
-          previousTask,
-        );
-        final currentNotifyTarget = _notificationTargetAssigneeId(updatedTask);
-        final becamePublished =
-            previousTask.taskBoardLane != Task.lanePublished &&
-            updatedTask.taskBoardLane == Task.lanePublished;
-        final reassignedWhilePublished =
-            previousTask.taskBoardLane == Task.lanePublished &&
-            updatedTask.taskBoardLane == Task.lanePublished &&
-            previousNotifyTarget != currentNotifyTarget;
-
-        if ((becamePublished || reassignedWhilePublished) &&
-            currentNotifyTarget != null) {
-          try {
-            await _sendTaskAssignmentNotification(
-              task: updatedTask,
-              assigneeId: currentNotifyTarget,
-            );
-          } catch (e) {
-            debugPrint(
-              '[TaskNotification] failed to send assignment notification on update: $e',
-            );
-          }
-        }
-      }
 
       debugPrint(
         '[DEBUG] TaskProvider: Task ${updatedTask.taskId} updated successfully',
@@ -590,9 +426,7 @@ class TaskProvider extends ChangeNotifier {
       // we determine what the old value was by inverting the current value
       final isNowDone = task.taskIsDone;
       final wasAlreadyDone = !isNowDone; // The opposite of the new value
-      final submitsForReview =
-          isNowDone && task.taskRequiresApproval && !wasAlreadyDone;
-      final effectiveNowDone = submitsForReview ? false : isNowDone;
+      final effectiveNowDone = isNowDone;
 
       if (isNowDone) {
         final blocker = await getFirstIncompleteDependency(task);
@@ -652,13 +486,7 @@ class TaskProvider extends ChangeNotifier {
       final taskIndex = _tasks.indexWhere((t) => t.taskId == task.taskId);
       if (taskIndex != -1) {
         // Update the task with the exact state passed in (already has correct isDone value)
-        _tasks[taskIndex] = submitsForReview
-            ? task.copyWith(
-                taskIsDone: false,
-                taskStatus: Task.statusSubmitted,
-                taskApprovalStatus: 'pending',
-              )
-            : task;
+        _tasks[taskIndex] = task;
         notifyListeners();
       }
 
@@ -694,49 +522,7 @@ class TaskProvider extends ChangeNotifier {
     return blockers.isEmpty ? null : blockers.first;
   }
 
-  Future<void> acceptTask(String taskId) async {
-    try {
-      debugPrint('[DEBUG] TaskProvider: acceptTask called for taskId = $taskId');
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('No user logged in');
-      }
 
-      await _taskService.acceptTask(
-        taskId,
-        currentUser.uid,
-        currentUser.displayName ?? 'Unknown User',
-      );
-
-      // Notification will be created by the UI layer when needed
-
-      debugPrint('✅ Task $taskId accepted');
-    } catch (e) {
-      debugPrint('⚠️ Error accepting task: $e');
-      rethrow;
-    }
-  }
-
-  Future<void> declineTask(String taskId) async {
-    try {
-      debugPrint('[DEBUG] TaskProvider: declineTask called for taskId = $taskId');
-      final currentUser = FirebaseAuth.instance.currentUser;
-      if (currentUser == null) {
-        throw Exception('No user logged in');
-      }
-
-      await _taskService.declineTask(
-        taskId,
-        currentUser.uid,
-        currentUser.displayName ?? 'Unknown User',
-      );
-
-      debugPrint('✅ Task $taskId declined');
-    } catch (e) {
-      debugPrint('⚠️ Error declining task: $e');
-      rethrow;
-    }
-  }
 
   // ----------------------
   // DEADLINE MANAGEMENT
@@ -858,3 +644,6 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 }
+
+
+

@@ -6,7 +6,6 @@ import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/models/task_stats_model.dart';
 import '../../../../tasks/datasources/helpers/task_dependency_helper.dart';
 import '../../../datasources/models/board_model.dart';
-import '../../../datasources/models/board_roles.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import 'package:uuid/uuid.dart';
 
@@ -100,8 +99,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
     for (String memberId in widget.board.memberIds) {
       if (memberId != widget.userId) {
         // Skip supervisors - they cannot be assigned tasks
-        final role = BoardRoles.normalize(widget.board.memberRoles[memberId]);
-        if (role == BoardRoles.supervisor) continue;
+        final role =
+            (widget.board.memberRoles[memberId] ?? '').trim().toLowerCase();
+        if (role == 'supervisor') continue;
 
         try {
           final userData = await UserService().getUserById(memberId);
@@ -239,6 +239,14 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}';
       }
 
+      final isDraftTeamTask =
+          widget.board.boardType == 'team' &&
+          (widget.board.boardManagerId != widget.userId || _taskBoardLane == _laneDrafts);
+      final hasProposedAssignee =
+          isDraftTeamTask &&
+          _assignedToUserId != null &&
+          _assignedToUserId != 'None';
+
       final newTask = Task(
         taskId: const Uuid().v4(),
         taskBoardId: widget.board.boardId,
@@ -246,26 +254,14 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        taskProposedAssigneeId: widget.board.boardType == 'personal'
-            ? null
-            : (_assignedToUserId != null && _assignedToUserId != widget.userId
-                  ? _assignedToUserId
-                  : null),
-        taskProposedAssigneeName: widget.board.boardType == 'personal'
-            ? null
-            : (_assignedToUserId != null && _assignedToUserId != widget.userId
-                  ? _assignedToUserName
-                  : null),
         // Personal boards always assign to board manager.
         taskAssignedTo: widget.board.boardType == 'personal'
             ? widget.board.boardManagerId
-            : ((_assignedToUserId != null && _assignedToUserId != widget.userId)
-                  ? 'None'
-                  : (_assignedToUserId ?? 'None')),
+            : (hasProposedAssignee ? 'None' : (_assignedToUserId ?? 'None')),
         taskAssignedToName: widget.board.boardType == 'personal'
             ? (_boardMembers[widget.board.boardManagerId] ?? _currentUserName)
-            : ((_assignedToUserId != null && _assignedToUserId != widget.userId)
-                  ? 'Unassigned'
+            : (hasProposedAssignee
+                  ? 'None (Pending)'
                   : (_assignedToUserName ?? 'Unassigned')),
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
@@ -278,7 +274,8 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskStats: TaskStats(),
         taskPriorityLevel: _priorityLevel,
         taskStatus: 'To Do',
-        taskAllowsSubmissions: true,
+        taskAllowsSubmissions:
+            _taskRequiresSubmission || _taskRequiresApproval,
         taskRequiresSubmission: _taskRequiresSubmission,
         taskRequiresApproval: _taskRequiresApproval,
         taskIsRepeating: _isRepeating,
@@ -291,27 +288,18 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskBoardLane: widget.board.boardType == 'personal'
             ? _lanePublished
             : (_isCurrentUserSupervisor ? _laneDrafts : _taskBoardLane),
-        // Set acceptance status to null if self-assigned (single member boards), pending otherwise
-        taskAssignmentStatus: widget.board.boardType == 'personal'
-            ? null
-            : (_assignedToUserId == widget.userId
-                  ? null
-                  : (_assignedToUserId != null ? 'pending' : null)),
+        taskAssignmentStatus: hasProposedAssignee ? 'pending' : null,
+        taskProposedAssigneeId: hasProposedAssignee ? _assignedToUserId : null,
+        taskProposedAssigneeName: hasProposedAssignee
+            ? _assignedToUserName
+            : null,
         taskDependencyIds: TaskDependencyHelper.sanitizeDependencyIds(
           _selectedDependencyIds,
         ),
       );
 
       // Pass the selected member for assignment notification, not the task itself
-      await taskProvider.addTask(
-        newTask,
-        selectedAssigneeId: widget.board.boardType == 'personal'
-            ? null
-            : _assignedToUserId,
-        selectedAssigneeName: widget.board.boardType == 'personal'
-            ? null
-            : _assignedToUserName,
-      );
+      await taskProvider.addTask(newTask);
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {
@@ -923,9 +911,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
               _buildLaneSection(),
               const SizedBox(height: 12),
             ],
-            _buildSubmissionOptionsSection(),
-            const SizedBox(height: 12),
             _buildDependenciesSection(context),
+            const SizedBox(height: 12),
+            _buildSubmissionOptionsSection(),
             const SizedBox(height: 12),
             if (widget.board.boardType == 'team' &&
                 !_loadingMembers &&

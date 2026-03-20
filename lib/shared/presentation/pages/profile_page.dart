@@ -1,34 +1,172 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../features/users/datasources/providers/user_provider.dart';
-import '../../features/users/datasources/models/user_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
-import '../../utilities/cloudinary_service.dart';
 import 'dart:io';
+
+import '../../features/users/datasources/models/user_model.dart';
+import '../../features/users/datasources/providers/user_provider.dart';
+import '../../utilities/cloudinary_service.dart';
+import '../widgets/profile/change_password_dialog.dart';
+import '../widgets/profile/delete_account_dialog.dart';
 import '../widgets/profile/profile_header.dart';
 import '../widgets/profile/profile_info_row.dart';
 import '../widgets/profile/profile_section_card.dart';
 import '../widgets/profile/profile_status_row.dart';
 
-class ProfilePage extends StatefulWidget {
-  const ProfilePage({super.key});
+class ProfilePageController extends ChangeNotifier {
+  bool _isEditingProfile = false;
+  bool _isSavingProfile = false;
+  VoidCallback? _enterEditMode;
+  VoidCallback? _cancelEditMode;
+  Future<void> Function()? _saveProfileChanges;
 
-  @override
-  State<ProfilePage> createState() => _ProfilePageState();
+  bool get isEditingProfile => _isEditingProfile;
+  bool get isSavingProfile => _isSavingProfile;
+
+  void bind({
+    required bool isEditingProfile,
+    required bool isSavingProfile,
+    required VoidCallback enterEditMode,
+    required VoidCallback cancelEditMode,
+    required Future<void> Function() saveProfileChanges,
+  }) {
+    _isEditingProfile = isEditingProfile;
+    _isSavingProfile = isSavingProfile;
+    _enterEditMode = enterEditMode;
+    _cancelEditMode = cancelEditMode;
+    _saveProfileChanges = saveProfileChanges;
+    notifyListeners();
+  }
+
+  void unbind() {
+    _enterEditMode = null;
+    _cancelEditMode = null;
+    _saveProfileChanges = null;
+    _isEditingProfile = false;
+    _isSavingProfile = false;
+    notifyListeners();
+  }
+
+  void enterEditMode() => _enterEditMode?.call();
+
+  void cancelEditMode() => _cancelEditMode?.call();
+
+  Future<void> saveProfileChanges() async {
+    await _saveProfileChanges?.call();
+  }
 }
 
-class _ProfilePageState extends State<ProfilePage> {
-  bool _isEditingBio = false;
+class ProfilePage extends StatefulWidget {
+  final ProfilePageController? controller;
+
+  const ProfilePage({super.key, this.controller});
+
+  @override
+  State<ProfilePage> createState() => ProfilePageState();
+}
+
+class ProfilePageState extends State<ProfilePage> {
+  static const List<String> _availableSkills = [
+    'Front-end',
+    'Backend',
+    'Full Stack',
+    'UI/UX',
+    'Project Management',
+    'Data Analysis',
+    'Mobile Development',
+  ];
+
+  bool _isEditingProfile = false;
+  bool _isSavingProfile = false;
+  TextEditingController? _nameController;
+  TextEditingController? _handleController;
+  TextEditingController? _phoneController;
   TextEditingController? _bioController;
+  List<String> _selectedSkills = [];
   final ImagePicker _imagePicker = ImagePicker();
 
   void _log(String message) {
     debugPrint(message);
   }
 
+  bool get isEditingProfile => _isEditingProfile;
+  bool get isSavingProfile => _isSavingProfile;
+
+  void _syncController() {
+    widget.controller?.bind(
+      isEditingProfile: _isEditingProfile,
+      isSavingProfile: _isSavingProfile,
+      enterEditMode: enterEditMode,
+      cancelEditMode: cancelEditMode,
+      saveProfileChanges: saveProfileChanges,
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _syncController();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfilePage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller?.unbind();
+      _syncController();
+    }
+  }
+
+  void _initializeControllers(UserModel user) {
+    _nameController ??= TextEditingController();
+    _handleController ??= TextEditingController();
+    _phoneController ??= TextEditingController();
+    _bioController ??= TextEditingController();
+    _syncDraftWithUser(user);
+  }
+
+  void _syncDraftWithUser(UserModel user) {
+    if (_isEditingProfile) return;
+
+    _nameController?.text = user.userName;
+    _handleController?.text = user.userHandle;
+    _phoneController?.text = user.userPhoneNumber ?? '';
+    _bioController?.text = user.userBio ?? '';
+    _selectedSkills = List<String>.from(user.userSkills);
+  }
+
+  UserModel _buildDraftUser(UserModel user) {
+    return user.copyWith(
+      userName: _nameController?.text.trim() ?? user.userName,
+      userHandle: _handleController?.text.trim() ?? user.userHandle,
+      userPhoneNumber: (_phoneController?.text.trim().isEmpty ?? true)
+          ? null
+          : _phoneController!.text.trim(),
+      userBio: _bioController?.text.trim(),
+      userSkills: List<String>.from(_selectedSkills),
+    );
+  }
+
+  List<String> _missingDiscoverabilityFields(UserModel user) {
+    final missingFields = <String>[];
+
+    if (user.userName.isEmpty) missingFields.add('Name');
+    if (user.userHandle.isEmpty) missingFields.add('Handle');
+    if (user.userBio == null || user.userBio!.isEmpty) {
+      missingFields.add('Bio');
+    }
+    if (user.userSkills.isEmpty) missingFields.add('Skills');
+
+    return missingFields;
+  }
+
   @override
   void dispose() {
+    widget.controller?.unbind();
+    _nameController?.dispose();
+    _handleController?.dispose();
+    _phoneController?.dispose();
     _bioController?.dispose();
     super.dispose();
   }
@@ -197,52 +335,115 @@ class _ProfilePageState extends State<ProfilePage> {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  Future<void> _saveBio(BuildContext context, UserModel user) async {
-    if (_bioController == null) return;
+  Future<bool> _saveProfile(
+    BuildContext context,
+    UserModel user, {
+    bool showSuccessMessage = true,
+  }) async {
+    final draftUser = _buildDraftUser(user);
 
-    final userProvider = context.read<UserProvider>();
-    final updatedUser = user.copyWith(userBio: _bioController!.text.trim());
+    if (draftUser.userName.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Name cannot be empty')));
+      return false;
+    }
+
+    if (draftUser.userHandle.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Handle cannot be empty')));
+      return false;
+    }
+
+    setState(() {
+      _isSavingProfile = true;
+    });
 
     try {
-      await userProvider.updateUserData(updatedUser);
+      await context.read<UserProvider>().updateUserData(draftUser);
+      if (!mounted) return false;
+
       setState(() {
-        _isEditingBio = false;
+        _isEditingProfile = false;
+        _isSavingProfile = false;
       });
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bio updated successfully')),
+      _syncController();
+
+      if (showSuccessMessage) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully')),
         );
       }
+      return true;
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error updating bio: $e')));
-      }
+      if (!mounted) return false;
+
+      setState(() {
+        _isSavingProfile = false;
+      });
+      _syncController();
+
+      ScaffoldMessenger.of(
+        this.context,
+      ).showSnackBar(SnackBar(content: Text('Error updating profile: $e')));
+      return false;
     }
   }
 
-  Future<void> _togglePublicProfile(BuildContext context, bool isPublic) async {
+  void _startEditing(UserModel user) {
+    _initializeControllers(user);
+    setState(() {
+      _syncDraftWithUser(user);
+      _isEditingProfile = true;
+    });
+    _syncController();
+  }
+
+  void _cancelEditing(UserModel user) {
+    setState(() {
+      _isEditingProfile = false;
+      _syncDraftWithUser(user);
+    });
+    _syncController();
+  }
+
+  void enterEditMode() {
+    final user = context.read<UserProvider>().currentUser;
+    if (user == null || _isEditingProfile) return;
+    _startEditing(user);
+  }
+
+  void cancelEditMode() {
+    final user = context.read<UserProvider>().currentUser;
+    if (user == null || !_isEditingProfile) return;
+    _cancelEditing(user);
+  }
+
+  Future<void> saveProfileChanges() async {
+    final user = context.read<UserProvider>().currentUser;
+    if (user == null || !_isEditingProfile || _isSavingProfile) return;
+    await _saveProfile(context, user);
+  }
+
+  Future<void> _toggleDiscoverability(
+    BuildContext context,
+    bool isDiscoverable,
+    UserModel user,
+  ) async {
     final userProvider = context.read<UserProvider>();
-    final user = userProvider.currentUser;
+    final sourceUser = _isEditingProfile ? _buildDraftUser(user) : user;
 
-    // If trying to make public, validate required fields
-    if (isPublic && user != null) {
-      final missingFields = <String>[];
-
-      if (user.userName.isEmpty) missingFields.add('Name');
-      if (user.userHandle.isEmpty) missingFields.add('Handle');
-      if (user.userBio == null || user.userBio!.isEmpty) {
-        missingFields.add('Bio');
-      }
-      if (user.userSkills.isEmpty) missingFields.add('Skills');
+    // If trying to make the profile discoverable, validate required fields.
+    if (isDiscoverable) {
+      final missingFields = _missingDiscoverabilityFields(sourceUser);
 
       if (missingFields.isNotEmpty) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Please complete the following fields before making your profile public: ${missingFields.join(', ')}',
+                'Please complete the following fields before making your profile discoverable: ${missingFields.join(', ')}',
               ),
               duration: const Duration(seconds: 4),
               action: SnackBarAction(label: 'OK', onPressed: () {}),
@@ -251,15 +452,26 @@ class _ProfilePageState extends State<ProfilePage> {
         }
         return;
       }
+
+      if (_isEditingProfile) {
+        final saved = await _saveProfile(
+          context,
+          user,
+          showSuccessMessage: false,
+        );
+        if (!saved || !context.mounted) return;
+      }
     }
 
     try {
-      await userProvider.togglePublicProfile(isPublic);
+      await userProvider.togglePublicProfile(isDiscoverable);
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              isPublic ? 'Profile is now public' : 'Profile is now private',
+              isDiscoverable
+                  ? 'Your profile is now discoverable'
+                  : 'Your profile is now hidden',
             ),
           ),
         );
@@ -276,478 +488,152 @@ class _ProfilePageState extends State<ProfilePage> {
     }
   }
 
-  Future<void> _toggleSearchVisibility(
-    BuildContext context,
-    bool allowSearch,
-  ) async {
-    try {
-      await context.read<UserProvider>().setAllowSearch(allowSearch);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              allowSearch
-                  ? 'Your profile can be found in search'
-                  : 'Your profile is hidden from search',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error updating search visibility: $e')),
-        );
-      }
+  Widget _buildBioSection(UserModel user) {
+    if (_isEditingProfile) {
+      return TextField(
+        controller: _bioController,
+        decoration: const InputDecoration(
+          hintText: 'Write something about yourself...',
+          border: OutlineInputBorder(),
+        ),
+        maxLines: 4,
+        maxLength: 500,
+      );
     }
-  }
 
-  void _showEditProfileDialog(BuildContext context, UserModel user) {
-    final nameController = TextEditingController(text: user.userName);
-    final handleController = TextEditingController(text: user.userHandle);
-    final phoneController = TextEditingController(text: user.userPhoneNumber);
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit Personal Information'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.person),
-                ),
-                maxLength: 50,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: handleController,
-                decoration: const InputDecoration(
-                  labelText: 'Handle',
-                  border: OutlineInputBorder(),
-                  prefixText: '@',
-                  prefixIcon: Icon(Icons.alternate_email),
-                ),
-                maxLength: 30,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phoneController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.phone),
-                  hintText: '09123456789',
-                ),
-                keyboardType: TextInputType.phone,
-                maxLength: 11,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (nameController.text.trim().isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Name cannot be empty')),
-                );
-                return;
-              }
-
-              final updatedUser = user.copyWith(
-                userName: nameController.text.trim(),
-                userHandle: handleController.text.trim(),
-                userPhoneNumber: phoneController.text.trim().isEmpty
-                    ? null
-                    : phoneController.text.trim(),
-              );
-
-              try {
-                await context.read<UserProvider>().updateUserData(updatedUser);
-                if (dialogContext.mounted) Navigator.pop(dialogContext);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Profile updated successfully'),
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error updating profile: $e')),
-                  );
-                }
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+    return Text(
+      user.userBio?.isNotEmpty == true ? user.userBio! : 'No bio added yet',
+      style: const TextStyle(fontSize: 14),
     );
   }
 
-  void _showSkillsDialog(BuildContext context, UserModel user) {
-    final availableSkills = [
-      'Front-end',
-      'Backend',
-      'Full Stack',
-      'UI/UX',
-      'Project Management',
-      'Data Analysis',
-      'Mobile Development',
-    ];
-    final selectedSkills = [...user.userSkills];
+  Widget _buildPersonalInfoSection(UserModel user) {
+    if (_isEditingProfile) {
+      return Column(
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.person),
+            ),
+            maxLength: 50,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _handleController,
+            decoration: const InputDecoration(
+              labelText: 'Handle',
+              border: OutlineInputBorder(),
+              prefixText: '@',
+              prefixIcon: Icon(Icons.alternate_email),
+            ),
+            maxLength: 30,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _phoneController,
+            decoration: const InputDecoration(
+              labelText: 'Phone Number',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.phone),
+              hintText: '09123456789',
+            ),
+            keyboardType: TextInputType.phone,
+            maxLength: 11,
+          ),
+        ],
+      );
+    }
 
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Manage Skills'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Select up to 3 skills (${selectedSkills.length}/3)',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey[600],
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                ...availableSkills.map((skill) {
-                  final isSelected = selectedSkills.contains(skill);
-                  final canSelect = selectedSkills.length < 3 || isSelected;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ProfileInfoRow(
+          icon: Icons.person,
+          label: 'Name',
+          value: user.userName,
+        ),
+        const SizedBox(height: 8),
+        ProfileInfoRow(
+          icon: Icons.alternate_email,
+          label: 'Handle',
+          value: '@${user.userHandle}',
+        ),
+        const SizedBox(height: 8),
+        ProfileInfoRow(
+          icon: Icons.phone,
+          label: 'Phone',
+          value: user.userPhoneNumber ?? 'Not provided',
+        ),
+      ],
+    );
+  }
 
-                  return CheckboxListTile(
-                    title: Text(skill),
-                    value: isSelected,
-                    onChanged: canSelect
-                        ? (value) {
-                            setState(() {
-                              if (value == true) {
-                                selectedSkills.add(skill);
-                              } else {
-                                selectedSkills.remove(skill);
-                              }
-                            });
+  Widget _buildSkillsSection(UserModel user) {
+    if (_isEditingProfile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Select up to 3 skills (${_selectedSkills.length}/3)',
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: Color(0xFF6B7280),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _availableSkills.map((skill) {
+              final isSelected = _selectedSkills.contains(skill);
+              final canToggle = isSelected || _selectedSkills.length < 3;
+
+              return FilterChip(
+                label: Text(skill),
+                selected: isSelected,
+                onSelected: canToggle
+                    ? (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedSkills.add(skill);
+                          } else {
+                            _selectedSkills.remove(skill);
                           }
-                        : null,
-                    enabled: canSelect,
-                  );
-                }),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final updatedUser = user.copyWith(userSkills: selectedSkills);
-
-                try {
-                  await context.read<UserProvider>().updateUserData(
-                    updatedUser,
-                  );
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Skills updated successfully'),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error updating skills: $e')),
-                    );
-                  }
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showChangePasswordDialog(BuildContext context) {
-    final currentPasswordController = TextEditingController();
-    final newPasswordController = TextEditingController();
-    final confirmPasswordController = TextEditingController();
-    bool obscureCurrent = true;
-    bool obscureNew = true;
-    bool obscureConfirm = true;
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Change Password'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: currentPasswordController,
-                  decoration: InputDecoration(
-                    labelText: 'Current Password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureCurrent
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                      ),
-                      onPressed: () =>
-                          setState(() => obscureCurrent = !obscureCurrent),
-                    ),
-                  ),
-                  obscureText: obscureCurrent,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: newPasswordController,
-                  decoration: InputDecoration(
-                    labelText: 'New Password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureNew ? Icons.visibility : Icons.visibility_off,
-                      ),
-                      onPressed: () => setState(() => obscureNew = !obscureNew),
-                    ),
-                  ),
-                  obscureText: obscureNew,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: confirmPasswordController,
-                  decoration: InputDecoration(
-                    labelText: 'Confirm New Password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureConfirm
-                            ? Icons.visibility
-                            : Icons.visibility_off,
-                      ),
-                      onPressed: () =>
-                          setState(() => obscureConfirm = !obscureConfirm),
-                    ),
-                  ),
-                  obscureText: obscureConfirm,
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (currentPasswordController.text.trim().isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Please enter your current password'),
-                    ),
-                  );
-                  return;
-                }
-
-                if (newPasswordController.text.trim().length < 6) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Password must be at least 6 characters'),
-                    ),
-                  );
-                  return;
-                }
-
-                if (newPasswordController.text !=
-                    confirmPasswordController.text) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Passwords do not match')),
-                  );
-                  return;
-                }
-
-                try {
-                  await context.read<UserProvider>().changePassword(
-                    currentPassword: currentPasswordController.text.trim(),
-                    newPassword: newPasswordController.text.trim(),
-                  );
-
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Password changed successfully'),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  String errorMessage = 'Error changing password';
-
-                  final message = e.toString().toLowerCase();
-                  if (message.contains('wrong-password') ||
-                      message.contains('invalid-credential')) {
-                    errorMessage = 'Current password is incorrect';
-                  } else if (message.contains('weak-password')) {
-                    errorMessage = 'New password is too weak';
-                  } else if (message.contains('requires-recent-login')) {
-                    errorMessage =
-                        'Please log out and log in again before changing password';
-                  }
-
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(SnackBar(content: Text(errorMessage)));
-                  }
-                }
-              },
-              child: const Text('Change Password'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showDeleteAccountDialog(BuildContext context) {
-    final confirmController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete Account'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'This action is permanent and cannot be undone.',
-              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
-            ),
-            const SizedBox(height: 16),
-            const Text('All your data will be permanently deleted, including:'),
-            const SizedBox(height: 8),
-            const Text('- All boards and tasks'),
-            const Text('- Profile information'),
-            const Text('- Activity history'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: confirmController,
-              decoration: const InputDecoration(
-                labelText: 'Type "DELETE" to confirm',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (confirmController.text.trim() != 'DELETE') {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Please type DELETE to confirm'),
-                  ),
-                );
-                return;
-              }
-
-              // Close delete confirmation dialog immediately
-              Navigator.pop(dialogContext);
-
-              // Show loading indicator
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (loadingContext) =>
-                    const Center(child: CircularProgressIndicator()),
+                        });
+                      }
+                    : null,
               );
-
-              try {
-                // Delete account (errors are handled inside deleteAccount method)
-                await context.read<UserProvider>().deleteAccount();
-
-                // Account deletion completed - navigate to login
-                // Use Navigator to close loading and go to login in one go
-                if (context.mounted) {
-                  Navigator.of(
-                    context,
-                  ).pushNamedAndRemoveUntil('/auth', (route) => false);
-                }
-              } catch (e) {
-                // Close loading dialog
-                if (context.mounted) {
-                  Navigator.pop(context);
-
-                  // Show error but still navigate to login since auth might be deleted
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Account deletion completed with warnings. You have been signed out.',
-                      ),
-                      duration: const Duration(seconds: 5),
-                    ),
-                  );
-
-                  // Navigate to login anyway
-                  Future.delayed(const Duration(milliseconds: 500), () {
-                    if (context.mounted) {
-                      Navigator.of(
-                        context,
-                      ).pushNamedAndRemoveUntil('/auth', (route) => false);
-                    }
-                  });
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF9C88D4),
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete Account'),
+            }).toList(),
           ),
         ],
-      ),
+      );
+    }
+
+    if (user.userSkills.isEmpty) {
+      return const Text('No skills added yet. Add up to 3 skills.');
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: user.userSkills
+          .map(
+            (skill) => Chip(
+              label: Text(skill),
+              backgroundColor: const Color(0xFFE7EEFF),
+              side: const BorderSide(color: Color(0xFFC7D6FF)),
+            ),
+          )
+          .toList(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    _log('[DEBUG] ProfilePage: build called');
-
     return Consumer<UserProvider>(
       builder: (context, userProvider, _) {
         final user = userProvider.currentUser;
@@ -765,13 +651,7 @@ class _ProfilePageState extends State<ProfilePage> {
           );
         }
 
-        // Initialize bio controller once with current bio
-        _bioController ??= TextEditingController(text: user.userBio ?? '');
-
-        // Update controller text if not editing and bio changed
-        if (!_isEditingBio && _bioController!.text != (user.userBio ?? '')) {
-          _bioController!.text = user.userBio ?? '';
-        }
+        _initializeControllers(user);
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
@@ -787,90 +667,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   ),
                   ProfileSectionCard(
                     title: 'Bio',
-                    action: IconButton(
-                      icon: Icon(
-                        _isEditingBio ? Icons.check : Icons.edit,
-                        size: 20,
-                      ),
-                      onPressed: () {
-                        if (_isEditingBio) {
-                          _saveBio(context, user);
-                        } else {
-                          setState(() {
-                            _isEditingBio = true;
-                          });
-                        }
-                      },
-                    ),
-                    child: _isEditingBio
-                        ? TextField(
-                            controller: _bioController,
-                            decoration: const InputDecoration(
-                              hintText: 'Write something about yourself...',
-                              border: OutlineInputBorder(),
-                            ),
-                            maxLines: 4,
-                            maxLength: 500,
-                          )
-                        : Text(
-                            user.userBio?.isNotEmpty == true
-                                ? user.userBio!
-                                : 'No bio added yet',
-                            style: const TextStyle(fontSize: 14),
-                          ),
+                    child: _buildBioSection(user),
                   ),
                   ProfileSectionCard(
                     title: 'Personal Information',
-                    action: IconButton(
-                      icon: const Icon(Icons.edit, size: 20),
-                      onPressed: () => _showEditProfileDialog(context, user),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        ProfileInfoRow(
-                          icon: Icons.person,
-                          label: 'Name',
-                          value: user.userName,
-                        ),
-                        const SizedBox(height: 8),
-                        ProfileInfoRow(
-                          icon: Icons.alternate_email,
-                          label: 'Handle',
-                          value: '@${user.userHandle}',
-                        ),
-                        const SizedBox(height: 8),
-                        ProfileInfoRow(
-                          icon: Icons.phone,
-                          label: 'Phone',
-                          value: user.userPhoneNumber ?? 'Not provided',
-                        ),
-                      ],
-                    ),
+                    child: _buildPersonalInfoSection(user),
                   ),
                   ProfileSectionCard(
                     title: 'Skills & Interests',
-                    action: IconButton(
-                      icon: const Icon(Icons.edit, size: 20),
-                      onPressed: () => _showSkillsDialog(context, user),
-                    ),
-                    child: user.userSkills.isEmpty
-                        ? const Text('No skills added yet. Add up to 3 skills.')
-                        : Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            children: user.userSkills
-                                .map(
-                                  (skill) => Chip(
-                                    label: Text(skill),
-                                    backgroundColor: const Color(0xFFE7EEFF),
-                                    side: const BorderSide(
-                                      color: Color(0xFFC7D6FF),
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                          ),
+                    child: _buildSkillsSection(user),
                   ),
                   ProfileSectionCard(
                     title: 'Visibility & Status',
@@ -906,7 +711,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             const SizedBox(width: 8),
                             const Expanded(
                               child: Text(
-                                'Public Profile',
+                                'Discoverable Profile',
                                 style: TextStyle(
                                   fontSize: 13,
                                   color: Color(0xFF2563EB),
@@ -917,32 +722,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             Switch(
                               value: user.userIsPublic,
                               onChanged: (value) =>
-                                  _togglePublicProfile(context, value),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.manage_search,
-                              color: const Color(0xFF2563EB),
-                              size: 20,
-                            ),
-                            const SizedBox(width: 8),
-                            const Expanded(
-                              child: Text(
-                                'Appear In Search',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF2563EB),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                            Switch(
-                              value: user.userAllowSearch,
-                              onChanged: (value) =>
-                                  _toggleSearchVisibility(context, value),
+                                  _toggleDiscoverability(context, value, user),
                             ),
                           ],
                         ),
@@ -998,7 +778,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             Icons.arrow_forward_ios,
                             size: 16,
                           ),
-                          onTap: () => _showChangePasswordDialog(context),
+                          onTap: () => showChangePasswordDialog(context),
                           contentPadding: EdgeInsets.zero,
                         ),
                         const Divider(),
@@ -1019,7 +799,7 @@ class _ProfilePageState extends State<ProfilePage> {
                             size: 16,
                             color: Colors.red,
                           ),
-                          onTap: () => _showDeleteAccountDialog(context),
+                          onTap: () => showDeleteAccountDialog(context),
                           contentPadding: EdgeInsets.zero,
                         ),
                       ],

@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../features/search/providers/search_provider.dart';
 import '../../features/users/datasources/models/user_model.dart';
-import '../../features/users/datasources/providers/user_provider.dart';
-import '../../../features/boards/datasources/models/board_model.dart';
-import '../../../features/boards/datasources/providers/board_provider.dart';
-import '../../features/thoughts/datasources/providers/thought_provider.dart';
 
 class SearchAndDiscoverPage extends StatefulWidget {
   const SearchAndDiscoverPage({super.key});
@@ -16,6 +12,7 @@ class SearchAndDiscoverPage extends StatefulWidget {
 
 class _SearchAndDiscoverPageState extends State<SearchAndDiscoverPage> {
   final TextEditingController _searchController = TextEditingController();
+  SearchProvider? _searchProvider;
 
   @override
   void initState() {
@@ -27,8 +24,14 @@ class _SearchAndDiscoverPageState extends State<SearchAndDiscoverPage> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _searchProvider = context.read<SearchProvider>();
+  }
+
+  @override
   void dispose() {
-    context.read<SearchProvider>().stopStreamingUsers();
+    _searchProvider?.stopStreamingUsers();
     _searchController.dispose();
     super.dispose();
   }
@@ -202,140 +205,11 @@ class _SearchAndDiscoverPageState extends State<SearchAndDiscoverPage> {
                   ],
                 ),
               ),
-              // Recruit Button
-              IconButton(
-                icon: const Icon(Icons.person_add, color: Colors.blue),
-                onPressed: () => _showRecruitDialog(user),
-                tooltip: 'Recruit to Board',
-              ),
             ],
           ),
         ),
       ),
     );
-  }
-
-  void _showRecruitDialog(UserModel user) async {
-    final boardProvider = context.read<BoardProvider>();
-    final userProvider = context.read<UserProvider>();
-    final currentUserId = userProvider.currentUser?.userId;
-
-    if (currentUserId == null) return;
-
-    final myBoards =
-        boardProvider.boards
-            .where((board) => board.boardManagerId == currentUserId && board.boardTitle.toLowerCase() != 'personal')
-            .toList();
-
-    if (myBoards.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'You need to create a board first to recruit members',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Recruit ${user.userName}'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Select a board to invite this user to:'),
-                const SizedBox(height: 16),
-                ...myBoards.map(
-                  (board) => ListTile(
-                    title: Text(board.boardTitle),
-                    subtitle: Text(board.boardGoal),
-                    onTap: () async {
-                      Navigator.pop(context);
-                      await _sendBoardInvite(board, user);
-                    },
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
-    );
-  }
-
-  Future<void> _sendBoardInvite(Board board, UserModel user) async {
-    // Check if user is already a member
-    if (board.memberIds.contains(user.userId)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${user.userName} is already a member of this board'),
-          ),
-        );
-      }
-      return;
-    }
-
-    // Check if there's already a pending request
-    final thoughtProvider = context.read<ThoughtProvider>();
-    final hasPending = await thoughtProvider.hasPendingBoardInvite(
-      boardId: board.boardId,
-      recipientUserId: user.userId,
-    );
-
-    if (hasPending) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${user.userName} already has a pending invite to ${board.boardTitle}',
-            ),
-          ),
-        );
-      }
-      return;
-    }
-
-    try {
-      // Send recruitment request instead of directly adding
-      await thoughtProvider.createBoardInviteThought(
-        boardId: board.boardId,
-        boardTitle: board.boardTitle,
-        recipientUserId: user.userId,
-        recipientUserName: user.userName,
-        boardManagerId: board.boardManagerId,
-        boardManagerName: board.boardManagerName,
-        message: 'You have been invited to join this board',
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invitation sent to ${user.userName}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to send invitation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   void _showUserProfile(UserModel user) {

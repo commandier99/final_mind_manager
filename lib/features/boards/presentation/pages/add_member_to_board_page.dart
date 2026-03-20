@@ -2,9 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../datasources/models/board_model.dart';
 import '../../datasources/models/board_roles.dart';
+import '../../datasources/providers/board_provider.dart';
+import '../../../notifications/datasources/models/notification_model.dart';
+import '../../../notifications/datasources/providers/notification_provider.dart';
+import '../../../thoughts/datasources/models/thought_model.dart';
+import '../../../thoughts/datasources/providers/thought_provider.dart';
 import '../../../../shared/features/search/providers/search_provider.dart';
-import '../../../../shared/features/thoughts/datasources/providers/thought_provider.dart';
 import '../../../../shared/features/users/datasources/models/user_model.dart';
+import '../../../../shared/features/users/datasources/providers/user_provider.dart';
+import 'package:uuid/uuid.dart';
 
 class AddMemberToBoardPage extends StatefulWidget {
   final Board board;
@@ -16,9 +22,11 @@ class AddMemberToBoardPage extends StatefulWidget {
 }
 
 class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
+  final Uuid _uuid = const Uuid();
   final TextEditingController _searchController = TextEditingController();
   SearchProvider? _searchProvider;
-  String _selectedInviteRole = BoardRoles.member;
+  final Set<String> _sendingInviteUserIds = <String>{};
+  final Set<String> _pendingInviteUserIds = <String>{};
 
   bool get _canAddMembersToThisBoard {
     return widget.board.boardType == 'team';
@@ -30,6 +38,7 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
     // Start streaming all discoverable users on page load
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SearchProvider>().streamDiscoverableUsers();
+      _loadPendingInvites();
     });
   }
 
@@ -65,58 +74,29 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
           Container(
             color: const Color(0xFFFAFCFD),
             padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search by name, handle, or skills...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              _searchController.clear();
-                              _performSearch();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  onChanged: (_) {
-                    setState(() {});
-                    _performSearch();
-                  },
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search by name, handle, or skills...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _searchController.clear();
+                          _performSearch();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedInviteRole,
-                  decoration: const InputDecoration(
-                    labelText: 'Invite as',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.badge_outlined),
-                  ),
-                  items: const [
-                    DropdownMenuItem<String>(
-                      value: BoardRoles.member,
-                      child: Text('Member'),
-                    ),
-                    DropdownMenuItem<String>(
-                      value: BoardRoles.supervisor,
-                      child: Text('Supervisor'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() {
-                      _selectedInviteRole = BoardRoles.normalize(value);
-                    });
-                  },
-                ),
-              ],
+              ),
+              onChanged: (_) {
+                setState(() {});
+                _performSearch();
+              },
             ),
           ),
           // Results
@@ -193,9 +173,8 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
 
   Widget _buildUserCard(UserModel user) {
     final isAlreadyMember = widget.board.memberIds.contains(user.userId);
-    final existingRole = BoardRoles.normalize(
-      widget.board.memberRoles[user.userId],
-    );
+    final isSendingInvite = _sendingInviteUserIds.contains(user.userId);
+    final hasPendingInvite = _pendingInviteUserIds.contains(user.userId);
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -275,22 +254,26 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
             // Add/Member Button
             if (isAlreadyMember)
               Chip(
-                label: Text(
-                  existingRole == BoardRoles.supervisor
-                      ? 'Supervisor'
-                      : 'Member',
-                ),
+                label: const Text('Member'),
                 backgroundColor: Colors.grey.shade300,
               )
             else
               ElevatedButton.icon(
-                icon: const Icon(Icons.person_add),
-                label: Text(
-                  _selectedInviteRole == BoardRoles.supervisor
-                      ? 'Invite Supervisor'
-                      : 'Invite Member',
+                icon: Icon(
+                  isSendingInvite
+                      ? Icons.hourglass_top
+                      : (hasPendingInvite
+                            ? Icons.check_circle_outline
+                            : Icons.mail_outline),
                 ),
-                onPressed: () => _handleAddMember(user),
+                label: Text(
+                  isSendingInvite
+                      ? 'Sending...'
+                      : (hasPendingInvite ? 'Sent' : 'Invite'),
+                ),
+                onPressed: isSendingInvite || hasPendingInvite
+                    ? null
+                    : () => _handleAddMember(user),
               ),
           ],
         ),
@@ -299,77 +282,295 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
   }
 
   void _handleAddMember(UserModel user) async {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final currentUser = context.read<UserProvider>().currentUser;
+    final thoughtProvider = context.read<ThoughtProvider>();
+    final notificationProvider = context.read<NotificationProvider>();
+
     if (!_canAddMembersToThisBoard) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Only Team boards can add members.')),
-        );
-      }
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Only Team boards can add members.')),
+      );
       return;
     }
 
     // Check if user is already a member
     if (widget.board.memberIds.contains(user.userId)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('User is already a member of this board'),
-          ),
-        );
-      }
+      messenger?.showSnackBar(
+        const SnackBar(
+          content: Text('User is already a member of this board'),
+        ),
+      );
       return;
     }
 
-    // Check if there's already a pending request
-    final thoughtProvider = context.read<ThoughtProvider>();
-    final hasPending = await thoughtProvider.hasPendingBoardInvite(
-      boardId: widget.board.boardId,
-      recipientUserId: user.userId,
-    );
+    if (currentUser == null) {
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('No signed-in user found.')),
+      );
+      return;
+    }
 
-    if (hasPending) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              '${user.userName} already has a pending invite to ${widget.board.boardTitle}',
-            ),
+    final boardProvider = context.read<BoardProvider>();
+    final selectedRole = await _showInviteRoleSheet(user);
+    if (!mounted || selectedRole == null) return;
+
+    setState(() {
+      _sendingInviteUserIds.add(user.userId);
+    });
+
+    try {
+      final now = DateTime.now();
+      final authorName = currentUser.userName.trim().isEmpty
+          ? 'Unknown'
+          : currentUser.userName.trim();
+      final roleLabel = selectedRole == BoardRoles.supervisor
+          ? 'Supervisor'
+          : 'Member';
+      final rolePhrase = selectedRole == BoardRoles.supervisor
+          ? 'a Supervisor'
+          : 'a Member';
+      final notificationSeed = _uuid.v4();
+
+      final thought = Thought(
+        thoughtId: '',
+        type: Thought.typeBoardRequest,
+        status: Thought.statusPending,
+        scopeType: Thought.scopeBoard,
+        boardId: widget.board.boardId,
+        taskId: '',
+        authorId: currentUser.userId,
+        authorName: authorName,
+        targetUserId: user.userId,
+        targetUserName: user.userName,
+        title: 'Board Invite: ${widget.board.boardTitle}',
+        message:
+            '$authorName invited ${user.userName} to join ${widget.board.boardTitle} as $rolePhrase.',
+        createdAt: now,
+        updatedAt: now,
+        metadata: {
+          'source': 'add_member_to_board_page',
+          'boardTitle': widget.board.boardTitle,
+          'requestDirection': 'invite_member',
+          'invitedMemberId': user.userId,
+          'invitedMemberName': user.userName,
+          'invitedMemberHandle': user.userHandle,
+          'invitedRole': selectedRole,
+          'notificationSeed': notificationSeed,
+        },
+      );
+
+      final thoughtId = await thoughtProvider.createThought(thought);
+      await boardProvider.markPendingBoardInvite(
+        boardId: widget.board.boardId,
+        userId: user.userId,
+        invitationThoughtId: thoughtId,
+      );
+      try {
+        await notificationProvider.createNotifications([
+          AppNotification(
+            notificationId: '',
+            recipientUserId: currentUser.userId,
+            title: 'Board Invite Sent',
+            message:
+                'You invited ${user.userName} to join ${widget.board.boardTitle}.',
+            type: 'thought_board_invite_sent',
+            deliveryStatus: AppNotification.deliveryPending,
+            isRead: false,
+            isDeleted: false,
+            createdAt: now,
+            updatedAt: now,
+            actorUserId: currentUser.userId,
+            actorUserName: authorName,
+            thoughtId: thoughtId,
+            eventKey:
+                '$notificationSeed:${currentUser.userId}:thought_board_invite_sent',
+            metadata: {
+              'role': selectedRole,
+              'thoughtType': Thought.typeBoardRequest,
+              'requestDirection': 'invite_member',
+            },
           ),
+          AppNotification(
+            notificationId: '',
+            recipientUserId: user.userId,
+            title: 'Board Invite Received',
+            message:
+                '$authorName invited you to join ${widget.board.boardTitle} as $rolePhrase.',
+            type: 'thought_board_invite_received',
+            deliveryStatus: AppNotification.deliveryPending,
+            isRead: false,
+            isDeleted: false,
+            createdAt: now,
+            updatedAt: now,
+            actorUserId: currentUser.userId,
+            actorUserName: authorName,
+            thoughtId: thoughtId,
+            eventKey:
+                '$notificationSeed:${user.userId}:thought_board_invite_received',
+            metadata: {
+              'role': selectedRole,
+              'thoughtType': Thought.typeBoardRequest,
+              'requestDirection': 'invite_member',
+            },
+          ),
+        ]);
+      } catch (e) {
+        await _rollbackInviteThought(
+          boardProvider: boardProvider,
+          boardId: widget.board.boardId,
+          userId: user.userId,
+          thoughtProvider: thoughtProvider,
+          thoughtId: thoughtId,
+        );
+        throw Exception(
+          'Invite notifications could not be created, so the invite was cancelled. $e',
         );
       }
-      return;
+
+      if (!mounted) return;
+      setState(() {
+        _pendingInviteUserIds.add(user.userId);
+      });
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Invitation sent to ${user.userName} as $roleLabel.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Failed to send invitation: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sendingInviteUserIds.remove(user.userId);
+        });
+      }
+    }
+  }
+
+  Future<void> _rollbackInviteThought({
+    required BoardProvider boardProvider,
+    required String boardId,
+    required String userId,
+    required ThoughtProvider thoughtProvider,
+    required String thoughtId,
+  }) async {
+    try {
+      await boardProvider.clearPendingBoardInvite(
+        boardId: boardId,
+        userId: userId,
+      );
+    } catch (_) {
+      // Best effort rollback. The original notification failure is still surfaced.
     }
 
     try {
-      // Send invitation request instead of directly adding
-      await thoughtProvider.createBoardInviteThought(
-        boardId: widget.board.boardId,
-        boardTitle: widget.board.boardTitle,
-        recipientUserId: user.userId,
-        recipientUserName: user.userName,
-        boardManagerId: widget.board.boardManagerId,
-        boardManagerName: widget.board.boardManagerName,
-        role: _selectedInviteRole,
-        message: 'You have been invited to join this board',
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Invitation sent to ${user.userName}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error sending invitation: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+      await thoughtProvider.softDeleteThought(thoughtId);
+    } catch (_) {
+      // Best effort rollback. The original notification failure is still surfaced.
     }
+  }
+
+  Future<void> _loadPendingInvites() async {
+    try {
+      final pendingIds = await context
+          .read<ThoughtProvider>()
+          .getPendingBoardInviteTargetUserIds(widget.board.boardId);
+      if (!mounted) return;
+      setState(() {
+        _pendingInviteUserIds
+          ..clear()
+          ..addAll(pendingIds);
+      });
+    } catch (_) {
+      // Best effort only; the page can still send invites without preload state.
+    }
+  }
+
+  Future<String?> _showInviteRoleSheet(UserModel user) {
+    return showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) {
+        String selectedRole = BoardRoles.member;
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Invite ${user.userName}',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Choose what role this user should get if they accept the board invite.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 16),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment<String>(
+                          value: BoardRoles.member,
+                          label: Text('Member'),
+                          icon: Icon(Icons.person_outline),
+                        ),
+                        ButtonSegment<String>(
+                          value: BoardRoles.supervisor,
+                          label: Text('Supervisor'),
+                          icon: Icon(Icons.shield_outlined),
+                        ),
+                      ],
+                      selected: {selectedRole},
+                      onSelectionChanged: (selection) {
+                        if (selection.isEmpty) return;
+                        final nextRole = selection.first;
+                        setSheetState(() {
+                          selectedRole = nextRole;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      selectedRole == BoardRoles.supervisor
+                          ? 'Supervisor can help oversee work on the board.'
+                          : 'Member gets standard board access.',
+                      style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          onPressed: () =>
+                              Navigator.of(sheetContext).pop(selectedRole),
+                          child: const Text('Send Invite'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 }

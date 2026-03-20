@@ -17,13 +17,32 @@ class BoardDetailsSection extends StatefulWidget {
 class _BoardDetailsSectionState extends State<BoardDetailsSection> {
   bool _isGoalExpanded = false;
   bool _isDescriptionExpanded = false;
+  late BoardStatsProvider _boardStatsProvider;
+  bool _hasStartedStreaming = false;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BoardStatsProvider>().streamStatsForBoard(widget.boardId);
-    });
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _boardStatsProvider = context.read<BoardStatsProvider>();
+    if (!_hasStartedStreaming) {
+      _boardStatsProvider.streamStatsForBoard(widget.boardId);
+      _hasStartedStreaming = true;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BoardDetailsSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.boardId != widget.boardId) {
+      _boardStatsProvider.stopStreamingBoard(oldWidget.boardId);
+      _boardStatsProvider.streamStatsForBoard(widget.boardId);
+    }
+  }
+
+  @override
+  void dispose() {
+    _boardStatsProvider.stopStreamingBoard(widget.boardId);
+    super.dispose();
   }
 
   @override
@@ -33,11 +52,13 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
 
     return Consumer2<BoardStatsProvider, BoardProvider>(
       builder: (context, statsProvider, boardProvider, _) {
-        // Find the board from the provider's board list
-        final board = boardProvider.boards.firstWhere(
-          (b) => b.boardId == widget.boardId,
-          orElse: () => boardProvider.boards.first,
-        );
+        final board = boardProvider.getBoardById(widget.boardId);
+        if (board == null) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
 
         final stats = statsProvider.getStatsForBoard(board.boardId);
         final taskDone = stats?.boardTasksDoneCount ?? 0;
@@ -239,7 +260,6 @@ class _BoardDetailsSectionState extends State<BoardDetailsSection> {
               // Board Members Section
               BoardMembersSection(
                 memberIds: board.memberIds,
-                boardId: board.boardId,
                 currentUserId: currentUserId,
                 board: board,
               ),

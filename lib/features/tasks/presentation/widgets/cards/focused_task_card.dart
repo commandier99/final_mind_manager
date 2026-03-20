@@ -7,6 +7,7 @@ class FocusedTaskCard extends StatefulWidget {
   final Task task;
   final VoidCallback? onPause;
   final ValueChanged<bool?>? onToggleDone;
+  final VoidCallback? onSubmitThought;
   final bool isPomodoroMode;
   final Widget? stepsContent;
   final DateTime focusedStartedAt;
@@ -16,6 +17,7 @@ class FocusedTaskCard extends StatefulWidget {
     required this.task,
     this.onPause,
     this.onToggleDone,
+    this.onSubmitThought,
     this.isPomodoroMode = false,
     this.stepsContent,
     required this.focusedStartedAt,
@@ -87,6 +89,10 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
   Widget build(BuildContext context) {
     final priorityColor = _getPriorityColor();
     final canPause = widget.onPause != null && !widget.isPomodoroMode;
+    final showSubmitThoughtAction =
+        widget.onSubmitThought != null &&
+        widget.task.taskRequiresSubmission &&
+        !widget.task.taskIsDone;
     final scheme = Theme.of(context).colorScheme;
 
     return Padding(
@@ -132,20 +138,26 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                           width: 34,
                           height: 34,
                           child: Center(
-                            child: Transform.scale(
-                              scale: 1.12,
-                              child: Checkbox(
-                                value: widget.task.taskIsDone,
-                                onChanged: widget.onToggleDone,
-                                activeColor: priorityColor,
-                                side: BorderSide(
-                                  color: priorityColor.withAlpha(170),
-                                  width: 1.8,
-                                ),
-                                materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
+                            child: showSubmitThoughtAction
+                                ? Icon(
+                                    Icons.rate_review_outlined,
+                                    color: priorityColor,
+                                    size: 22,
+                                  )
+                                : Transform.scale(
+                                    scale: 1.12,
+                                    child: Checkbox(
+                                      value: widget.task.taskIsDone,
+                                      onChanged: widget.onToggleDone,
+                                      activeColor: priorityColor,
+                                      side: BorderSide(
+                                        color: priorityColor.withAlpha(170),
+                                        width: 1.8,
+                                      ),
+                                      materialTapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -153,8 +165,8 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                            Text(
-                              widget.task.taskTitle,
+                              Text(
+                                widget.task.taskTitle,
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w700,
@@ -165,44 +177,64 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.timer_outlined,
-                                  size: 12,
-                                  color: scheme.onSurfaceVariant,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Elapsed ${_formatElapsed()}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.timer_outlined,
+                                    size: 12,
                                     color: scheme.onSurfaceVariant,
                                   ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Elapsed ${_formatElapsed()}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: scheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (showSubmitThoughtAction)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: OutlinedButton.icon(
+                                    onPressed: widget.onSubmitThought,
+                                    icon: const Icon(
+                                      Icons.rate_review_outlined,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Submit Thought'),
+                                    style: OutlinedButton.styleFrom(
+                                      visualDensity: VisualDensity.compact,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                        if (canPause) ...[
-                          const SizedBox(width: 8),
-                          IconButton(
-                            onPressed: widget.onPause,
-                            tooltip: 'Pause task',
-                            style: IconButton.styleFrom(
-                              backgroundColor: scheme.surfaceContainerHighest,
-                              foregroundColor: scheme.onSurface,
-                              minimumSize: const Size(34, 34),
-                              padding: const EdgeInsets.all(8),
-                            ),
-                            icon: const Icon(Icons.pause_rounded, size: 18),
+                            ],
                           ),
-                        ],
+                        ),
+                        if (canPause)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: IconButton(
+                              onPressed: widget.onPause,
+                              tooltip: 'Pause task',
+                              style: IconButton.styleFrom(
+                                backgroundColor: scheme.surfaceContainerHighest,
+                                foregroundColor: scheme.onSurface,
+                                minimumSize: const Size(34, 34),
+                                padding: const EdgeInsets.all(8),
+                              ),
+                              icon: const Icon(Icons.pause_rounded, size: 18),
+                            ),
+                          ),
                       ],
                     ),
                     if (widget.stepsContent != null) ...[

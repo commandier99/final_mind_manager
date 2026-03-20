@@ -7,7 +7,8 @@ class NavigationProvider extends ChangeNotifier {
   int? _sideMenuIndex;
   String _currentTitle = 'Home';
   Task? _selectedTask;
-  String _memoryBankThoughtKey = memoryBankThoughtAll;
+  String? _selectedThoughtId;
+  String? _selectedThoughtType;
 
   int get selectedIndex => _selectedIndex;
   int? get bottomNavIndex => _bottomNavIndex;
@@ -15,14 +16,8 @@ class NavigationProvider extends ChangeNotifier {
   String get currentTitle => _currentTitle;
   bool get isViewingTaskDetails => _selectedTask != null;
   Task? get selectedTask => _selectedTask;
-  String get memoryBankThoughtKey => _memoryBankThoughtKey;
-
-  static const String memoryBankThoughtAll = 'all';
-  static const String memoryBankThoughtBoardInvites = 'board_invites';
-  static const String memoryBankThoughtTaskAssignments = 'task_assignments';
-  static const String memoryBankThoughtSuggestions = 'suggestions';
-  static const String memoryBankThoughtFeedback = 'feedback';
-  static const String memoryBankThoughtReminders = 'reminders';
+  String? get selectedThoughtId => _selectedThoughtId;
+  String? get selectedThoughtType => _selectedThoughtType;
 
   static const List<String> _titles = [
     // Bottom nav
@@ -33,13 +28,13 @@ class NavigationProvider extends ChangeNotifier {
 
     // Side menu
     'Profile',
-    'Notifications',
     'Search & Discover',
+    'Notifications',
+    'Thoughts',
     'Settings',
     'Help/FAQ',
     'About',
     'Mind:Set',
-    'Memory Bank',
   ];
 
   void selectFromBottomNav(int index) {
@@ -47,9 +42,6 @@ class NavigationProvider extends ChangeNotifier {
     _bottomNavIndex = index;
     _sideMenuIndex = null;
     _currentTitle = _titles[index];
-    if (index != 11) {
-      _memoryBankThoughtKey = memoryBankThoughtAll;
-    }
     notifyListeners();
   }
 
@@ -58,29 +50,22 @@ class NavigationProvider extends ChangeNotifier {
     _bottomNavIndex = null; // hides bottom nav highlight
     _sideMenuIndex = index; // highlights side menu item
     _currentTitle = _titles[index];
-    if (index != 11) {
-      _memoryBankThoughtKey = memoryBankThoughtAll;
-    }
     notifyListeners();
   }
 
-  void openMemoryBank({String thoughtKey = memoryBankThoughtAll}) {
-    _selectedIndex = 11;
+  void openThoughts({String? thoughtId, String? thoughtType}) {
+    _selectedIndex = 7;
     _bottomNavIndex = null;
-    _sideMenuIndex = 11;
-    _currentTitle = _titles[11];
-    _memoryBankThoughtKey = thoughtKey;
+    _sideMenuIndex = 7;
+    _currentTitle = _titles[7];
+    _selectedThoughtId = thoughtId;
+    _selectedThoughtType = thoughtType;
     notifyListeners();
   }
 
-  void setMemoryBankThought(String thoughtKey) {
-    _memoryBankThoughtKey = thoughtKey;
-    if (_selectedIndex != 11) {
-      _selectedIndex = 11;
-      _bottomNavIndex = null;
-      _sideMenuIndex = 11;
-      _currentTitle = _titles[11];
-    }
+  void clearThoughtSelection() {
+    _selectedThoughtId = null;
+    _selectedThoughtType = null;
     notifyListeners();
   }
 

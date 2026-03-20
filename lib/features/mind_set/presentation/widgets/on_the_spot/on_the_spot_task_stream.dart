@@ -15,6 +15,7 @@ import '../../../datasources/services/mind_set_session_runtime_service.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
 import '../../../../../shared/features/query/task_query_controller.dart';
+import '../../utils/session_task_submission_helper.dart';
 
 class OnTheSpotTaskStream extends StatefulWidget {
   final String sessionId;
@@ -294,6 +295,10 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
         SnackBar(content: Text(e.message.toString())),
       );
     }
+  }
+
+  Future<void> _openSubmissionFlow(Task task) async {
+    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
   Duration _consumeElapsedForTask(String taskId) {
@@ -786,8 +791,13 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                               showFrogBadge: isFrogTask,
                               onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,
-                              onToggleDone: canToggleDone
+                              onToggleDone:
+                                  canToggleDone && !task.taskRequiresSubmission
                                   ? (isDone) => _toggleDoneForTask(task, isDone)
+                                  : null,
+                              onSubmitThought:
+                                  canToggleDone && task.taskRequiresSubmission
+                                  ? () => _openSubmissionFlow(task)
                                   : null,
                               onDelete: () => _deleteTask(task),
                             ),

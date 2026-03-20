@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../services/deadline_reminder_service.dart';
-import '../../services/firebase_messaging_service.dart';
+import '../../services/task_deadline_reminder_service.dart';
 import '../widgets/app_top_bar.dart';
 import '../widgets/app_bottom_navigation.dart';
 import '../widgets/app_side_menu.dart';
@@ -11,15 +10,17 @@ import '../../../features/plans/presentation/pages/plans_page.dart';
 import '../../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../datasources/providers/navigation_provider.dart';
 import '../../features/users/datasources/providers/user_provider.dart';
-import '../../../features/notifications/presentation/pages/notifications_page.dart';
-import '../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 import '../pages/profile_page.dart';
 import '../pages/search_and_discover_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/help_page.dart';
 import '../pages/about_page.dart';
 import '../../../features/mind_set/presentation/pages/mind_set_page.dart';
-import '../../features/memory/presentation/pages/memory_page.dart';
+import '../../../features/notifications/datasources/providers/notification_provider.dart';
+import '../../../features/notifications/presentation/pages/notifications_page.dart';
+import '../../../features/thoughts/presentation/pages/thoughts_page.dart';
+import '../../../features/boards/datasources/providers/board_provider.dart';
+import '../../../features/boards/datasources/providers/board_stats_provider.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -30,6 +31,9 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+  final ProfilePageController _profilePageController = ProfilePageController();
+  final TaskDeadlineReminderService _taskDeadlineReminderService =
+      TaskDeadlineReminderService();
   VoidCallback? _homeSettingsPressed;
   VoidCallback? _boardsSearchToggle;
   VoidCallback? _plansSearchToggle;
@@ -37,10 +41,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   VoidCallback? _boardsSortPressed;
   VoidCallback? _plansFilterPressed;
   VoidCallback? _plansSortPressed;
-  VoidCallback? _notificationsFilterPressed;
-  String? _lastNotificationsUserId;
 
-  // Search state
   bool _boardsSearchExpanded = false;
   bool _plansSearchExpanded = false;
   TextEditingController? _boardsSearchController;
@@ -49,8 +50,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
   ValueChanged<String>? _plansSearchChanged;
   VoidCallback? _boardsSearchClear;
   VoidCallback? _plansSearchClear;
+  String? _activeUserId;
 
-  // Pages aligned with NavigationProvider.titles indexes
   List<Widget> get _pages => [
     HomePage(
       key: const ValueKey('home_page'),
@@ -91,63 +92,52 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       onSortPressedReady: (handler) => _plansSortPressed = handler,
     ),
     const DashboardPage(),
-    const ProfilePage(),
-    NotificationsPage(
-      key: const ValueKey('notifications_page'),
-      onFilterPressedReady: (handler) {
-        if (!mounted) return;
-        if (_notificationsFilterPressed == handler) return;
-        setState(() {
-          _notificationsFilterPressed = handler;
-        });
-      },
-    ),
+    ProfilePage(controller: _profilePageController),
     const SearchAndDiscoverPage(),
+    const NotificationsPage(),
+    const ThoughtsPage(),
     const SettingsPage(),
     const HelpPage(),
     const AboutPage(),
     const MindSetPage(),
-    const MemoryPage(),
   ];
-
-  final DeadlineReminderService _deadlineReminderService =
-      DeadlineReminderService(FirebaseMessagingService().localNotifications);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _profilePageController.addListener(_handleProfileControllerChanged);
 
-    // Start periodic reminders after first frame
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _deadlineReminderService.checkAndSendReminders();
-      _deadlineReminderService.startPeriodicReminders();
+      await _taskDeadlineReminderService.checkAndCreateReminders();
+      _taskDeadlineReminderService.startPeriodicReminders();
       if (!mounted) return;
       context.read<UserProvider>().markUserActive(force: true);
+      final userId = context.read<UserProvider>().userId;
+      if (userId != null && userId.isNotEmpty) {
+        context.read<NotificationProvider>().streamNotificationsForUser(userId);
+      }
     });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final userId = context.read<UserProvider>().userId;
-    if (userId == null || userId.isEmpty) return;
-    if (_lastNotificationsUserId == userId) return;
-    _lastNotificationsUserId = userId;
-    context.read<InAppNotificationProvider>().streamNotificationsByUser(userId);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _taskDeadlineReminderService.stopPeriodicReminders();
+    _profilePageController.removeListener(_handleProfileControllerChanged);
+    _profilePageController.dispose();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _deadlineReminderService.checkAndSendReminders();
+      _taskDeadlineReminderService.checkAndCreateReminders();
       context.read<UserProvider>().markUserActive(force: true);
+      final userId = context.read<UserProvider>().userId;
+      if (userId != null && userId.isNotEmpty) {
+        context.read<NotificationProvider>().streamNotificationsForUser(userId);
+      }
     }
   }
 
@@ -155,47 +145,58 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
     _scaffoldKey.currentState?.openDrawer();
   }
 
+  void _openNotifications() {
+    context.read<NavigationProvider>().selectFromSideMenu(6);
+  }
+
   void _handleSearchPressed() {
     final navigation = context.read<NavigationProvider>();
     final selectedIndex = navigation.selectedIndex;
 
-    // Trigger search in current page
     if (selectedIndex == 1) {
-      // Boards page
       _boardsSearchToggle?.call();
     } else if (selectedIndex == 2) {
-      // Plans page
       _plansSearchToggle?.call();
     } else {
-      // Navigate to Search & Discover page for other pages
-      navigation.selectFromSideMenu(6);
+      navigation.selectFromSideMenu(5);
     }
+  }
+
+  void _handleProfileControllerChanged() {
+    if (!mounted) return;
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    final currentUserId = context.watch<UserProvider>().userId;
+    if (_activeUserId != currentUserId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        context.read<BoardProvider>().syncForCurrentUser();
+        context.read<BoardStatsProvider>().clear();
+      });
+      _activeUserId = currentUserId;
+    }
+
     final navigation = context.watch<NavigationProvider>();
     final selectedIndex = navigation.selectedIndex;
-    final isNotificationsPage = selectedIndex == 5;
-    final showNotificationButton =
-        !isNotificationsPage &&
-        (selectedIndex == 0 || navigation.sideMenuIndex != null);
 
-    // Custom actions for notifications page (3-dot menu)
     List<Widget>? customActions;
-    if (isNotificationsPage) {
+    if (selectedIndex == 0) {
       customActions = [
-        IconButton(
-          icon: const Icon(Icons.filter_list),
-          onPressed: _notificationsFilterPressed,
-          tooltip: 'Filter',
-        ),
-      ];
-    } else if (selectedIndex == 0) {
-      customActions = [
-        _buildNotificationAction(
-          onPressed: () {
-            navigation.selectFromSideMenu(5);
+        Consumer<NotificationProvider>(
+          builder: (context, notificationProvider, _) {
+            final unreadCount = notificationProvider.unreadCount;
+            return IconButton(
+              icon: Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+              onPressed: _openNotifications,
+              tooltip: 'Notifications',
+            );
           },
         ),
         IconButton(
@@ -230,28 +231,69 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           tooltip: 'Search',
         ),
       ];
+    } else if (selectedIndex == 4) {
+      customActions = [
+        PopupMenuButton<String>(
+          tooltip: 'Profile options',
+          onSelected: (value) {
+            if (value == 'edit') {
+              _profilePageController.enterEditMode();
+            } else if (value == 'cancel') {
+              _profilePageController.cancelEditMode();
+            }
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem<String>(
+              value: _profilePageController.isEditingProfile ? 'cancel' : 'edit',
+              child: Text(
+                _profilePageController.isEditingProfile
+                    ? 'Cancel editing'
+                    : 'Edit profile',
+              ),
+            ),
+          ],
+        ),
+      ];
     }
 
-    // Determine search state based on current page
     final isSearchExpanded = selectedIndex == 1
         ? _boardsSearchExpanded
         : selectedIndex == 2
-        ? _plansSearchExpanded
-        : false;
+            ? _plansSearchExpanded
+            : false;
     final searchController = selectedIndex == 1
         ? _boardsSearchController
         : selectedIndex == 2
-        ? _plansSearchController
-        : null;
+            ? _plansSearchController
+            : null;
     final onSearchChanged = selectedIndex == 1
         ? _boardsSearchChanged
         : selectedIndex == 2
-        ? _plansSearchChanged
-        : null;
+            ? _plansSearchChanged
+            : null;
     final onSearchClear = selectedIndex == 1
         ? _boardsSearchClear
         : selectedIndex == 2
-        ? _plansSearchClear
+            ? _plansSearchClear
+            : null;
+
+    final floatingActionButton = selectedIndex == 4 &&
+            _profilePageController.isEditingProfile
+        ? FloatingActionButton.extended(
+            onPressed: _profilePageController.isSavingProfile
+                ? null
+                : () => _profilePageController.saveProfileChanges(),
+            icon: _profilePageController.isSavingProfile
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_outlined),
+            label: Text(
+              _profilePageController.isSavingProfile ? 'Saving...' : 'Save',
+            ),
+          )
         : null;
 
     return Scaffold(
@@ -262,8 +304,8 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
           navigation.selectFromBottomNav(0);
         },
         title: navigation.currentTitle,
-        showNotificationButton: showNotificationButton,
-        showBackButton: isNotificationsPage,
+        showNotificationButton: selectedIndex == 0 || navigation.sideMenuIndex != null,
+        showBackButton: false,
         customActions: customActions,
         onSearchPressed: _handleSearchPressed,
         isSearchExpanded: isSearchExpanded,
@@ -277,6 +319,7 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
         },
       ),
       body: IndexedStack(index: selectedIndex, children: _pages),
+      floatingActionButton: floatingActionButton,
       bottomNavigationBar: AppBottomNavigation(
         currentIndex: navigation.bottomNavIndex ?? 0,
         onTap: (index) {
@@ -285,37 +328,4 @@ class _MainScreenState extends State<MainScreen> with WidgetsBindingObserver {
       ),
     );
   }
-
-  Widget _buildNotificationAction({required VoidCallback onPressed}) {
-    return Consumer<InAppNotificationProvider>(
-      builder: (context, inAppProvider, _) {
-        final unreadCount = inAppProvider.unreadCount;
-        return IconButton(
-          onPressed: onPressed,
-          tooltip: 'Notifications',
-          icon: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              const Icon(Icons.notifications_outlined),
-              if (unreadCount > 0)
-                Positioned(
-                  right: -1,
-                  top: -1,
-                  child: Container(
-                    width: 9,
-                    height: 9,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      borderRadius: BorderRadius.circular(99),
-                      border: Border.all(color: Colors.white, width: 1.2),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
-

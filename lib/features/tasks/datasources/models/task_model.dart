@@ -56,6 +56,7 @@ class Task {
   final String
   taskApprovalStatus; // none | pending | approved | rejected | changes_requested
   final String? taskSubmissionId; // Reference to task submission if exists
+  final String? taskLatestSubmissionThoughtId;
 
   // Repeating Fields
   final bool taskIsRepeating; // Does the task repeat?
@@ -113,6 +114,7 @@ class Task {
     this.taskRequiresApproval = false,
     this.taskApprovalStatus = 'none',
     this.taskSubmissionId,
+    this.taskLatestSubmissionThoughtId,
     this.taskIsRepeating = false,
     this.taskRepeatInterval,
     this.taskRepeatEndDate,
@@ -273,6 +275,8 @@ class Task {
         data['taskApprovalStatus'] as String? ?? 'none',
       ),
       taskSubmissionId: data['taskSubmissionId'] as String?,
+      taskLatestSubmissionThoughtId:
+          data['taskLatestSubmissionThoughtId'] as String?,
       taskIsRepeating: data['taskIsRepeating'] as bool? ?? false,
       taskRepeatInterval: data['taskRepeatInterval'] as String?,
       taskRepeatEndDate: (data['taskRepeatEndDate'] as Timestamp?)?.toDate(),
@@ -330,6 +334,8 @@ class Task {
       'taskRequiresApproval': taskRequiresApproval,
       'taskApprovalStatus': normalizeTaskApprovalStatus(taskApprovalStatus),
       if (taskSubmissionId != null) 'taskSubmissionId': taskSubmissionId,
+      if (taskLatestSubmissionThoughtId != null)
+        'taskLatestSubmissionThoughtId': taskLatestSubmissionThoughtId,
       'taskIsRepeating': taskIsRepeating,
       if (taskRepeatInterval != null) 'taskRepeatInterval': taskRepeatInterval,
       if (taskRepeatEndDate != null)
@@ -382,6 +388,7 @@ class Task {
     bool? taskRequiresApproval,
     String? taskApprovalStatus,
     String? taskSubmissionId,
+    String? taskLatestSubmissionThoughtId,
     bool? taskIsRepeating,
     String? taskRepeatInterval,
     DateTime? taskRepeatEndDate,
@@ -430,6 +437,8 @@ class Task {
         taskApprovalStatus ?? this.taskApprovalStatus,
       ),
       taskSubmissionId: taskSubmissionId ?? this.taskSubmissionId,
+      taskLatestSubmissionThoughtId:
+          taskLatestSubmissionThoughtId ?? this.taskLatestSubmissionThoughtId,
       taskIsRepeating: taskIsRepeating ?? this.taskIsRepeating,
       taskRepeatInterval: taskRepeatInterval ?? this.taskRepeatInterval,
       taskRepeatEndDate: taskRepeatEndDate ?? this.taskRepeatEndDate,

@@ -75,26 +75,27 @@ class AppSideMenu extends StatelessWidget {
             title: const Text('Search & Discover'),
             onTap: () {
               Navigator.pop(context);
-              onSelect?.call(6);
-              context.read<NavigationProvider>().selectFromSideMenu(6);
+              onSelect?.call(5);
+              context.read<NavigationProvider>().selectFromSideMenu(5);
             },
           ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.psychology_outlined),
             title: const Text('Mind:Set'),
             onTap: () {
               Navigator.pop(context);
-              onSelect?.call(10);
-              context.read<NavigationProvider>().selectFromSideMenu(10);
+              onSelect?.call(11);
+              context.read<NavigationProvider>().selectFromSideMenu(11);
             },
           ),
           ListTile(
-            leading: const Icon(Icons.memory_outlined),
-            title: const Text('Memory Bank'),
+            leading: const Icon(Icons.forum_outlined),
+            title: const Text('Thoughts'),
             onTap: () {
               Navigator.pop(context);
-              onSelect?.call(11);
-              context.read<NavigationProvider>().openMemoryBank();
+              onSelect?.call(7);
+              context.read<NavigationProvider>().selectFromSideMenu(7);
             },
           ),
           const Divider(),
@@ -103,8 +104,8 @@ class AppSideMenu extends StatelessWidget {
             title: const Text('Settings'),
             onTap: () {
               Navigator.pop(context);
-              onSelect?.call(7);
-              context.read<NavigationProvider>().selectFromSideMenu(7);
+              onSelect?.call(8);
+              context.read<NavigationProvider>().selectFromSideMenu(8);
             },
           ),
           ListTile(
@@ -112,8 +113,8 @@ class AppSideMenu extends StatelessWidget {
             title: const Text('Help/FAQ'),
             onTap: () {
               Navigator.pop(context);
-              onSelect?.call(8);
-              context.read<NavigationProvider>().selectFromSideMenu(8);
+              onSelect?.call(9);
+              context.read<NavigationProvider>().selectFromSideMenu(9);
             },
           ),
           ListTile(
@@ -121,8 +122,8 @@ class AppSideMenu extends StatelessWidget {
             title: const Text('About'),
             onTap: () {
               Navigator.pop(context);
-              onSelect?.call(9);
-              context.read<NavigationProvider>().selectFromSideMenu(9);
+              onSelect?.call(10);
+              context.read<NavigationProvider>().selectFromSideMenu(10);
             },
           ),
           const Divider(),

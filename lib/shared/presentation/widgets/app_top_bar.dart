@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../features/notifications/datasources/providers/notification_provider.dart';
 import '../../datasources/providers/navigation_provider.dart';
-import '../../../features/notifications/datasources/providers/in_app_notif_provider.dart';
 
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback? onMenuPressed;
@@ -102,34 +102,19 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
     return [
       if (showNotificationButton)
-        Consumer<InAppNotificationProvider>(
-          builder: (context, inAppProvider, _) {
-            final unreadCount = inAppProvider.unreadCount;
+        Consumer<NotificationProvider>(
+          builder: (context, notificationProvider, _) {
+            final unreadCount = notificationProvider.unreadCount;
             return IconButton(
+              icon: Badge(
+                isLabelVisible: unreadCount > 0,
+                label: Text(unreadCount > 99 ? '99+' : '$unreadCount'),
+                child: const Icon(Icons.notifications_outlined),
+              ),
               onPressed: () {
-                context.read<NavigationProvider>().selectFromSideMenu(5);
+                context.read<NavigationProvider>().selectFromSideMenu(6);
               },
               tooltip: 'Notifications',
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.notifications_outlined),
-                  if (unreadCount > 0)
-                    Positioned(
-                      right: -1,
-                      top: -1,
-                      child: Container(
-                        width: 9,
-                        height: 9,
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent,
-                          borderRadius: BorderRadius.circular(99),
-                          border: Border.all(color: Colors.white, width: 1.2),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
             );
           },
         )
@@ -139,7 +124,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
           onPressed:
               onSearchPressed ??
               () {
-                context.read<NavigationProvider>().selectFromSideMenu(6);
+                context.read<NavigationProvider>().selectFromSideMenu(5);
               },
           tooltip: 'Search',
         ),

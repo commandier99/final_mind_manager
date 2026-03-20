@@ -4,7 +4,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:mind_manager_final/features/notifications/datasources/services/push_messaging_service.dart';
 
 import '../models/user_model.dart';
 import '../services/user_services.dart';
@@ -62,9 +61,7 @@ class UserProvider extends ChangeNotifier {
 
     await loadUserData(firebaseUser.uid);
 
-    // Only register FCM token if user document exists.
     if (_currentUser != null) {
-      await PushMessagingService().registerTokenForUser(firebaseUser.uid);
       await markUserActive(force: true);
     }
   }
@@ -108,20 +105,28 @@ class UserProvider extends ChangeNotifier {
     if (_currentUser == null) return;
 
     final previousState = _currentUser!.userIsPublic;
+    final previousSearchState = _currentUser!.userAllowSearch;
 
     try {
-      _currentUser = _currentUser!.copyWith(userIsPublic: isPublic);
+      _currentUser = _currentUser!.copyWith(
+        userIsPublic: isPublic,
+        userAllowSearch: isPublic,
+      );
       notifyListeners();
 
       await _userService.updateUserFields(_currentUser!.userId, {
         'userIsPublic': isPublic,
+        'userAllowSearch': isPublic,
       });
 
       _log('Public visibility updated -> $isPublic');
     } catch (e) {
       _log('[UserProvider] Error toggling public profile: $e');
 
-      _currentUser = _currentUser!.copyWith(userIsPublic: previousState);
+      _currentUser = _currentUser!.copyWith(
+        userIsPublic: previousState,
+        userAllowSearch: previousSearchState,
+      );
       notifyListeners();
       rethrow;
     }
@@ -130,15 +135,23 @@ class UserProvider extends ChangeNotifier {
   Future<void> setAllowSearch(bool allowSearch) async {
     if (_currentUser == null) return;
 
+    final previousPublic = _currentUser!.userIsPublic;
     final previous = _currentUser!.userAllowSearch;
     try {
-      _currentUser = _currentUser!.copyWith(userAllowSearch: allowSearch);
+      _currentUser = _currentUser!.copyWith(
+        userAllowSearch: allowSearch,
+        userIsPublic: allowSearch,
+      );
       notifyListeners();
       await _userService.updateUserFields(_currentUser!.userId, {
         'userAllowSearch': allowSearch,
+        'userIsPublic': allowSearch,
       });
     } catch (e) {
-      _currentUser = _currentUser!.copyWith(userAllowSearch: previous);
+      _currentUser = _currentUser!.copyWith(
+        userAllowSearch: previous,
+        userIsPublic: previousPublic,
+      );
       notifyListeners();
       rethrow;
     }

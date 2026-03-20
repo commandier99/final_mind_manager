@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 import '../models/board_stats_model.dart';
 import '../services/board_stats_services.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +9,7 @@ class BoardStatsProvider extends ChangeNotifier {
 
   final Map<String, BoardStats> _stats = {};
   Map<String, BoardStats> get stats => _stats;
+  final Map<String, StreamSubscription<BoardStats>> _subscriptions = {};
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
@@ -50,7 +52,14 @@ class BoardStatsProvider extends ChangeNotifier {
     debugPrint(
       '[BoardStatsProvider] streamStatsForBoard called for boardId: $boardId',
     );
-    _statsService
+    if (_subscriptions.containsKey(boardId)) {
+      debugPrint(
+        '[BoardStatsProvider] Subscription already active for boardId: $boardId',
+      );
+      return;
+    }
+
+    _subscriptions[boardId] = _statsService
         .streamStatsByBoardId(boardId)
         .listen(
           (boardStats) {
@@ -61,9 +70,46 @@ class BoardStatsProvider extends ChangeNotifier {
             notifyListeners();
           },
           onError: (error) {
-            debugPrint('[BoardStatsProvider] Stream error: $error');
+            debugPrint(
+              '[BoardStatsProvider] Stream error for board $boardId: $error',
+            );
+            _subscriptions.remove(boardId);
+            _stats.remove(boardId);
+            notifyListeners();
           },
         );
+  }
+
+  void stopStreamingBoard(String boardId) {
+    debugPrint('[BoardStatsProvider] stopStreamingBoard called for $boardId');
+    _subscriptions.remove(boardId)?.cancel();
+  }
+
+  void syncStreamingBoards(Iterable<String> boardIds) {
+    final nextIds = boardIds.toSet();
+    debugPrint(
+      '[BoardStatsProvider] syncStreamingBoards nextIds=$nextIds active=${_subscriptions.keys.toSet()}',
+    );
+
+    for (final boardId in _subscriptions.keys.toList()) {
+      if (!nextIds.contains(boardId)) {
+        debugPrint(
+          '[BoardStatsProvider] Cancelling stale stats subscription for $boardId',
+        );
+        _subscriptions.remove(boardId)?.cancel();
+        _stats.remove(boardId);
+      }
+    }
+  }
+
+  void clear() {
+    for (final subscription in _subscriptions.values) {
+      subscription.cancel();
+    }
+    _subscriptions.clear();
+    _stats.clear();
+    _isLoading = false;
+    notifyListeners();
   }
 
   // ------------------------
@@ -150,6 +196,12 @@ class BoardStatsProvider extends ChangeNotifier {
   // ------------------------
   BoardStats? getStatsForBoard(String boardId) {
     return _stats[boardId];
+  }
+
+  @override
+  void dispose() {
+    clear();
+    super.dispose();
   }
 }
 

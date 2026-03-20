@@ -1,231 +1,213 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../datasources/providers/in_app_notif_provider.dart';
-import '../../datasources/models/in_app_notif_model.dart';
-import '../../datasources/models/push_notif_model.dart';
-import '../widgets/sections/all_notifs_section.dart';
+
+import '../../../../shared/datasources/providers/navigation_provider.dart';
+import '../../../../shared/features/users/datasources/providers/user_provider.dart';
+import '../../datasources/models/notification_model.dart';
+import '../../datasources/providers/notification_provider.dart';
+import '../widgets/cards/notification_card.dart';
 
 class NotificationsPage extends StatefulWidget {
-  final ValueChanged<VoidCallback>? onFilterPressedReady;
-
-  const NotificationsPage({
-    super.key,
-    this.onFilterPressedReady,
-  });
+  const NotificationsPage({super.key});
 
   @override
   State<NotificationsPage> createState() => _NotificationsPageState();
 }
 
 class _NotificationsPageState extends State<NotificationsPage> {
-  final Set<String> _selectedFilters = <String>{};
-  bool _hasInitializedStreams = false;
-  static const Map<String, String> _filterLabels = {
-    notifFilterPokes: 'Reminders',
-    notifFilterReminders: 'Reminders',
-    notifFilterAssignments: 'Assignments',
-    notifFilterSubmissions: 'Submissions',
-    notifFilterSuggestions: 'Suggestions',
-    notifFilterInvites: 'Invites',
-  };
+  bool _isAutoMarkingRead = false;
 
   @override
   void initState() {
     super.initState();
-    _ensureStreamsStarted();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      widget.onFilterPressedReady?.call(_openFilterSheet);
+      final userId = context.read<UserProvider>().userId;
+      if (userId != null && userId.isNotEmpty) {
+        context.read<NotificationProvider>().streamNotificationsForUser(userId);
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    _ensureStreamsStarted();
-    return Column(
-      children: [
-        if (_selectedFilters.isNotEmpty)
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: Row(
-              children: _selectedFilters
-                  .map(
-                    (key) => Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: InputChip(
-                        label: Text(_filterLabels[key] ?? key),
-                        onDeleted: () {
-                          setState(() {
-                            _selectedFilters.remove(key);
-                          });
-                        },
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => _refreshNotifications(context),
-            child: _buildBody(context),
-          ),
-        ),
-      ],
-    );
-  }
+    final isActivePage = context.watch<NavigationProvider>().selectedIndex == 6;
 
-  Future<void> _openFilterSheet() async {
-    final tempSelection = Set<String>.from(_selectedFilters);
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Filter Notifications',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    ..._filterLabels.entries.map((entry) {
-                      final checked = tempSelection.contains(entry.key);
-                      return CheckboxListTile(
-                        value: checked,
-                        title: Text(entry.value),
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        onChanged: (_) {
-                          setModalState(() {
-                            if (checked) {
-                              tempSelection.remove(entry.key);
-                            } else {
-                              tempSelection.add(entry.key);
-                            }
-                          });
-                        },
-                      );
-                    }),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            setModalState(tempSelection.clear);
-                          },
-                          child: const Text('Clear All'),
-                        ),
-                        const Spacer(),
-                        TextButton(
-                          onPressed: () => Navigator.of(sheetContext).pop(),
-                          child: const Text('Cancel'),
-                        ),
-                        const SizedBox(width: 8),
-                        FilledButton(
-                          onPressed: () {
-                            if (!mounted) return;
-                            setState(() {
-                              _selectedFilters
-                                ..clear()
-                                ..addAll(tempSelection);
-                            });
-                            Navigator.of(sheetContext).pop();
-                          },
-                          child: const Text('Apply'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+    return Consumer<NotificationProvider>(
+      builder: (context, provider, _) {
+        if (isActivePage) {
+          _autoMarkVisibleNotificationsAsRead(provider);
+        }
+        final visibleNotifications = provider.notifications;
+        final listItems = _buildListItems(visibleNotifications);
+
+        if (provider.isLoading && provider.notifications.isEmpty) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        if (provider.error != null && provider.notifications.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text(
+                provider.error!,
+                style: const TextStyle(color: Colors.red),
+                textAlign: TextAlign.center,
               ),
-            );
-          },
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: visibleNotifications.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Text(
+                          'No notifications yet.',
+                          style: TextStyle(color: Colors.grey.shade600),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: listItems.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final item = listItems[index];
+                        if (item.header != null) {
+                          return _DaySeparator(label: item.header!);
+                        }
+                        final notification = item.notification!;
+                        return NotificationCard(
+                          notification: notification,
+                          onOpen: () => _openNotification(notification),
+                        );
+                      },
+                    ),
+            ),
+          ],
         );
       },
     );
   }
 
-  void _ensureStreamsStarted() {
-    if (_hasInitializedStreams) return;
-
-    final userId = FirebaseAuth.instance.currentUser?.uid;
-    debugPrint('[NotificationsPage] ensureStreams: userId = $userId');
-
-    if (userId == null) return;
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _hasInitializedStreams) return;
-
-      _hasInitializedStreams = true;
-
-      // Stream in-app notifications
-      debugPrint('[NotificationsPage] Streaming in-app notifications...');
-      context.read<InAppNotificationProvider>().streamNotificationsByUser(
-        userId,
-      );
+  void _autoMarkVisibleNotificationsAsRead(NotificationProvider provider) {
+    if (_isAutoMarkingRead || provider.unreadCount == 0) return;
+    _isAutoMarkingRead = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (!mounted) return;
+        await context.read<NotificationProvider>().markAllAsRead();
+      } finally {
+        _isAutoMarkingRead = false;
+      }
     });
   }
 
-  Widget _buildBody(BuildContext context) {
-    return buildAllNotificationsSection(
-      context,
-      () => _refreshNotifications(context),
-      _getNotificationDate,
-      _buildEmptyState,
-      _selectedFilters,
-    );
-  }
+  List<_NotificationListItem> _buildListItems(
+    List<AppNotification> notifications,
+  ) {
+    final items = <_NotificationListItem>[];
+    String? previousBucket;
 
-  Future<void> _refreshNotifications(BuildContext context) async {
-    _ensureStreamsStarted();
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-  }
-
-  DateTime _getNotificationDate(dynamic notification) {
-    if (notification is InAppNotification) {
-      return notification.createdAt;
-    } else if (notification is PushNotification) {
-      return notification.createdAt;
+    for (final notification in notifications) {
+      final bucket = _dayBucket(notification.createdAt);
+      if (bucket != previousBucket) {
+        previousBucket = bucket;
+        items.add(_NotificationListItem.header(_dayLabel(notification.createdAt)));
+      }
+      items.add(_NotificationListItem.notification(notification));
     }
-    return DateTime.now();
+
+    return items;
   }
 
-  Widget _buildEmptyState() {
-    final isFiltered = _selectedFilters.isNotEmpty;
-    final selectedNames = _selectedFilters
-        .map((key) => _filterLabels[key] ?? key)
-        .toList();
-    final subtitle = isFiltered
-        ? 'No items for: ${selectedNames.join(', ')}'
-        : 'You\'re all caught up!';
+  String _dayBucket(DateTime value) =>
+      '${value.year}-${value.month}-${value.day}';
 
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.notifications_none, size: 80, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            isFiltered ? 'No matching notifications' : 'No notifications',
-            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+  String _dayLabel(DateTime value) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final target = DateTime(value.year, value.month, value.day);
+    final difference = today.difference(target).inDays;
+    if (difference == 0) return 'Today';
+    if (difference == 1) return 'Yesterday';
+    return '${value.month}/${value.day}/${value.year}';
+  }
+
+  void _openNotification(AppNotification notification) {
+    final thoughtId = (notification.thoughtId ?? '').trim();
+    if (thoughtId.isNotEmpty) {
+      context.read<NavigationProvider>().openThoughts(
+        thoughtId: thoughtId,
+        thoughtType: _thoughtTypeForNotification(notification.type),
+      );
+      return;
+    }
+  }
+
+  String? _thoughtTypeForNotification(String type) {
+    final normalized = type.trim().toLowerCase();
+    if (normalized.startsWith('thought_board_')) return 'board_request';
+    if (normalized.startsWith('thought_task_assignment_') ||
+        normalized.startsWith('thought_task_request_')) {
+      return 'task_assignment';
+    }
+    if (normalized.startsWith('thought_deadline_extension_request_')) {
+      return 'task_request';
+    }
+    if (normalized.startsWith('thought_submission_')) {
+      return 'submission_feedback';
+    }
+    return null;
+  }
+}
+
+class _NotificationListItem {
+  const _NotificationListItem._({this.header, this.notification});
+
+  const _NotificationListItem.header(String value)
+    : this._(header: value);
+
+  const _NotificationListItem.notification(AppNotification value)
+    : this._(notification: value);
+
+  final String? header;
+  final AppNotification? notification;
+}
+
+class _DaySeparator extends StatelessWidget {
+  const _DaySeparator({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: Divider(color: theme.colorScheme.outlineVariant),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            label,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            subtitle,
-            style: TextStyle(fontSize: 14, color: Colors.grey[500]),
-          ),
-        ],
-      ),
+        ),
+        Expanded(
+          child: Divider(color: theme.colorScheme.outlineVariant),
+        ),
+      ],
     );
   }
 }

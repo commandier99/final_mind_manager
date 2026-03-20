@@ -93,18 +93,21 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     _taskAllowsSubmissions = widget.task.taskAllowsSubmissions;
     _taskRequiresSubmission = widget.task.taskRequiresSubmission;
     _taskRequiresApproval = widget.task.taskRequiresApproval;
-    // Pending external assignments are tracked in proposed assignee fields.
-    if (widget.task.taskAssignmentStatus == 'pending' &&
-        widget.task.taskProposedAssigneeId != null &&
-        widget.task.taskProposedAssigneeId!.isNotEmpty) {
-      _assignedToUserId = widget.task.taskProposedAssigneeId;
-      _assignedToUserName = widget.task.taskProposedAssigneeName;
-    }
-    // Handle "None" or empty assignedTo values
-    else if (widget.task.taskAssignedTo.isEmpty ||
+    if (widget.task.taskAssignedTo.isEmpty ||
         widget.task.taskAssignedTo == 'None') {
-      _assignedToUserId = null;
-      _assignedToUserName = null;
+      final proposedAssigneeId =
+          (widget.task.taskProposedAssigneeId ?? '').trim();
+      final proposedAssigneeName =
+          (widget.task.taskProposedAssigneeName ?? '').trim();
+      if (proposedAssigneeId.isNotEmpty) {
+        _assignedToUserId = proposedAssigneeId;
+        _assignedToUserName = proposedAssigneeName.isEmpty
+            ? null
+            : proposedAssigneeName;
+      } else {
+        _assignedToUserId = null;
+        _assignedToUserName = null;
+      }
     } else {
       _assignedToUserId = widget.task.taskAssignedTo;
       _assignedToUserName = widget.task.taskAssignedToName;
@@ -182,17 +185,6 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     try {
       final taskProvider = context.read<TaskProvider>();
 
-      final currentAssigneeForComparison =
-          (widget.task.taskAssignmentStatus == 'pending' &&
-              (widget.task.taskProposedAssigneeId ?? '').isNotEmpty)
-          ? widget.task.taskProposedAssigneeId
-          : ((widget.task.taskAssignedTo == 'None' ||
-                    widget.task.taskAssignedTo.isEmpty)
-                ? null
-                : widget.task.taskAssignedTo);
-      final bool assigneeChanged =
-          _assignedToUserId != currentAssigneeForComparison;
-
       if (_boardType != 'personal' &&
           _assignedToUserId != null &&
           _assignedToUserId != widget.task.taskOwnerId &&
@@ -216,10 +208,12 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         return;
       }
 
-      final hasPendingExternalAssignment =
-          _boardType != 'personal' &&
+      final isDraftTeamTask =
+          _boardType == 'team' && _taskBoardLane == _laneDrafts;
+      final hasProposedAssignee =
+          isDraftTeamTask &&
           _assignedToUserId != null &&
-          _assignedToUserId != widget.task.taskOwnerId;
+          _assignedToUserId != 'None';
 
       final updatedTask = widget.task.copyWith(
         taskTitle: _titleController.text.trim(),
@@ -245,43 +239,33 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         // Personal boards always assign to manager.
         taskAssignedTo: _boardType == 'personal'
             ? widget.task.taskOwnerId
-            : (hasPendingExternalAssignment
-                  ? 'None'
-                  : (_assignedToUserId ?? 'None')),
+            : (hasProposedAssignee ? 'None' : (_assignedToUserId ?? 'None')),
         taskAssignedToName: _boardType == 'personal'
             ? widget.task.taskOwnerName
-            : (hasPendingExternalAssignment
-                  ? 'Unassigned'
+            : (hasProposedAssignee
+                  ? 'None (Pending)'
                   : (_assignedToUserName ?? 'Unassigned')),
         taskBoardLane: _boardType == 'personal'
             ? _lanePublished
             : _taskBoardLane,
-        // Reset acceptance status to 'pending' if task is reassigned to a different person
-        taskAssignmentStatus: _boardType == 'personal'
-            ? null
-            : (assigneeChanged
-                  ? (_assignedToUserId != null &&
-                            _assignedToUserId != widget.task.taskOwnerId
-                        ? 'pending'
-                        : null)
+        taskAssignmentStatus: hasProposedAssignee
+            ? 'pending'
+            : ((_assignedToUserId == null || _assignedToUserId == 'None')
+                  ? null
                   : widget.task.taskAssignmentStatus),
-        taskProposedAssigneeId: _boardType == 'personal'
-            ? null
-            : (hasPendingExternalAssignment ? _assignedToUserId : null),
-        taskProposedAssigneeName: _boardType == 'personal'
-            ? null
-            : (hasPendingExternalAssignment ? _assignedToUserName : null),
+        taskProposedAssigneeId: hasProposedAssignee ? _assignedToUserId : null,
+        taskProposedAssigneeName: hasProposedAssignee
+            ? _assignedToUserName
+            : null,
         taskDependencyIds: TaskDependencyHelper.sanitizeDependencyIds(
           _selectedDependencyIds,
           selfTaskId: widget.task.taskId,
         ),
         taskAllowsSubmissions: _taskAllowsSubmissions,
-        taskRequiresSubmission: _taskAllowsSubmissions
-            ? _taskRequiresSubmission
-            : false,
-        taskRequiresApproval: _taskAllowsSubmissions
-            ? _taskRequiresApproval
-            : false,
+        taskRequiresSubmission:
+            _taskAllowsSubmissions && _taskRequiresSubmission,
+        taskRequiresApproval:
+            _taskAllowsSubmissions && _taskRequiresApproval,
       );
 
       await taskProvider.updateTask(updatedTask);
@@ -907,9 +891,9 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
               _buildLaneSection(),
               const SizedBox(height: 12),
             ],
-            _buildSubmissionOptionsSection(),
-            const SizedBox(height: 12),
             _buildDependenciesSection(context),
+            const SizedBox(height: 12),
+            _buildSubmissionOptionsSection(),
             const SizedBox(height: 12),
             ...[
               if (_loadingMembers)

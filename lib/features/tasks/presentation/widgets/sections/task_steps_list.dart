@@ -5,6 +5,11 @@ import '../../../../steps/datasources/models/step_model.dart';
 import '../../../../steps/presentation/widgets/step_card.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
+import '../../../../boards/datasources/models/board_model.dart';
+import '../../../../thoughts/datasources/models/thought_model.dart';
+import '../../../../thoughts/datasources/services/thought_service.dart';
+import '../../../../thoughts/presentation/widgets/dialogs/create_thought_dialog.dart';
+import '../cards/suggested_step_card.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 
 class TaskStepsList extends StatefulWidget {
@@ -29,8 +34,10 @@ class TaskStepsList extends StatefulWidget {
 
 class _TaskStepsListState extends State<TaskStepsList> {
   final TextEditingController _newStepController = TextEditingController();
+  final ThoughtService _thoughtService = ThoughtService();
   bool _isAddingStepInline = false;
   bool _isSavingStepInline = false;
+  bool _showStepSuggestions = false;
 
   @override
   void initState() {
@@ -91,13 +98,36 @@ class _TaskStepsListState extends State<TaskStepsList> {
     final stepProvider = context.read<StepProvider>();
     final isTaskLocked = widget.task?.taskIsDone == true;
     final canMutateSteps = !isTaskLocked;
-    final canAddStep = canMutateSteps && _canAddStep();
+    final canAddRealStep = canMutateSteps && _canAddRealStep();
+    final canSuggestStep = canMutateSteps && _canSuggestStep();
+    final canViewStepSuggestions =
+        canMutateSteps && _canViewStepSuggestions();
 
     return Padding(
       padding: widget.contentPadding,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (canViewStepSuggestions) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: Divider(
+                    height: 1,
+                    thickness: 1,
+                    color: Theme.of(context).dividerColor.withValues(alpha: 0.45),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _buildSuggestionToggle(context),
+              ],
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (canViewStepSuggestions && _showStepSuggestions) ...[
+            _buildStepSuggestionStream(),
+            const SizedBox(height: 6),
+          ],
           // Stream of steps
           StreamBuilder<List<TaskStep>>(
             stream: stepProvider.streamStepsByTaskId(widget.parentTaskId),
@@ -218,10 +248,10 @@ class _TaskStepsListState extends State<TaskStepsList> {
                                     stepProvider.softDeleteStep(step);
                                   }
                                 : null,
-                            onEdit: canMutateSteps && canAddStep
+                            onEdit: canMutateSteps && canAddRealStep
                                 ? () => _openEditStepDialog(step)
                                 : null,
-                            onDuplicate: canMutateSteps && canAddStep
+                            onDuplicate: canMutateSteps && canAddRealStep
                                 ? () async {
                                     await stepProvider.duplicateStep(step);
                                     if (!context.mounted) return;
@@ -242,7 +272,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
               );
             },
           ),
-          if (canAddStep)
+          if (canAddRealStep)
             Padding(
               padding: const EdgeInsets.only(top: 2, bottom: 6),
               child: _isAddingStepInline
@@ -261,41 +291,215 @@ class _TaskStepsListState extends State<TaskStepsList> {
                     )
                   : _buildAddStepGhostCard(context, onTap: _startInlineAdd),
             ),
+          if (!canAddRealStep && canSuggestStep)
+            Padding(
+              padding: const EdgeInsets.only(top: 2, bottom: 6),
+              child: _buildAddStepGhostCard(
+                context,
+                onTap: _openSuggestStepSheet,
+                label: 'Suggest Step',
+                icon: Icons.edit_note_rounded,
+              ),
+            ),
         ],
       ),
     );
   }
 
-  bool _canAddStep() {
+  bool _canAddRealStep() {
     // If no task info, allow (personal task)
     if (widget.task == null) return true;
 
-    final userProvider = context.read<UserProvider>();
-    final currentUserId = userProvider.userId ?? '';
+    if (_isDraftTask) return false;
 
-    // Task assignee can add steps.
-    if (widget.task!.taskAssignedTo == currentUserId) return true;
+    final currentUserId = _currentUserId;
+    return widget.task!.taskAssignedTo == currentUserId &&
+        currentUserId.isNotEmpty &&
+        widget.task!.taskAssignedTo != 'None';
+  }
 
-    // If it's a board task, check if user is board manager
-    if (widget.task!.taskBoardId.isNotEmpty) {
-      final boardProvider = context.read<BoardProvider>();
-      final board = boardProvider.boards.firstWhere(
-        (b) => b.boardId == widget.task!.taskBoardId,
-        orElse: () => boardProvider.boards.first,
-      );
-      if (board.boardManagerId == currentUserId) return true;
+  bool _canSuggestStep() {
+    final task = widget.task;
+    if (task == null || task.taskBoardId.isEmpty) return false;
 
-      // Board members cannot add steps
-      return false;
+    final board = _currentBoard;
+    final currentUserId = _currentUserId;
+    if (board == null || currentUserId.isEmpty) return false;
+
+    return board.isManager(currentUserId) || board.isSupervisor(currentUserId);
+  }
+
+  bool _canViewStepSuggestions() {
+    final task = widget.task;
+    if (task == null) return false;
+
+    final currentUserId = _currentUserId;
+    if (currentUserId.isEmpty) return false;
+
+    return task.taskAssignedTo == currentUserId &&
+        task.taskAssignedTo != 'None';
+  }
+
+  String get _currentUserId => context.read<UserProvider>().userId ?? '';
+
+  Board? get _currentBoard {
+    final task = widget.task;
+    if (task == null || task.taskBoardId.isEmpty) return null;
+    return context.read<BoardProvider>().getBoardById(task.taskBoardId);
+  }
+
+  bool get _isDraftTask => widget.task?.taskBoardLane == Task.laneDrafts;
+
+  Future<void> _openSuggestStepSheet() async {
+    final task = widget.task;
+    if (task == null) return;
+    await CreateThoughtDialog.show(
+      context,
+      initialType: Thought.typeSuggestion,
+      initialTaskId: task.taskId,
+      initialSuggestionMode: 'step',
+      lockType: true,
+    );
+  }
+
+  Widget _buildSuggestionToggle(BuildContext context) {
+    final isActive = _showStepSuggestions;
+    return Tooltip(
+      message: isActive ? 'Hide step suggestions' : 'Show step suggestions',
+      child: InkWell(
+        onTap: () {
+          setState(() {
+            _showStepSuggestions = !_showStepSuggestions;
+          });
+        },
+        borderRadius: BorderRadius.circular(8),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: isActive ? const Color(0xFFFFF7CC) : null,
+            border: Border.all(
+              color: isActive
+                  ? const Color(0xFFEAB308)
+                  : Colors.grey.shade300,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.inbox_outlined,
+                size: 16,
+                color: isActive
+                    ? const Color(0xFF854D0E)
+                    : Colors.grey.shade700,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Suggestions',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isActive
+                      ? const Color(0xFF854D0E)
+                      : Colors.grey.shade700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStepSuggestionStream() {
+    final task = widget.task;
+    if (task == null) {
+      return const SizedBox.shrink();
     }
 
-    // For personal tasks, fall back to assignee.
-    return widget.task!.taskAssignedTo == currentUserId;
+    return StreamBuilder<List<Thought>>(
+      stream: _thoughtService.streamThoughtsByTask(task.taskId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: LinearProgressIndicator(minHeight: 3),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Could not load step suggestions.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.red.shade400,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          );
+        }
+
+        final thoughts = snapshot.data ?? const <Thought>[];
+        final stepSuggestions = thoughts.where((thought) {
+          if (thought.type != Thought.typeSuggestion) return false;
+          if (!thought.isActionable) return false;
+          final metadata = thought.metadata ?? const <String, dynamic>{};
+          final suggestionTarget = (metadata['suggestionTarget']?.toString() ?? '')
+              .trim()
+              .toLowerCase();
+          return suggestionTarget == 'step';
+        }).toList();
+
+        if (stepSuggestions.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'No step suggestions waiting for review.',
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade500,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          );
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 8, bottom: 8),
+              child: Text(
+                'Step Suggestions',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+            ),
+            ...stepSuggestions.map(
+              (thought) => SuggestedStepCard(
+                key: ValueKey('step_suggestion_${thought.thoughtId}'),
+                thought: thought,
+                task: task,
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Widget _buildAddStepGhostCard(
     BuildContext context, {
     required VoidCallback onTap,
+    String label = 'Add Step',
+    IconData icon = Icons.add_circle_outline,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     return Align(
@@ -328,7 +532,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons.add_circle_outline,
+                      icon,
                       size: 18,
                       color: colorScheme.onSurfaceVariant.withValues(
                         alpha: 0.65,
@@ -336,7 +540,7 @@ class _TaskStepsListState extends State<TaskStepsList> {
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Add Step',
+                      label,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13,

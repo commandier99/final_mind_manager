@@ -40,6 +40,7 @@ class Board {
   final Map<String, int>
   memberTaskLimits; // userId -> max tasks they can be assigned
   final int boardTaskCapacity; // uniform active task cap for members, 0 = unlimited
+  final List<String> pendingInviteUserIds;
 
   final DateTime boardLastModifiedAt;
   final String boardLastModifiedBy;
@@ -66,6 +67,7 @@ class Board {
     this.memberRoles = const {},
     this.memberTaskLimits = const {},
     this.boardTaskCapacity = defaultMemberTaskLimit,
+    this.pendingInviteUserIds = const [],
     required this.boardLastModifiedAt,
     required this.boardLastModifiedBy,
   });
@@ -145,6 +147,7 @@ class Board {
       boardTaskCapacity:
           (data['boardTaskCapacity'] as num?)?.toInt() ??
           defaultMemberTaskLimit,
+      pendingInviteUserIds: List<String>.from(data['pendingInviteUserIds'] ?? []),
       boardLastModifiedAt:
           (data['boardLastModifiedAt'] as Timestamp?)?.toDate() ??
           DateTime.now(),
@@ -175,6 +178,7 @@ class Board {
       'memberRoles': memberRoles,
       'memberTaskLimits': memberTaskLimits,
       'boardTaskCapacity': boardTaskCapacity,
+      'pendingInviteUserIds': pendingInviteUserIds,
       'boardLastModifiedAt': Timestamp.fromDate(boardLastModifiedAt),
       'boardLastModifiedBy': boardLastModifiedBy,
     };
@@ -197,6 +201,7 @@ class Board {
     Map<String, String>? memberRoles,
     Map<String, int>? memberTaskLimits,
     int? boardTaskCapacity,
+    List<String>? pendingInviteUserIds,
     DateTime? boardLastModifiedAt,
     String? boardLastModifiedBy,
   }) {
@@ -222,6 +227,7 @@ class Board {
       memberRoles: memberRoles ?? this.memberRoles,
       memberTaskLimits: memberTaskLimits ?? this.memberTaskLimits,
       boardTaskCapacity: boardTaskCapacity ?? this.boardTaskCapacity,
+      pendingInviteUserIds: pendingInviteUserIds ?? this.pendingInviteUserIds,
       boardLastModifiedAt: boardLastModifiedAt ?? this.boardLastModifiedAt,
       boardLastModifiedBy: boardLastModifiedBy ?? this.boardLastModifiedBy,
     );

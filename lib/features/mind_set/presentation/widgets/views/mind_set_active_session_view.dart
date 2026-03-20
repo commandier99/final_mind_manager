@@ -15,6 +15,7 @@ import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/presentation/widgets/cards/focused_task_card.dart';
 import '../../../../tasks/presentation/widgets/sections/task_steps_list.dart';
 import '../../../../steps/datasources/providers/step_provider.dart';
+import '../../utils/session_task_submission_helper.dart';
 
 class MindSetActiveSessionView extends StatefulWidget {
   final MindSetSession session;
@@ -202,12 +203,19 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                     ? () => _pauseTask(taskProvider, activeTask)
                     : null,
                 isPomodoroMode: modePolicy.isPomodoro,
-                onToggleDone: modePolicy.doneAllowedOnTask(isFocused: true)
+                onToggleDone:
+                    modePolicy.doneAllowedOnTask(isFocused: true) &&
+                        !activeTask.taskRequiresSubmission
                     ? (isDone) => _toggleTaskDone(
                         taskProvider,
                         activeTask,
                         isDone ?? false,
                       )
+                    : null,
+                onSubmitThought:
+                    modePolicy.doneAllowedOnTask(isFocused: true) &&
+                        activeTask.taskRequiresSubmission
+                    ? () => _openSubmissionFlow(activeTask)
                     : null,
                 stepsContent: ChangeNotifierProvider<StepProvider>.value(
                   value: _focusedTaskStepProvider,
@@ -512,6 +520,10 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     );
 
     if (finishedTask == true) {
+      if (focusedTask.taskRequiresSubmission) {
+        await _openSubmissionFlow(focusedTask);
+        return PomodoroTransition.startBreak;
+      }
       try {
         await taskProvider.toggleTaskDone(
           focusedTask.copyWith(
@@ -603,6 +615,10 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
         ),
       );
     }
+  }
+
+  Future<void> _openSubmissionFlow(Task task) async {
+    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
   Future<void> _handlePostCompletion(

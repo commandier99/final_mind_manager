@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
-import '/features/plans/datasources/services/plan_service.dart';
 import '/features/tasks/datasources/services/task_services.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
@@ -16,7 +15,6 @@ class MindSetSelectionView extends StatefulWidget {
 
 class _MindSetSelectionViewState extends State<MindSetSelectionView> {
   final MindSetSessionService _sessionService = MindSetSessionService();
-  final PlanService _planService = PlanService();
   final TaskService _taskService = TaskService();
 
   @override
@@ -143,12 +141,14 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
         return;
       }
 
-      final hasUnplanned = await _hasUnplannedTasks(userId);
+      final hasAssignedTasks = await _hasAssignedTasksToWorkOn(userId);
       if (!mounted) return;
-      if (!hasUnplanned) {
+      if (!hasAssignedTasks) {
         messenger.showSnackBar(
           const SnackBar(
-            content: Text('No unplanned tasks available for Go with the Flow.'),
+            content: Text(
+              'No assigned tasks available for Go with the Flow.',
+            ),
           ),
         );
         return;
@@ -182,24 +182,9 @@ class _MindSetSelectionViewState extends State<MindSetSelectionView> {
     return active != null;
   }
 
-  Future<bool> _hasUnplannedTasks(String userId) async {
-    final tasks = await _taskService.streamTasks(ownerId: userId).first;
-
-    final activeTasks = tasks
-        .where((task) => !task.taskIsDone && !task.taskIsDeleted)
-        .toList();
-
-    if (activeTasks.isEmpty) return false;
-
-    final plans = await _planService.getUserPlans(userId);
-
-    final plannedTaskIds = <String>{};
-
-    for (final plan in plans) {
-      plannedTaskIds.addAll(plan.taskIds);
-    }
-
-    return activeTasks.any((task) => !plannedTaskIds.contains(task.taskId));
+  Future<bool> _hasAssignedTasksToWorkOn(String userId) async {
+    final tasks = await _taskService.streamTasksAssignedTo(userId).first;
+    return tasks.any((task) => !task.taskIsDone && !task.taskIsDeleted);
   }
 
   Future<void> _startSession(MindSetSession session) async {

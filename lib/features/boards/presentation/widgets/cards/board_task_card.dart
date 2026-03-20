@@ -4,10 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
-import '../../../../tasks/datasources/services/task_application_service.dart';
 import '../../../../tasks/presentation/pages/task_details_page.dart';
 import '../../../../tasks/presentation/widgets/dialogs/edit_task_dialog.dart';
-import '../../../../notifications/datasources/helpers/notification_helper.dart';
+import '../../../../thoughts/datasources/models/thought_model.dart';
+import '../../../../thoughts/presentation/widgets/dialogs/create_thought_dialog.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../../../../shared/datasources/providers/navigation_provider.dart';
 import '../../../datasources/models/board_model.dart';
@@ -46,9 +46,6 @@ class BoardTaskCard extends StatefulWidget {
 
 class _BoardTaskCardState extends State<BoardTaskCard> {
   late String _currentUserId;
-  final TaskApplicationService _taskApplicationService =
-      TaskApplicationService();
-  bool _isPoking = false;
 
   @override
   void initState() {
@@ -61,18 +58,9 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         widget.task.taskAssignedTo == 'None';
   }
 
-  bool _shouldAllowUnassigned() {
-    // Only allow unassigned status if there are multiple board members
-    // If board has only 1 member (the manager), tasks must be assigned
-    return widget.board == null || (widget.board!.memberIds.length > 1);
-  }
-
-  bool _canCurrentUserApply() {
-    if (widget.board == null || widget.currentUserId == null) {
-      return true;
-    }
-    // Managers should not apply to board tasks.
-    return widget.currentUserId != widget.board!.boardManagerId;
+  bool _hasPendingAssignment() {
+    return widget.task.taskAssignmentStatus == 'pending' &&
+        (widget.task.taskProposedAssigneeId ?? '').trim().isNotEmpty;
   }
 
   List<String> _incompleteDependencyTitles(TaskProvider taskProvider) {
@@ -102,154 +90,15 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     return 'Complete "${titles[0]}", "${titles[1]}", and ${titles.length - 2} more first.';
   }
 
-  void _showApplicationDialog() {
-    final applicationController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Apply for Task'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Why are you a good fit for this task?',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: applicationController,
-                maxLines: 5,
-                minLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'Share relevant skills or context...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              final text = applicationController.text;
-              Navigator.pop(dialogContext);
-              _submitApplication(text);
-            },
-            icon: const Icon(Icons.how_to_reg),
-            label: const Text('Apply'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Stream<bool> _isUserAppliedStream() {
-    return _taskApplicationService.hasUserApplied(
-      widget.task.taskId,
-      _currentUserId,
-    );
-  }
-
-  Future<void> _submitApplication(String applicationText) async {
-    try {
-      await _taskApplicationService.submitApplication(
-        taskId: widget.task.taskId,
-        userId: _currentUserId,
-        applicationText: applicationText,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application submitted.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You cannot apply to this task.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _withdrawApplication() async {
-    await _taskApplicationService.removeUserApplications(
-      taskId: widget.task.taskId,
-      userId: _currentUserId,
-    );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Application withdrawn'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
-  }
-
-  Widget _buildApplicationToggle(bool isApplied) {
-    final colorScheme = Theme.of(context).colorScheme;
-    final inactiveBorder = Colors.grey.shade400;
-    final activeColor = colorScheme.primary;
-
-    return Semantics(
-      button: true,
-      toggled: isApplied,
-      label: isApplied ? 'Applied' : 'Apply',
-      child: OutlinedButton.icon(
-        onPressed: () {
-          if (isApplied) {
-            _withdrawApplication();
-          } else {
-            _showApplicationDialog();
-          }
-        },
-        style: OutlinedButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          foregroundColor: isApplied ? activeColor : Colors.grey.shade700,
-          side: BorderSide(
-            color: isApplied ? activeColor : inactiveBorder,
-            width: 1.2,
-          ),
-          backgroundColor: isApplied
-              ? activeColor.withValues(alpha: 0.08)
-              : Colors.transparent,
-        ),
-        icon: Icon(
-          isApplied ? Icons.waving_hand : Icons.waving_hand_outlined,
-          size: 16,
-        ),
-        label: Text(isApplied ? 'Applied' : 'Apply'),
-      ),
-    );
-  }
-
   String _getDisplayAssignedName() {
+    if (widget.task.taskAssignmentStatus == 'pending' &&
+        (widget.task.taskProposedAssigneeName ?? '').trim().isNotEmpty) {
+      return '${widget.task.taskProposedAssigneeName!.trim()} (Pending)';
+    }
+
     if (widget.task.taskAssignedToName.isEmpty ||
-        widget.task.taskAssignedToName == 'Unassigned') {
+        widget.task.taskAssignedToName == 'Unassigned' ||
+        widget.task.taskAssignedToName == 'None (Pending)') {
       return 'Unassigned';
     }
 
@@ -270,160 +119,62 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     return displayName;
   }
 
+  bool _canApplyForTask() {
+    final board = widget.board;
+    if (board == null) return false;
+    if (widget.showPublishButton) return false;
+    if (widget.task.taskIsDone || widget.task.taskIsDeleted) return false;
+    if (widget.task.taskBoardLane != Task.lanePublished) return false;
+    if (!_isTaskUnassigned() || _hasPendingAssignment()) return false;
+    return board.roleOf(_currentUserId) == 'member';
+  }
+
+  bool _isConnectedRequiredTaskForCurrentUser(TaskProvider taskProvider) {
+    return taskProvider.tasks.any(
+      (task) =>
+          !task.taskIsDeleted &&
+          !task.taskIsDone &&
+          task.taskAssignedTo == _currentUserId &&
+          task.taskDependencyIds.contains(widget.task.taskId),
+    );
+  }
+
+  bool _canSendReminder(TaskProvider taskProvider) {
+    final board = widget.board;
+    if (board == null) return false;
+    if (widget.showPublishButton) return false;
+    if (widget.task.taskIsDone || widget.task.taskIsDeleted) return false;
+    if (_isTaskUnassigned() || _hasPendingAssignment()) return false;
+    return board.canPokeMembers(_currentUserId) ||
+        _isConnectedRequiredTaskForCurrentUser(taskProvider);
+  }
+
+  Future<void> _openApplyForTask() async {
+    await CreateThoughtDialog.show(
+      context,
+      initialType: Thought.typeTaskAssignment,
+      initialBoardId: widget.task.taskBoardId,
+      initialTaskId: widget.task.taskId,
+      initialTaskAssignmentMode: 'member_to_manager',
+      lockType: true,
+    );
+  }
+
+  Future<void> _openReminder() async {
+    await CreateThoughtDialog.show(
+      context,
+      initialType: Thought.typeReminder,
+      initialBoardId: widget.task.taskBoardId,
+      initialTaskId: widget.task.taskId,
+      lockType: true,
+    );
+  }
+
   bool _isSupervisorDraft() {
     if (widget.board == null) return false;
     if (widget.task.taskBoardLane != Task.laneDrafts) return false;
     if (widget.task.taskOwnerId == widget.board!.boardManagerId) return false;
     return widget.board!.isSupervisor(widget.task.taskOwnerId);
-  }
-
-  bool _canPokeMember() {
-    if (widget.board == null || widget.currentUserId == null) return false;
-    if (!widget.board!.canPokeMembers(widget.currentUserId)) return false;
-    if (widget.task.taskIsDone) return false;
-    if (_isTaskUnassigned()) return false;
-    final assigneeId = widget.task.taskAssignedTo;
-    if (assigneeId.isEmpty || assigneeId == 'None') return false;
-    if (assigneeId == widget.currentUserId) return false;
-    return true;
-  }
-
-  Future<void> _pokeMember() async {
-    if (!_canPokeMember() || _isPoking) return;
-    String detailsText = '';
-    String? detailsError;
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Poke Assignee',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Action Needed: Update progress/status',
-                      style: TextStyle(
-                        color: Colors.orange.shade800,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Task: ${widget.task.taskTitle}',
-                      style: TextStyle(color: Colors.grey.shade700),
-                    ),
-                    const SizedBox(height: 10),
-                    TextField(
-                      maxLines: 4,
-                      maxLength: 400,
-                      onChanged: (value) {
-                        detailsText = value;
-                        if (detailsError != null) {
-                          setModalState(() => detailsError = null);
-                        }
-                      },
-                      decoration: InputDecoration(
-                        labelText: 'Details',
-                        hintText:
-                            'Write your reminder details for the assignee.',
-                        helperText: 'Minimum 15 characters.',
-                        errorText: detailsError,
-                        border: const OutlineInputBorder(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          final details = detailsText.trim();
-                          if (details.length < 15) {
-                            setModalState(() {
-                              detailsError =
-                                  'Details must be at least 15 characters.';
-                            });
-                            return;
-                          }
-                          Navigator.of(context).pop(true);
-                        },
-                        icon: const Icon(Icons.send),
-                        label: const Text('Send Poke'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    final details = detailsText.trim();
-    if (confirmed != true) return;
-
-    setState(() => _isPoking = true);
-    try {
-      const actionNeeded = 'Update progress/status';
-      final reminderMessage = 'Action needed: $actionNeeded\nDetails: $details';
-
-      await NotificationHelper.createNotificationPair(
-        userId: widget.task.taskAssignedTo,
-        title: 'Task Reminder: ${widget.task.taskTitle}',
-        message: reminderMessage,
-        category: NotificationHelper.categoryReminder,
-        relatedId: widget.task.taskId,
-        metadata: {
-          'kind': 'reminder',
-          'source': 'poke',
-          'actionNeeded': actionNeeded,
-          'details': details,
-          'reminderMessage': reminderMessage,
-          'targetType': 'task',
-          'targetLabel': widget.task.taskTitle,
-          'createdByUserId': _currentUserId,
-          'createdByUserName':
-              FirebaseAuth.instance.currentUser?.displayName ?? 'Manager',
-          'pokeTiming': 'now',
-          'taskId': widget.task.taskId,
-          'boardId': widget.task.taskBoardId,
-          'type': 'task_poke',
-        },
-      );
-      final messenger = mounted ? ScaffoldMessenger.maybeOf(context) : null;
-      messenger?.showSnackBar(const SnackBar(content: Text('Poke sent.')));
-    } catch (e) {
-      final messenger = mounted ? ScaffoldMessenger.maybeOf(context) : null;
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text('Failed to send poke: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isPoking = false);
-      }
-    }
   }
 
   Color _getMemberColor() {
@@ -542,23 +293,15 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     final memberColor = _getMemberColor();
     final isUnassigned =
         widget.task.taskAssignedToName.isEmpty ||
-        widget.task.taskAssignedToName == 'Unassigned';
+        widget.task.taskAssignedToName == 'Unassigned' ||
+        widget.task.taskAssignedToName == 'None (Pending)';
     final priorityColor = _getPriorityColor(widget.task.taskPriorityLevel);
-    final canHaveUnassigned = _shouldAllowUnassigned();
     final blockedDependencyTitles = _incompleteDependencyTitles(taskProvider);
     final isDependencyLocked = blockedDependencyTitles.isNotEmpty;
     final isLocked = widget.isDisabled;
-    final canShowApplyAction =
-        _isTaskUnassigned() &&
-        canHaveUnassigned &&
-        _canCurrentUserApply() &&
-        !widget.showPublishButton;
-    final canPoke = _canPokeMember() && !isDependencyLocked;
     final isSupervisorDraft = _isSupervisorDraft();
-    final missingRequiredSubmission =
-        widget.task.taskRequiresSubmission &&
-        (widget.task.taskSubmissionId ?? '').trim().isEmpty;
-
+    final canApplyForTask = _canApplyForTask();
+    final canSendReminder = _canSendReminder(taskProvider);
     // Only allow delete for board manager or task owner
     final canDelete =
         !isLocked &&
@@ -918,27 +661,13 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                             Row(
                               children: [
                                 if (widget.showCheckbox) ...[
-                                  if (missingRequiredSubmission)
-                                    Tooltip(
-                                      message:
-                                          'Upload is required before completing this task.',
-                                      child: Checkbox(
-                                        value: widget.task.taskIsDone,
-                                        onChanged:
-                                            isLocked || !widget.task.taskIsDone
-                                            ? null
-                                            : (value) => widget.onToggleDone
-                                                  ?.call(value),
-                                      ),
-                                    )
-                                  else
-                                    Checkbox(
-                                      value: widget.task.taskIsDone,
-                                      onChanged: isLocked
-                                          ? null
-                                          : (value) =>
-                                                widget.onToggleDone?.call(value),
-                                    ),
+                                  Checkbox(
+                                    value: widget.task.taskIsDone,
+                                    onChanged: isLocked
+                                        ? null
+                                        : (value) =>
+                                              widget.onToggleDone?.call(value),
+                                  ),
                                   const SizedBox(width: 8),
                                 ],
                                 // Main content
@@ -1053,51 +782,59 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                // Show application button only if task is unassigned AND unassigned is allowed
-                                if (canPoke) ...[
-                                  Tooltip(
-                                    message: 'Poke assignee',
-                                    child: OutlinedButton(
-                                      onPressed: _isPoking ? null : _pokeMember,
-                                      style: OutlinedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                        foregroundColor: Colors.orange.shade800,
-                                        minimumSize: const Size(40, 40),
-                                        padding: EdgeInsets.zero,
-                                        shape: const CircleBorder(),
-                                        tapTargetSize:
-                                            MaterialTapTargetSize.shrinkWrap,
-                                        side: BorderSide(
-                                          color: Colors.orange.shade300,
+                                if (canApplyForTask || canSendReminder)
+                                  Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (canApplyForTask)
+                                        Tooltip(
+                                          message: 'Apply for Task',
+                                          child: OutlinedButton(
+                                            onPressed: _openApplyForTask,
+                                            style: OutlinedButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              minimumSize: const Size(42, 36),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 6,
+                                                  ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.assignment_ind_outlined,
+                                              size: 18,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                      child: Icon(
-                                        _isPoking
-                                            ? Icons.hourglass_top
-                                            : Icons.ads_click,
-                                        size: 22,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                ],
-                                if (canShowApplyAction)
-                                  StreamBuilder<bool>(
-                                    stream: _isUserAppliedStream(),
-                                    builder: (context, snapshot) {
-                                      final isApplied = snapshot.data ?? false;
-
-                                      return Tooltip(
-                                        message: isApplied
-                                            ? 'Withdraw application'
-                                            : 'Apply',
-                                        child: _buildApplicationToggle(
-                                          isApplied,
+                                      if (canApplyForTask && canSendReminder)
+                                        const SizedBox(height: 6),
+                                      if (canSendReminder)
+                                        Tooltip(
+                                          message: 'Send Reminder',
+                                          child: OutlinedButton(
+                                            onPressed: _openReminder,
+                                            style: OutlinedButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              minimumSize: const Size(42, 36),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 6,
+                                                  ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.notifications_active_outlined,
+                                              size: 18,
+                                            ),
+                                          ),
                                         ),
-                                      );
-                                    },
+                                    ],
                                   )
-                                else if (widget.showPublishButton)
+                                else
+                                  const SizedBox.shrink(),
+                                if (widget.showPublishButton)
                                   Tooltip(
                                     message: 'Move to Published',
                                     child: OutlinedButton(

@@ -9,17 +9,13 @@ import '../../pages/add_member_to_board_page.dart';
 
 class BoardMembersSection extends StatefulWidget {
   final List<String> memberIds;
-  final String boardId;
   final String? currentUserId;
-  final VoidCallback? onAddMember;
   final Board board;
 
   const BoardMembersSection({
     super.key,
     required this.memberIds,
-    required this.boardId,
     this.currentUserId,
-    this.onAddMember,
     required this.board,
   });
 
@@ -156,7 +152,7 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                           SizedBox(
                             width: 60,
                             child: Text(
-                              'Add',
+                              'Invite',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 12,

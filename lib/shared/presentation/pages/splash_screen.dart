@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'dart:async';
 import '../../../features/authentication/datasources/providers/authentication_provider.dart';
-import '../../services/firebase_messaging_service.dart';
 import '../../features/users/datasources/providers/user_provider.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -66,20 +63,6 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _checkAuthAndNavigate() async {
     if (!mounted) return;
 
-    // Request notification permission on app startup (non-blocking)
-    unawaited(
-      Permission.notification.status.then((status) {
-        if (status.isDenied) {
-          debugPrint(
-            '[SplashScreen] Requesting notification permission on app startup',
-          );
-          Permission.notification.request().then((result) {
-            debugPrint('[SplashScreen] Notification permission result: $result');
-          });
-        }
-      }),
-    );
-
     final authProvider = Provider.of<AuthenticationProvider>(
       context,
       listen: false,
@@ -103,11 +86,6 @@ class _SplashScreenState extends State<SplashScreen>
         // Only proceed if a user document exists in the database.
         if (userProvider.currentUser != null) {
           debugPrint('[SplashScreen] User loaded: ${userProvider.currentUser?.userId}');
-
-          // Register FCM token only for existing users (prevents creating empty user docs)
-          FirebaseMessagingService().registerTokenForUser(
-            userProvider.currentUser!.userId,
-          );
 
           if (!mounted) return;
           Navigator.pushReplacementNamed(context, '/home');

@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/providers/task_provider.dart';
-import '../../../datasources/services/task_application_service.dart';
 import '../../pages/task_details_page.dart';
 import '../dialogs/edit_task_dialog.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
@@ -15,6 +14,7 @@ class TaskCard extends StatefulWidget {
   final VoidCallback? onTap;
   final VoidCallback? onDelete;
   final ValueChanged<bool?>? onToggleDone;
+  final VoidCallback? onSubmitThought;
   final bool showFocusAction;
   final VoidCallback? onFocus;
   final VoidCallback? onPause;
@@ -32,6 +32,7 @@ class TaskCard extends StatefulWidget {
     this.onTap,
     this.onDelete,
     this.onToggleDone,
+    this.onSubmitThought,
     this.showFocusAction = false,
     this.onFocus,
     this.onPause,
@@ -50,8 +51,6 @@ class TaskCard extends StatefulWidget {
 
 class _TaskCardState extends State<TaskCard> {
   late String _currentUserId;
-  final TaskApplicationService _taskApplicationService =
-      TaskApplicationService();
 
   @override
   void initState() {
@@ -61,136 +60,6 @@ class _TaskCardState extends State<TaskCard> {
 
   bool _hasSteps() {
     return (widget.task.taskStats.taskStepsCount ?? 0) > 0;
-  }
-
-  bool _isTaskUnassigned() {
-    // Task is unassigned if assigned to empty string
-    return widget.task.taskAssignedTo.isEmpty;
-  }
-
-  bool _shouldAllowUnassigned() {
-    // Only allow unassigned status if there are multiple board members
-    // If board has only 1 member (the manager), tasks must be assigned
-    if (widget.task.taskBoardId.isEmpty) return true;
-
-    final boardProvider = context.read<BoardProvider>();
-    final board = boardProvider.getBoardById(widget.task.taskBoardId);
-
-    return board == null || (board.memberIds.length > 1);
-  }
-
-  bool _canCurrentUserApply() {
-    if (widget.task.taskBoardId.isEmpty) return true;
-    final boardProvider = context.read<BoardProvider>();
-    final board = boardProvider.getBoardById(widget.task.taskBoardId);
-    if (board == null) return true;
-    return _currentUserId != board.boardManagerId;
-  }
-
-  void _showApplicationDialog() {
-    final applicationController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Apply for Task'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Why are you a good fit for this task?',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: applicationController,
-                maxLines: 5,
-                minLines: 3,
-                decoration: InputDecoration(
-                  hintText: 'Share relevant skills or context...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  contentPadding: const EdgeInsets.all(12),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              _submitApplication(applicationController.text);
-              applicationController.dispose();
-            },
-            icon: const Icon(Icons.how_to_reg),
-            label: const Text('Apply'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Stream<bool> _isUserAppliedStream() {
-    return _taskApplicationService.hasUserApplied(
-      widget.task.taskId,
-      _currentUserId,
-    );
-  }
-
-  Future<void> _submitApplication(String applicationText) async {
-    try {
-      await _taskApplicationService.submitApplication(
-        taskId: widget.task.taskId,
-        userId: _currentUserId,
-        applicationText: applicationText,
-      );
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Application submitted.'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('You cannot apply to this task.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _withdrawApplication() async {
-    await _taskApplicationService.removeUserApplications(
-      taskId: widget.task.taskId,
-      userId: _currentUserId,
-    );
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Application withdrawn'),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
   }
 
   Color _getPriorityColor(String priority) {
@@ -310,32 +179,6 @@ class _TaskCardState extends State<TaskCard> {
     }
   }
 
-  String _getAcceptanceStatusLabel(String? status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending';
-      case 'accepted':
-        return 'Accepted';
-      case 'declined':
-        return 'Declined';
-      default:
-        return '';
-    }
-  }
-
-  Color _getAcceptanceStatusColor(String? status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'accepted':
-        return Colors.green;
-      case 'declined':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
   Future<void> _handleDuplicate() async {
     try {
       final taskProvider = context.read<TaskProvider>();
@@ -370,12 +213,14 @@ class _TaskCardState extends State<TaskCard> {
         widget.task.taskIsDone ||
         _normalizeStatus(widget.task.taskStatus) == 'COMPLETED';
     final showFocusAction = widget.showFocusAction && !isCompleted;
-    final missingRequiredSubmission =
+    final showSubmitThoughtAction =
+        widget.onSubmitThought != null &&
         widget.task.taskRequiresSubmission &&
-        (widget.task.taskSubmissionId ?? '').trim().isEmpty;
+        !isCompleted;
 
     final showCheckbox =
-        !widget.showCheckboxWhenFocusedOnly || (isFocused && !isCompleted);
+        (!widget.showCheckboxWhenFocusedOnly || (isFocused && !isCompleted)) &&
+        !showSubmitThoughtAction;
     final statusColor = widget.useStatusColor
         ? _getStatusColor(widget.task.taskStatus)
         : Theme.of(context).colorScheme.onSurfaceVariant;
@@ -700,19 +545,11 @@ class _TaskCardState extends State<TaskCard> {
                         Row(
                           children: [
                             if (showCheckbox) ...[
-                              Tooltip(
-                                message: missingRequiredSubmission
-                                    ? 'Upload is required before completing this task.'
-                                    : '',
-                                child: Checkbox(
-                                  value: widget.task.taskIsDone,
-                                  onChanged:
-                                      missingRequiredSubmission &&
-                                          !widget.task.taskIsDone
-                                      ? null
-                                      : (bool? newValue) =>
-                                            widget.onToggleDone?.call(newValue),
-                                ),
+                              Checkbox(
+                                value: widget.task.taskIsDone,
+                                onChanged:
+                                    (bool? newValue) =>
+                                        widget.onToggleDone?.call(newValue),
                               ),
                               const SizedBox(width: 8),
                             ],
@@ -764,11 +601,26 @@ class _TaskCardState extends State<TaskCard> {
                                     ],
                                   ),
                                   const SizedBox(height: 3),
+                                  if (showSubmitThoughtAction) ...[
+                                    const SizedBox(height: 6),
+                                    OutlinedButton.icon(
+                                      onPressed: widget.onSubmitThought,
+                                      icon: const Icon(
+                                        Icons.rate_review_outlined,
+                                        size: 16,
+                                      ),
+                                      label: const Text('Submit Thought'),
+                                      style: OutlinedButton.styleFrom(
+                                        visualDensity: VisualDensity.compact,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                   // Compact badges row
-                                  if (widget.task.taskRequiresApproval ||
-                                      widget.task.taskAssignmentStatus !=
-                                          null ||
-                                      widget.task.taskDependencyIds.isNotEmpty)
+                                  if (widget.task.taskDependencyIds.isNotEmpty)
                                     SingleChildScrollView(
                                       scrollDirection: Axis.horizontal,
                                       child: Row(
@@ -817,71 +669,6 @@ class _TaskCardState extends State<TaskCard> {
                                                 ),
                                               ),
                                             ),
-                                          if (widget.task.taskRequiresApproval)
-                                            Tooltip(
-                                              message: 'Requires approval',
-                                              child: Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                      horizontal: 4,
-                                                      vertical: 1,
-                                                    ),
-                                                decoration: BoxDecoration(
-                                                  color: Colors.purple[100],
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                ),
-                                                child: Icon(
-                                                  Icons.verified_user,
-                                                  size: 10,
-                                                  color: Colors.purple[700],
-                                                ),
-                                              ),
-                                            ),
-                                          if (widget
-                                                  .task
-                                                  .taskAssignmentStatus !=
-                                              null)
-                                            Padding(
-                                              padding: const EdgeInsets.only(
-                                                left: 4,
-                                              ),
-                                              child: Tooltip(
-                                                message:
-                                                    _getAcceptanceStatusLabel(
-                                                      widget
-                                                          .task
-                                                          .taskAssignmentStatus,
-                                                    ),
-                                                child: Container(
-                                                  padding:
-                                                      const EdgeInsets.symmetric(
-                                                        horizontal: 4,
-                                                        vertical: 1,
-                                                      ),
-                                                  decoration: BoxDecoration(
-                                                    color: _getAcceptanceStatusColor(
-                                                      widget
-                                                          .task
-                                                          .taskAssignmentStatus,
-                                                    ).withValues(alpha: 0.2),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                          4,
-                                                        ),
-                                                  ),
-                                                  child: Icon(
-                                                    Icons.check_circle,
-                                                    size: 10,
-                                                    color: _getAcceptanceStatusColor(
-                                                      widget
-                                                          .task
-                                                          .taskAssignmentStatus,
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
                                         ],
                                       ),
                                     ),
@@ -917,54 +704,6 @@ class _TaskCardState extends State<TaskCard> {
                                     minWidth: 40,
                                     minHeight: 40,
                                   ),
-                                )
-                              else if (!showFocusAction &&
-                                  _isTaskUnassigned() &&
-                                  _shouldAllowUnassigned() &&
-                                  _canCurrentUserApply())
-                                StreamBuilder<bool>(
-                                  stream: _isUserAppliedStream(),
-                                  builder: (context, snapshot) {
-                                    final isApplied = snapshot.data ?? false;
-
-                                    return GestureDetector(
-                                      onTap: () {
-                                        if (isApplied) {
-                                          _withdrawApplication();
-                                        } else {
-                                          _showApplicationDialog();
-                                        }
-                                      },
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: isApplied
-                                              ? Colors.green[100]
-                                              : Colors.grey[100],
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                          border: Border.all(
-                                            color: isApplied
-                                                ? Colors.green
-                                                : Colors.grey[300]!,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          isApplied
-                                              ? Icons.how_to_reg
-                                              : Icons.app_registration,
-                                          size: 16,
-                                          color: isApplied
-                                              ? Colors.green
-                                              : Colors.grey[600],
-                                        ),
-                                      ),
-                                    );
-                                  },
                                 )
                               else if (_hasSteps())
                                 SizedBox(

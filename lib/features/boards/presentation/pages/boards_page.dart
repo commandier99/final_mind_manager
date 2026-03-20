@@ -39,6 +39,7 @@ class BoardsPage extends StatefulWidget {
 class _BoardsPageState extends State<BoardsPage> {
   final BoardsQueryController _queryController = BoardsQueryController();
   String? _userId;
+  Set<String> _syncedBoardIds = const {};
   bool _isSearchExpanded = false;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -55,6 +56,7 @@ class _BoardsPageState extends State<BoardsPage> {
 
   @override
   void dispose() {
+    context.read<BoardStatsProvider>().syncStreamingBoards(const []);
     _searchController.dispose();
     super.dispose();
   }
@@ -73,11 +75,31 @@ class _BoardsPageState extends State<BoardsPage> {
 
   Future<void> _refreshBoardsAndStats() async {
     final boardProvider = context.read<BoardProvider>();
-    final statsProvider = context.read<BoardStatsProvider>();
     await boardProvider.refreshBoards();
-    for (final board in boardProvider.boards) {
-      statsProvider.streamStatsForBoard(board.boardId);
+    _syncBoardStatsSubscriptions(boardProvider.boards);
+  }
+
+  void _syncBoardStatsSubscriptions(List<Board> boards) {
+    final nextBoardIds = boards.map((board) => board.boardId).toSet();
+    if (_syncedBoardIds.length == nextBoardIds.length &&
+        _syncedBoardIds.containsAll(nextBoardIds)) {
+      return;
     }
+
+    debugPrint(
+      '[BoardsPage] Syncing board stats subscriptions. Previous=$_syncedBoardIds Next=$nextBoardIds',
+    );
+
+    _syncedBoardIds = nextBoardIds;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final statsProvider = context.read<BoardStatsProvider>();
+      statsProvider.syncStreamingBoards(nextBoardIds);
+      for (final board in boards) {
+        statsProvider.streamStatsForBoard(board.boardId);
+      }
+    });
   }
 
   Future<void> _duplicateBoard(Board board) async {
@@ -295,6 +317,8 @@ class _BoardsPageState extends State<BoardsPage> {
     return Scaffold(
       body: Consumer<BoardProvider>(
         builder: (context, boardProvider, child) {
+          _syncBoardStatsSubscriptions(boardProvider.boards);
+
           Widget wrapWithRefresh(Widget content) {
             if (content is ScrollView) {
               return RefreshIndicator(

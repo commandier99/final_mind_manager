@@ -5,7 +5,6 @@ import 'package:mind_manager_final/shared/modes/mind_set_modes.dart';
 import '/shared/features/users/datasources/providers/user_provider.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
-import '/features/plans/datasources/services/plan_service.dart';
 import '/features/plans/presentation/widgets/cards/plan_card.dart';
 import '/features/tasks/datasources/services/task_services.dart';
 import '../../datasources/models/mind_set_session_model.dart';
@@ -27,7 +26,6 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   final _whyController = TextEditingController();
   final MindSetSessionService _sessionService = MindSetSessionService();
   final TaskService _taskService = TaskService();
-  final PlanService _planService = PlanService();
 
   String _selectedMode = MindSetModes.checklist;
   String _flowStyle = MindSetModes.flowStyleList;
@@ -448,19 +446,8 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
   }
 
   Future<bool> _hasAvailableGoWithFlowTasks(String userId) async {
-    final tasks = await _taskService.streamTasks(ownerId: userId).first;
-    final activeTasks = tasks
-        .where((task) => !task.taskIsDone && !task.taskIsDeleted)
-        .toList();
-    if (activeTasks.isEmpty) return false;
-
-    final plans = await _planService.getUserPlans(userId);
-    final plannedTaskIds = <String>{};
-    for (final plan in plans) {
-      plannedTaskIds.addAll(plan.taskIds);
-    }
-
-    return activeTasks.any((task) => !plannedTaskIds.contains(task.taskId));
+    final tasks = await _taskService.streamTasksAssignedTo(userId).first;
+    return tasks.any((task) => !task.taskIsDone && !task.taskIsDeleted);
   }
 
   Future<void> _createSession() async {
@@ -515,7 +502,9 @@ class _MindSetCreateFormState extends State<MindSetCreateForm> {
       if (!hasAvailableTasks) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No unplanned tasks available for Go with the Flow.'),
+            content: Text(
+              'No assigned tasks available for Go with the Flow.',
+            ),
           ),
         );
         return;

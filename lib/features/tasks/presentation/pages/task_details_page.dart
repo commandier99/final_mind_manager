@@ -7,20 +7,29 @@ import '../../../../shared/presentation/widgets/app_side_menu.dart';
 import '../../../../shared/datasources/providers/navigation_provider.dart';
 import 'package:provider/provider.dart';
 import '../widgets/sections/task_details_section.dart';
-import '../widgets/sections/task_applications_section.dart';
+import '../widgets/sections/task_uploads_section.dart';
 import '../widgets/sections/task_steps_list.dart';
-import '../widgets/sections/task_file_submissions_section.dart';
 import '../widgets/sections/task_stats_section.dart';
 import '../../../steps/datasources/providers/step_provider.dart';
 import '../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../widgets/dialogs/edit_task_dialog.dart';
 import '../../datasources/providers/task_provider.dart';
+import '../../datasources/providers/task_upload_provider.dart';
 import '../../../boards/datasources/providers/board_provider.dart';
 
 class TaskDetailsPage extends StatefulWidget {
-  final Task task;
+  static const String tabSteps = 'steps';
+  static const String tabUploads = 'uploads';
+  static const String tabStats = 'stats';
 
-  const TaskDetailsPage({super.key, required this.task});
+  final Task task;
+  final String initialTab;
+
+  const TaskDetailsPage({
+    super.key,
+    required this.task,
+    this.initialTab = tabSteps,
+  });
 
   @override
   State<TaskDetailsPage> createState() => _TaskDetailsPageState();
@@ -33,19 +42,16 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
       'home_last_visited_task_board_title';
   static const String _lastVisitedTaskAtKey = 'home_last_visited_task_at';
 
-  static const String _tabSteps = 'steps';
-  static const String _tabSubmissions = 'submissions';
-  static const String _tabStats = 'stats';
-  static const String _tabApplications = 'applications';
-
   bool _isDetailsPanelExpanded = true;
   bool _isSearchExpanded = false;
-  String _selectedTab = _tabSteps;
+  late String _selectedTab;
   final TextEditingController _searchController = TextEditingController();
+  final TaskUploadProvider _taskUploadProvider = TaskUploadProvider();
 
   @override
   void initState() {
     super.initState();
+    _selectedTab = widget.initialTab;
     _persistLastVisitedTask();
   }
 
@@ -71,6 +77,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _taskUploadProvider.dispose();
     super.dispose();
   }
 
@@ -220,27 +227,8 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
               currentTask = widget.task;
             }
 
-            final isUnassigned = _isTaskUnassigned(currentTask);
-            final isAcceptedOrNoAcceptanceNeeded =
-                _isAcceptedOrNoAcceptanceNeeded(currentTask);
             final canManageTask = _canManageTask(currentTask);
-            final showApplicationsTab =
-                isUnassigned && _canViewApplications(currentTask);
-            final showWorkTabs =
-                canManageTask ||
-                (!isUnassigned && isAcceptedOrNoAcceptanceNeeded);
-            final showSubmissionsTab =
-                showWorkTabs && currentTask.taskAllowsSubmissions;
-
-            if (showApplicationsTab && _selectedTab != _tabApplications) {
-              _selectedTab = _tabApplications;
-            }
-            if (!showApplicationsTab && _selectedTab == _tabApplications) {
-              _selectedTab = _tabSteps;
-            }
-            if (!showSubmissionsTab && _selectedTab == _tabSubmissions) {
-              _selectedTab = _tabSteps;
-            }
+            final showWorkTabs = canManageTask || !_isTaskUnassigned(currentTask);
 
             return Column(
               children: [
@@ -304,7 +292,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                     ],
                   ),
                 ),
-                if (showApplicationsTab || showWorkTabs)
+                if (showWorkTabs)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                     child: Row(
@@ -313,48 +301,35 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                           Expanded(
                             child: _buildViewTab(
                               label: 'Steps',
-                              selected: _selectedTab == _tabSteps,
+                              selected: _selectedTab == TaskDetailsPage.tabSteps,
                               onTap: () =>
-                                  setState(() => _selectedTab = _tabSteps),
+                                  setState(() => _selectedTab = TaskDetailsPage.tabSteps),
                             ),
                           ),
-                        if (showWorkTabs && showSubmissionsTab) ...[
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _buildViewTab(
-                              label: 'Uploads',
-                              selected: _selectedTab == _tabSubmissions,
-                              onTap: () => setState(
-                                () => _selectedTab = _tabSubmissions,
-                              ),
-                            ),
-                          ),
-                        ],
                         if (showWorkTabs) ...[
                           const SizedBox(width: 8),
                           Expanded(
                             child: _buildViewTab(
-                              label: 'Stats',
-                              selected: _selectedTab == _tabStats,
+                              label: 'Uploads',
+                              selected: _selectedTab == TaskDetailsPage.tabUploads,
                               onTap: () =>
-                                  setState(() => _selectedTab = _tabStats),
+                                  setState(() => _selectedTab = TaskDetailsPage.tabUploads),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildViewTab(
+                              label: 'Stats',
+                              selected: _selectedTab == TaskDetailsPage.tabStats,
+                              onTap: () =>
+                                  setState(() => _selectedTab = TaskDetailsPage.tabStats),
                             ),
                           ),
                         ],
-                        if (showApplicationsTab)
-                          Expanded(
-                            child: _buildViewTab(
-                              label: 'Applications',
-                              selected: _selectedTab == _tabApplications,
-                              onTap: () => setState(
-                                () => _selectedTab = _tabApplications,
-                              ),
-                            ),
-                          ),
                       ],
                     ),
                   ),
-                if (showWorkTabs && _selectedTab == _tabSteps)
+                if (showWorkTabs && _selectedTab == TaskDetailsPage.tabSteps)
                   ChangeNotifierProvider(
                     create: (_) => StepProvider(),
                     child: TaskStepsList(
@@ -368,19 +343,16 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                       ),
                     ),
                   )
-                else if (showWorkTabs && _selectedTab == _tabSubmissions)
-                  TaskFileSubmissionsSection(task: currentTask)
-                else if (showWorkTabs && _selectedTab == _tabStats)
-                  TaskStatsSection(task: currentTask)
-                else if (showApplicationsTab &&
-                    _selectedTab == _tabApplications)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                    child: TaskApplicationsSection(
-                      taskId: currentTask.taskId,
-                      initialTask: currentTask,
+                else if (showWorkTabs && _selectedTab == TaskDetailsPage.tabUploads)
+                  ChangeNotifierProvider.value(
+                    value: _taskUploadProvider,
+                    child: TaskUploadsSection(
+                      task: currentTask,
+                      canManageTask: canManageTask,
                     ),
                   )
+                else if (showWorkTabs && _selectedTab == TaskDetailsPage.tabStats)
+                  TaskStatsSection(task: currentTask)
                 else
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -393,7 +365,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                         border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Text(
-                        'Task details tabs will appear after assignment is accepted.',
+                        'Task details tabs will appear once the task is assigned.',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,
@@ -418,27 +390,6 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
     );
   }
 
-  bool _canViewApplications(Task task) {
-    final currentUserId = context.read<UserProvider>().userId;
-    if (currentUserId == null) return false;
-
-    final isUnassigned =
-        task.taskAssignedTo.isEmpty || task.taskAssignedTo == 'None';
-    if (!isUnassigned) return false;
-
-    if (task.taskOwnerId == currentUserId) return true;
-
-    if (task.taskBoardId.isNotEmpty) {
-      final board = context.read<BoardProvider>().getBoardById(
-        task.taskBoardId,
-      );
-      if (board?.boardManagerId == currentUserId) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   bool _canManageTask(Task task) {
     final currentUserId = context.read<UserProvider>().userId;
     if (currentUserId == null || currentUserId.isEmpty) return false;
@@ -451,16 +402,13 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
 
   bool _isTaskFocusedStatus(String status) {
     final normalized = status.toUpperCase().replaceAll(' ', '_');
-    return normalized == 'IN_PROGRESS' || normalized == 'FOCUSED';
+    return normalized == 'IN_PROGRESS' ||
+        normalized == 'FOCUSED' ||
+        normalized == 'SUBMITTED';
   }
 
   bool _isTaskUnassigned(Task task) {
     return task.taskAssignedTo.isEmpty || task.taskAssignedTo == 'None';
-  }
-
-  bool _isAcceptedOrNoAcceptanceNeeded(Task task) {
-    return task.taskAssignmentStatus == null ||
-        task.taskAssignmentStatus == 'accepted';
   }
 
   Widget _buildViewTab({
@@ -482,13 +430,18 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
           ),
         ),
         child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? Colors.blue[700] : Colors.grey[700],
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? Colors.blue[700] : Colors.grey[700],
+                ),
+              ),
+            ],
           ),
         ),
       ),

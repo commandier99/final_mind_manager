@@ -89,369 +89,6 @@ service cloud.firestore {
       allow create: if request.auth != null && request.auth.uid == userId;
     }
 
-    // In-app notifications
-    match /in_app_notifications/{notificationId} {
-      function isSelfNotificationCreate() {
-        return request.resource.data.userId == request.auth.uid;
-      }
-
-      function isInviteNotificationCreate() {
-        return request.resource.data.category == 'invitation' &&
-          request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)) &&
-          get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId == request.resource.data.userId &&
-          (
-            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.boardManagerId ||
-            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId
-          );
-      }
-
-      function isApprovalNotificationCreate() {
-        return request.resource.data.category == 'approval' &&
-          request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)) &&
-          exists(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)) &&
-          (
-            // Reviewer -> submitter (review result)
-            (
-              request.resource.data.userId ==
-                get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.submittedBy &&
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskOwnerId ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != '' &&
-                  (
-                    request.auth.uid ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.boardManagerId ||
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
-                  )
-                )
-              )
-            ) ||
-            // Assignee -> reviewers (new submission alert)
-            (
-              request.auth.uid ==
-                get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskAssignedTo &&
-              (
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskOwnerId ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != '' &&
-                  (
-                    request.resource.data.userId ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.boardManagerId ||
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.memberRoles[request.resource.data.userId] == 'supervisor'
-                  )
-                )
-              )
-            )
-          );
-      }
-
-      function isSuggestionNotificationCreate() {
-        return request.resource.data.category == 'reminder' &&
-          request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/suggestions/$(request.resource.data.relatedId)) &&
-          exists(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/suggestions/$(request.resource.data.relatedId)).data.suggestionBoardId)) &&
-          request.auth.uid ==
-            get(/databases/$(database)/documents/suggestions/$(request.resource.data.relatedId)).data.suggestionAuthorId &&
-          request.resource.data.userId ==
-            get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/suggestions/$(request.resource.data.relatedId)).data.suggestionBoardId)).data.boardManagerId &&
-          request.resource.data.userId != request.auth.uid;
-      }
-
-      function isPokeReminderNotificationCreate() {
-        return request.resource.data.category == 'reminder' &&
-          request.resource.data.userId is string &&
-          request.resource.data.userId != '' &&
-          request.resource.data.userId != request.auth.uid &&
-          request.resource.data.metadata is map &&
-          request.resource.data.metadata.source == 'poke' &&
-          (
-            // Task poke: task participant can notify assigned member.
-            (
-              request.resource.data.metadata.targetType == 'task' &&
-              request.resource.data.relatedId is string &&
-              exists(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)) &&
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
-                  (
-                    request.auth.uid ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.boardManagerId ||
-                    request.auth.uid in
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberIds
-                  )
-                )
-              ) &&
-              request.resource.data.userId ==
-                get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo
-            ) ||
-            // Board poke: board member can notify another user.
-            (
-              request.resource.data.metadata.targetType == 'board' &&
-              request.resource.data.relatedId is string &&
-              exists(/databases/$(database)/documents/boards/$(request.resource.data.relatedId)) &&
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/boards/$(request.resource.data.relatedId)).data.boardManagerId ||
-                request.auth.uid in
-                  get(/databases/$(database)/documents/boards/$(request.resource.data.relatedId)).data.memberIds
-              )
-            ) ||
-            // Direct user poke.
-            (
-              request.resource.data.metadata.targetType == 'user' &&
-              request.resource.data.relatedId is string &&
-              request.resource.data.relatedId == request.resource.data.userId
-            ) ||
-            // Fallback for legacy poke payloads without explicit target type.
-            (
-              !(request.resource.data.metadata.targetType is string)
-            )
-          );
-      }
-
-      function notificationTaskId() {
-        return (request.resource.data.relatedId is string &&
-            request.resource.data.relatedId != '')
-          ? request.resource.data.relatedId
-          : (
-              request.resource.data.metadata is map &&
-              request.resource.data.metadata.taskId is string &&
-              request.resource.data.metadata.taskId != ''
-            )
-            ? request.resource.data.metadata.taskId
-            : '';
-      }
-
-      function isTaskAssignmentNotificationCreate() {
-        let taskId = notificationTaskId();
-        return request.resource.data.category == 'task_assigned' &&
-          taskId != '' &&
-          exists(/databases/$(database)/documents/tasks/$(taskId)) &&
-          (
-            // Task owner can notify assigned/proposed assignee
-            (
-              request.auth.uid ==
-                get(/databases/$(database)/documents/tasks/$(taskId)).data.taskOwnerId &&
-              (
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskAssignedTo ||
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskProposedAssigneeId
-              )
-            ) ||
-            // Board manager/supervisor can notify assigned/proposed assignee for board tasks
-            (
-              get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId != null &&
-              get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId != '' &&
-              (
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskAssignedTo ||
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(taskId)).data.taskProposedAssigneeId
-              ) &&
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId)).data.boardManagerId ||
-                get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(taskId)).data.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
-              )
-            )
-          );
-      }
-
-      function isTaskApplicationNotificationCreate() {
-        return request.resource.data.category == 'approval' &&
-          request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)) &&
-          (
-            // A task participant can notify task owner/board reviewers about an application
-            (
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
-                  request.auth.uid in
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberIds
-                )
-              ) &&
-              request.resource.data.userId != request.auth.uid &&
-              (
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
-                  (
-                    request.resource.data.userId ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.boardManagerId ||
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberRoles[request.resource.data.userId] == 'supervisor'
-                  )
-                )
-              )
-            ) ||
-            // Task owner/board reviewers can notify assignee
-            (
-              request.resource.data.userId ==
-                get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskAssignedTo &&
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskOwnerId ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId != '' &&
-                  (
-                    request.auth.uid ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.boardManagerId ||
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(request.resource.data.relatedId)).data.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
-                  )
-                )
-              )
-            )
-          );
-      }
-
-      function hasValidNotificationPayload() {
-        return request.resource.data.userId is string &&
-          request.resource.data.userId != '' &&
-          request.resource.data.title is string &&
-          request.resource.data.title != '' &&
-          request.resource.data.message is string &&
-          request.resource.data.message != '' &&
-          request.resource.data.isRead == false &&
-          request.resource.data.createdAt is timestamp;
-      }
-
-      // Allow any authenticated user to CREATE notifications for any user
-      // (for task assignments, board invites, etc)
-      allow create: if request.auth != null &&
-        hasValidNotificationPayload() &&
-        (isSelfNotificationCreate() ||
-         isInviteNotificationCreate() ||
-         isApprovalNotificationCreate() ||
-         isSuggestionNotificationCreate() ||
-         isPokeReminderNotificationCreate() ||
-         isTaskAssignmentNotificationCreate() ||
-         isTaskApplicationNotificationCreate());
-
-      // Allow users to READ their own notifications
-      allow read: if request.auth != null &&
-                  resource.data.userId == request.auth.uid;
-
-      // Allow users to UPDATE their own notifications (mark as read, etc)
-      allow update: if request.auth != null &&
-                    resource.data.userId == request.auth.uid;
-
-      // Allow users to DELETE their own notifications
-      allow delete: if request.auth != null &&
-                    resource.data.userId == request.auth.uid;
-    }
-
-    // Push notifications (legacy). Canonical notifications are in_app_notifications.
-    match /push_notifications/{notificationId} {
-      function isSelfNotificationCreate() {
-        return request.resource.data.userId == request.auth.uid;
-      }
-
-      function isInviteNotificationCreate() {
-        return request.resource.data.category == 'invitation' &&
-          request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)) &&
-          get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId == request.resource.data.userId &&
-          (
-            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.boardManagerId ||
-            request.auth.uid == get(/databases/$(database)/documents/board_requests/$(request.resource.data.relatedId)).data.userId
-          );
-      }
-
-      function isApprovalNotificationCreate() {
-        return request.resource.data.category == 'approval' &&
-          request.resource.data.relatedId is string &&
-          exists(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)) &&
-          exists(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)) &&
-          (
-            (
-              request.resource.data.userId ==
-                get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.submittedBy &&
-              (
-                request.auth.uid ==
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskOwnerId ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != '' &&
-                  (
-                    request.auth.uid ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.boardManagerId ||
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor'
-                  )
-                )
-              )
-            ) ||
-            (
-              request.auth.uid ==
-                get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskAssignedTo &&
-              (
-                request.resource.data.userId ==
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskOwnerId ||
-                (
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != null &&
-                  get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId != '' &&
-                  (
-                    request.resource.data.userId ==
-                      get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.boardManagerId ||
-                    get(/databases/$(database)/documents/boards/$(get(/databases/$(database)/documents/tasks/$(get(/databases/$(database)/documents/task_submissions/$(request.resource.data.relatedId)).data.taskId)).data.taskBoardId)).data.memberRoles[request.resource.data.userId] == 'supervisor'
-                  )
-                )
-              )
-            )
-          );
-      }
-
-      function hasValidPushPayload() {
-        return request.resource.data.userId is string &&
-          request.resource.data.userId != '' &&
-          request.resource.data.title is string &&
-          request.resource.data.title != '' &&
-          request.resource.data.body is string &&
-          request.resource.data.body != '' &&
-          request.resource.data.isSent == false &&
-          request.resource.data.createdAt is timestamp;
-      }
-
-      allow read: if request.auth != null &&
-        resource.data.userId == request.auth.uid;
-
-      // Deprecated client writes: push is now derived from in-app notifications.
-      allow create: if false;
-
-      allow update, delete: if false;
-    }
-
-    // Email notifications (client writes, sender service consumes)
-    match /email_notifications/{notificationId} {
-      allow read: if request.auth != null &&
-        (resource.data.userId == request.auth.uid ||
-         resource.data.userEmail == request.auth.token.email);
-
-      allow create: if request.auth != null &&
-        request.resource.data.userId is string;
-
-      allow update, delete: if false;
-    }
-
     // Boards collection
     match /boards/{boardId} {
       function isBoardManager() {
@@ -467,50 +104,48 @@ service cloud.firestore {
           );
       }
 
-      function isRecruitmentType(data) {
-        return (
-          (data.boardReqType != null && data.boardReqType == 'recruitment') ||
-          (!(data.boardReqType != null) &&
-            data.requestType != null &&
-            data.requestType == 'invitation')
-        );
+      function hasPendingBoardInvite() {
+        return request.auth != null &&
+          request.auth.uid in resource.data.get('pendingInviteUserIds', []);
       }
 
-      function isInviteeSelfJoinUpdate() {
+      function canAcceptBoardInvite() {
         return request.auth != null &&
-          request.resource.data.boardLastJoinRequestId is string &&
-          request.resource.data.boardLastJoinRequestId != '' &&
-          exists(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)) &&
-          get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.userId == request.auth.uid &&
-          get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardId == boardId &&
-          get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardReqStatus == 'approved' &&
-          isRecruitmentType(get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data) &&
           !(request.auth.uid in resource.data.memberIds) &&
-          request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
-          request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
-          request.auth.uid in request.resource.data.memberIds &&
-          request.resource.data.memberRoles[request.auth.uid] ==
-            get(/databases/$(database)/documents/board_requests/$(request.resource.data.boardLastJoinRequestId)).data.boardReqRequestedRole &&
-          request.resource.data.memberRoles.diff(resource.data.memberRoles).affectedKeys().hasOnly([request.auth.uid]) &&
+          request.auth.uid in resource.data.get('pendingInviteUserIds', []) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'memberIds',
             'memberRoles',
+            'pendingInviteUserIds',
+            'boardLastThoughtId',
             'boardLastModifiedAt',
-            'boardLastModifiedBy',
-            'boardLastJoinRequestId'
-          ]);
+            'boardLastModifiedBy'
+          ]) &&
+          request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+          request.resource.data.memberIds.hasAll(resource.data.memberIds) &&
+          request.auth.uid in request.resource.data.memberIds &&
+          request.resource.data.memberRoles[request.auth.uid] in ['member', 'supervisor'] &&
+          resource.data.get('pendingInviteUserIds', []).size() ==
+            request.resource.data.get('pendingInviteUserIds', []).size() + 1 &&
+          resource.data.get('pendingInviteUserIds', [])
+            .hasAll(request.resource.data.get('pendingInviteUserIds', [])) &&
+          !(request.auth.uid in request.resource.data.get('pendingInviteUserIds', [])) &&
+          request.resource.data.memberRoles.diff(resource.data.memberRoles)
+            .affectedKeys()
+            .hasOnly([request.auth.uid]);
       }
 
       // Only boards user manages or belongs to are readable.
       // Members cannot read soft-deleted boards.
       allow read: if isBoardManager() ||
-        (isBoardMember() && resource.data.boardIsDeleted == false);
+        (isBoardMember() && resource.data.boardIsDeleted == false) ||
+        (hasPendingBoardInvite() && resource.data.boardIsDeleted == false);
 
       allow create: if request.auth != null &&
         request.auth.uid in request.resource.data.memberIds;
 
       allow update: if request.auth != null &&
-        (isBoardManager() || isInviteeSelfJoinUpdate());
+        (isBoardManager() || canAcceptBoardInvite());
 
       allow delete: if request.auth != null &&
         request.auth.uid == resource.data.boardManagerId;
@@ -534,174 +169,6 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
-
-    // Board join requests collection
-    match /board_requests/{requestId} {
-      function isRequestTargetUser() {
-        return request.auth != null &&
-          request.auth.uid == resource.data.userId;
-      }
-
-      function isRequestBoardManager() {
-        return request.auth != null &&
-          get(/databases/$(database)/documents/boards/$(resource.data.boardId)).data.boardManagerId == request.auth.uid;
-      }
-
-      function isRequestBoardManagerByField() {
-        return request.auth != null &&
-          resource.data.boardManagerId == request.auth.uid;
-      }
-
-      function isCreateByTargetUser() {
-        return request.auth != null &&
-          request.auth.uid == request.resource.data.userId;
-      }
-
-      function isCreateByBoardManager() {
-        return request.auth != null &&
-          get(/databases/$(database)/documents/boards/$(request.resource.data.boardId)).data.boardManagerId == request.auth.uid;
-      }
-
-      function isResponseOnlyUpdate() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'boardReqStatus',
-          'boardReqRespondedAt',
-          'boardReqRespondedBy',
-          'boardReqResponseMessage'
-        ]);
-      }
-
-      function isValidStatusTransition() {
-        return resource.data.boardReqStatus == 'pending' &&
-          request.resource.data.boardReqStatus in ['approved', 'rejected'];
-      }
-
-      function hasValidResponderMetadata() {
-        return request.resource.data.boardReqRespondedBy == request.auth.uid &&
-          request.resource.data.boardReqRespondedAt is timestamp;
-      }
-
-      function isManagerResponseUpdate() {
-        return !boardReqTypeIsRecruitment(resource.data) &&
-          (isRequestBoardManager() || isRequestBoardManagerByField()) &&
-          isResponseOnlyUpdate() &&
-          isValidStatusTransition() &&
-          hasValidResponderMetadata();
-      }
-
-      function isTargetUserRecruitmentResponseUpdate() {
-        return request.auth.uid == resource.data.userId &&
-          boardReqTypeIsRecruitment(resource.data) &&
-          isResponseOnlyUpdate() &&
-          isValidStatusTransition() &&
-          hasValidResponderMetadata();
-      }
-
-      function boardReqTypeIsRecruitment(data) {
-        return (
-          (data.boardReqType != null && data.boardReqType == 'recruitment') ||
-          (!(data.boardReqType != null) &&
-            data.requestType != null &&
-            data.requestType == 'invitation')
-        );
-      }
-
-      // Users can read their own requests; managers can read requests for their board.
-      allow read: if isRequestTargetUser() || isRequestBoardManager() || isRequestBoardManagerByField();
-
-      // Managers can create requests (invitations)
-      // Users can create requests for themselves (applications)
-      allow create: if isCreateByTargetUser() || isCreateByBoardManager();
-
-      // Managers can approve/reject any pending request.
-      // Target users can only accept/decline pending recruitment requests.
-      allow update: if request.auth != null &&
-        (isManagerResponseUpdate() ||
-         isTargetUserRecruitmentResponseUpdate());
-
-      // Users can delete their own requests
-      allow delete: if request.auth != null &&
-        request.auth.uid == resource.data.userId;
-    }
-
-    // Poke collection
-    match /pokes/{pokeId} {
-      function isCreator() {
-        return request.auth != null &&
-          request.auth.uid == resource.data.createdByUserId;
-      }
-
-      function isRecipient() {
-        return request.auth != null &&
-          resource.data.recipientUserId != null &&
-          request.auth.uid == resource.data.recipientUserId;
-      }
-
-      function isBoardTargetMember() {
-        return request.auth != null &&
-          resource.data.targetType == 'board' &&
-          (
-            request.auth.uid == get(/databases/$(database)/documents/boards/$(resource.data.targetId)).data.boardManagerId ||
-            request.auth.uid in get(/databases/$(database)/documents/boards/$(resource.data.targetId)).data.memberIds
-          );
-      }
-
-      function isTaskTargetParticipant() {
-        let task = get(/databases/$(database)/documents/tasks/$(resource.data.targetId)).data;
-        return request.auth != null &&
-          resource.data.targetType == 'task' &&
-          (
-            request.auth.uid == task.taskOwnerId ||
-            request.auth.uid == task.taskAssignedTo ||
-            (task.taskBoardId != null &&
-             task.taskBoardId != '' &&
-             (
-               request.auth.uid == get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
-               request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds
-             ))
-          );
-      }
-
-      allow read: if isCreator() || isRecipient() || isBoardTargetMember() || isTaskTargetParticipant();
-
-      allow create: if request.auth != null &&
-        request.resource.data.createdByUserId == request.auth.uid;
-
-      allow update, delete: if request.auth != null &&
-        request.auth.uid == resource.data.createdByUserId;
-    }
-
-    // Suggestions collection
-    match /suggestions/{suggestionId} {
-      function isBoardMember(boardId) {
-        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId ||
-               request.auth.uid in get(/databases/$(database)/documents/boards/$(boardId)).data.memberIds;
-      }
-
-      function isBoardManager(boardId) {
-        return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId;
-      }
-
-      function isBoardSupervisor(boardId) {
-        return get(/databases/$(database)/documents/boards/$(boardId)).data.memberRoles[request.auth.uid] == 'supervisor';
-      }
-
-      allow read: if request.auth != null &&
-        resource.data.suggestionIsDeleted == false &&
-        isBoardMember(resource.data.suggestionBoardId);
-
-      allow create: if request.auth != null &&
-        request.resource.data.suggestionAuthorId == request.auth.uid &&
-        isBoardMember(request.resource.data.suggestionBoardId);
-
-      allow update: if request.auth != null &&
-        (resource.data.suggestionAuthorId == request.auth.uid ||
-         isBoardManager(resource.data.suggestionBoardId));
-
-      allow delete: if request.auth != null &&
-        isBoardManager(resource.data.suggestionBoardId);
-    }
-
     // Tasks collection
     match /tasks/{taskId} {
       function isBoardMember(boardId) {
@@ -722,35 +189,33 @@ service cloud.firestore {
           get(/databases/$(database)/documents/boards/$(boardId)).data.memberRoles[request.auth.uid] == 'supervisor';
       }
 
-      function isAssignmentResponseByProposedAssignee() {
-        return request.auth != null &&
-          resource.data.taskIsDone != true &&
-          resource.data.taskAssignmentStatus == 'pending' &&
-          resource.data.taskProposedAssigneeId is string &&
-          resource.data.taskProposedAssigneeId == request.auth.uid &&
+      function isAssigneeReminderUpdate() {
+        return request.auth.uid == resource.data.taskAssignedTo &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'taskAssignedTo',
-            'taskAssignedToName',
-            'taskAssignmentStatus',
-            'taskAcceptanceStatus',
-            'taskProposedAssigneeId',
-            'taskProposedAssigneeName'
+            'taskReminderSentAt',
+            'taskDeadlineMissed'
+          ]);
+      }
+
+      function isAssigneeWorkflowStatusUpdate() {
+        return resource.data.taskIsDone != true &&
+          request.auth.uid == resource.data.taskAssignedTo &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'taskStatus'
           ]) &&
-          request.resource.data.taskAssignmentStatus in ['accepted', 'declined'] &&
-          (
-            (
-              request.resource.data.taskAssignmentStatus == 'accepted' &&
-              request.resource.data.taskAssignedTo == request.auth.uid &&
-              request.resource.data.taskAssignedToName is string &&
-              request.resource.data.taskAssignedToName != ''
-            ) ||
-            (
-              request.resource.data.taskAssignmentStatus == 'declined' &&
-              request.resource.data.taskAssignedTo == 'None'
-            )
-          ) &&
-          !('taskProposedAssigneeId' in request.resource.data) &&
-          !('taskProposedAssigneeName' in request.resource.data);
+          request.resource.data.taskStatus in ['To Do', 'In Progress', 'Paused'];
+      }
+
+      function isAssigneeSubmissionUpdate() {
+        return resource.data.taskIsDone != true &&
+          request.auth.uid == resource.data.taskAssignedTo &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'taskStatus',
+            'taskApprovalStatus',
+            'taskLatestSubmissionThoughtId'
+          ]) &&
+          request.resource.data.taskStatus == 'Submitted' &&
+          request.resource.data.taskApprovalStatus == 'pending';
       }
 
       allow read: if request.auth != null &&
@@ -776,12 +241,10 @@ service cloud.firestore {
       allow update: if request.auth != null &&
         (
           (
-            // Assigned members can only update reminder fields.
-            request.auth.uid == resource.data.taskAssignedTo &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'taskReminderSentAt',
-              'taskDeadlineMissed'
-            ])
+            // Assigned members can only update reminder fields and limited workflow fields.
+            isAssigneeReminderUpdate() ||
+            isAssigneeWorkflowStatusUpdate() ||
+            isAssigneeSubmissionUpdate()
           ) ||
           (
             resource.data.taskIsDone != true &&
@@ -806,9 +269,6 @@ service cloud.firestore {
               !isBoardManager(resource.data.taskBoardId)
             )
           )
-          ||
-          // Proposed assignee can accept/decline assignment.
-          isAssignmentResponseByProposedAssignee()
         );
 
       allow delete: if request.auth != null &&
@@ -818,41 +278,6 @@ service cloud.firestore {
           resource.data.taskBoardId != '' &&
           isBoardManager(resource.data.taskBoardId)));
 
-      // Applications subcollection
-      match /applications/{applicationId} {
-        function isBoardMember() {
-          let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
-          return request.auth != null &&
-            (
-              request.auth.uid == task.taskOwnerId ||
-              request.auth.uid == task.taskAssignedTo ||
-              (task.taskBoardId != null &&
-               (
-                 request.auth.uid == get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
-                 request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds
-               ))
-            );
-        }
-
-        function isBoardTaskManager() {
-          let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
-          return request.auth != null &&
-            task.taskBoardId != null &&
-            task.taskBoardId != '' &&
-            get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId == request.auth.uid;
-        }
-
-        allow read: if isBoardMember();
-
-        allow create: if request.auth != null &&
-          request.resource.data.userId == request.auth.uid &&
-          !isBoardTaskManager();
-
-        allow delete: if request.auth != null &&
-          request.auth.uid == resource.data.userId;
-
-        allow update: if false;
-      }
     }
 
     // Task stats collection
@@ -870,6 +295,89 @@ service cloud.firestore {
       allow delete: if hasTaskAccess();
     }
 
+    // Task uploads collection
+    match /task_uploads/{uploadId} {
+      function parentTask(taskId) {
+        return get(/databases/$(database)/documents/tasks/$(taskId)).data;
+      }
+
+      function taskExists(taskId) {
+        return taskId is string &&
+          taskId != '' &&
+          exists(/databases/$(database)/documents/tasks/$(taskId));
+      }
+
+      function hasTaskAccess(taskId) {
+        let task = parentTask(taskId);
+        return request.auth != null &&
+          taskExists(taskId) &&
+          (
+            request.auth.uid == task.taskOwnerId ||
+            request.auth.uid == task.taskAssignedTo ||
+            (
+              task.taskBoardId is string &&
+              task.taskBoardId != '' &&
+              request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds
+            ) ||
+            (
+              task.taskBoardId is string &&
+              task.taskBoardId != '' &&
+              request.auth.uid ==
+                get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId
+            )
+          );
+      }
+
+      function canManageTask(taskId) {
+        let task = parentTask(taskId);
+        return request.auth != null &&
+          taskExists(taskId) &&
+          (
+            request.auth.uid == task.taskOwnerId ||
+            (
+              task.taskBoardId is string &&
+              task.taskBoardId != '' &&
+              (
+                request.auth.uid ==
+                  get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
+                get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberRoles[request.auth.uid]
+                  == 'supervisor'
+              )
+            )
+          );
+      }
+
+      function preservesImmutableFields() {
+        return request.resource.data.taskId == resource.data.taskId &&
+          request.resource.data.boardId == resource.data.boardId &&
+          request.resource.data.uploadedByUserId == resource.data.uploadedByUserId &&
+          request.resource.data.fileName == resource.data.fileName &&
+          request.resource.data.fileUrl == resource.data.fileUrl &&
+          request.resource.data.filePublicId == resource.data.filePublicId &&
+          request.resource.data.uploadedAt == resource.data.uploadedAt;
+      }
+
+      allow read: if hasTaskAccess(resource.data.taskId) &&
+        resource.data.isDeleted == false;
+
+      allow create: if request.auth != null &&
+        request.resource.data.uploadedByUserId == request.auth.uid &&
+        hasTaskAccess(request.resource.data.taskId);
+
+      allow update: if request.auth != null &&
+        preservesImmutableFields() &&
+        (
+          request.auth.uid == resource.data.uploadedByUserId ||
+          canManageTask(resource.data.taskId)
+        );
+
+      allow delete: if request.auth != null &&
+        (
+          request.auth.uid == resource.data.uploadedByUserId ||
+          canManageTask(resource.data.taskId)
+        );
+    }
+
     // Steps collection
     match /steps/{stepId} {
       function parentTask(taskId) {
@@ -883,11 +391,6 @@ service cloud.firestore {
                (task.taskBoardId != null &&
                 task.taskBoardId != '' &&
                 request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds);
-      }
-
-      function isParentTaskAssignee(taskId) {
-        let task = parentTask(taskId);
-        return request.auth != null && request.auth.uid == task.taskAssignedTo;
       }
 
       function canManageParentTask(taskId) {
@@ -931,103 +434,8 @@ service cloud.firestore {
         isParentTaskOpen(resource.data.parentTaskId);
     }
 
-    // Task submissions collection
-    match /task_submissions/{submissionId} {
-      function taskById(taskId) {
-        let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
-        return task;
-      }
-
-      function canAccessTaskSubmissions(taskId) {
-        let task = taskById(taskId);
-        let isBoardTask = task.taskBoardId != null && task.taskBoardId != '';
-
-        return request.auth.uid == task.taskOwnerId ||
-               request.auth.uid == task.taskAssignedTo ||
-               (isBoardTask &&
-                (request.auth.uid == get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
-                 request.auth.uid in get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberIds));
-      }
-
-      function isTaskAssignee(taskId) {
-        let task = taskById(taskId);
-        return request.auth != null && request.auth.uid == task.taskAssignedTo;
-      }
-
-      function canReviewTaskSubmissions(taskId) {
-        let task = taskById(taskId);
-        let isBoardTask = task.taskBoardId != null && task.taskBoardId != '';
-        return request.auth != null &&
-          (request.auth.uid == task.taskOwnerId ||
-           (isBoardTask &&
-            (request.auth.uid == get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.boardManagerId ||
-             get(/databases/$(database)/documents/boards/$(task.taskBoardId)).data.memberRoles[request.auth.uid] == 'supervisor')));
-      }
-
-      function isTaskOpen(taskId) {
-        let task = taskById(taskId);
-        return task.taskIsDone != true;
-      }
-
-      function reviewFieldsOnly() {
-        return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status',
-          'feedback',
-          'reviewedAt',
-          'reviewedBy',
-          'revisionTaskId'
-        ]);
-      }
-
-      function isValidReviewStatus() {
-        return request.resource.data.status in [
-          'approved',
-          'rejected',
-          'revision_requested'
-        ];
-      }
-
-      function hasValidReviewPayload() {
-        return request.resource.data.reviewedBy == request.auth.uid &&
-          request.resource.data.reviewedAt is timestamp &&
-          request.resource.data.taskId == resource.data.taskId &&
-          request.resource.data.submittedBy == resource.data.submittedBy &&
-          request.resource.data.submittedAt == resource.data.submittedAt &&
-          (!('feedback' in request.resource.data) ||
-           request.resource.data.feedback == null ||
-           request.resource.data.feedback is string) &&
-          (!('revisionTaskId' in request.resource.data) ||
-           request.resource.data.revisionTaskId == null ||
-           request.resource.data.revisionTaskId is string);
-      }
-
-      // Allow read if user can access the task
-      allow read: if request.auth != null &&
-        canAccessTaskSubmissions(resource.data.taskId);
-
-      // Only assigned member can create submissions
-      allow create: if request.auth != null &&
-        request.resource.data.submittedBy == request.auth.uid &&
-        isTaskAssignee(request.resource.data.taskId) &&
-        isTaskOpen(request.resource.data.taskId);
-
-      // Only the submitter or task owner/manager can update
-      allow update: if request.auth != null &&
-        isTaskOpen(resource.data.taskId) &&
-        canReviewTaskSubmissions(resource.data.taskId) &&
-        reviewFieldsOnly() &&
-        isValidReviewStatus() &&
-        hasValidReviewPayload();
-
-      // Only the submitter or task owner/manager can delete
-      allow delete: if request.auth != null &&
-        isTaskOpen(resource.data.taskId) &&
-        (resource.data.submittedBy == request.auth.uid &&
-         isTaskAssignee(resource.data.taskId));
-    }
-
     // Task volunteer requests collection
-    match /task_volunteer_requests/{requestId} {
+    match /task_volunteer_requests/{volunteerRequestId} {
       function isBoardManagerForRequest() {
         let boardId = resource.data.boardId;
         return request.auth.uid == get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId;
@@ -1052,10 +460,254 @@ service cloud.firestore {
         resource.data.status == 'pending';
     }
 
+    // Notifications collection
+    match /notifications/{notificationId} {
+      function boardExists(boardId) {
+        return boardId is string &&
+          boardId != '' &&
+          exists(/databases/$(database)/documents/boards/$(boardId));
+      }
+
+      function taskExists(taskId) {
+        return taskId is string &&
+          taskId != '' &&
+          exists(/databases/$(database)/documents/tasks/$(taskId));
+      }
+
+      function isBoardParticipant(boardId) {
+        return request.auth != null &&
+          boardExists(boardId) &&
+          (
+            request.auth.uid ==
+              get(/databases/$(database)/documents/boards/$(boardId)).data.boardManagerId ||
+            request.auth.uid in
+              get(/databases/$(database)/documents/boards/$(boardId)).data.memberIds ||
+            get(/databases/$(database)/documents/boards/$(boardId)).data.memberRoles[request.auth.uid]
+              in ['member', 'supervisor', 'manager']
+          );
+      }
+
+      function hasTaskAccess(taskId) {
+        let task = get(/databases/$(database)/documents/tasks/$(taskId)).data;
+        return request.auth != null &&
+          taskExists(taskId) &&
+          (
+            request.auth.uid == task.taskOwnerId ||
+            request.auth.uid == task.taskAssignedTo ||
+            (
+              task.taskBoardId is string &&
+              task.taskBoardId != '' &&
+              isBoardParticipant(task.taskBoardId)
+            )
+          );
+      }
+
+      function isRecipient() {
+        return request.auth != null &&
+          request.auth.uid == resource.data.recipientUserId;
+      }
+
+      function isValidCreate() {
+        let data = request.resource.data;
+        let boardId = data.get('boardId', null);
+        let taskId = data.get('taskId', null);
+        return request.auth != null &&
+          data.actorUserId is string &&
+          data.actorUserId == request.auth.uid &&
+          data.recipientUserId is string &&
+          data.recipientUserId != '' &&
+          data.title is string &&
+          data.message is string &&
+          data.type is string &&
+          data.isRead == false &&
+          data.isDeleted == false &&
+          data.createdAt is timestamp &&
+          data.updatedAt is timestamp &&
+          (
+            !(boardId is string) ||
+            boardId == '' ||
+            boardExists(boardId)
+          ) &&
+          (
+            !(taskId is string) ||
+            taskId == '' ||
+            taskExists(taskId)
+          );
+      }
+
+      allow read: if request.auth != null &&
+        (
+          isRecipient() ||
+          (
+            resource.data.boardId is string &&
+            resource.data.boardId != '' &&
+            isBoardParticipant(resource.data.boardId)
+          ) ||
+          (
+            resource.data.taskId is string &&
+            resource.data.taskId != '' &&
+            hasTaskAccess(resource.data.taskId)
+          )
+        ) &&
+        resource.data.isDeleted == false;
+
+      allow create: if isValidCreate();
+
+      allow update: if request.auth != null && isRecipient();
+
+      allow delete: if request.auth != null && isRecipient();
+    }
+
+    // Thoughts collection
+    match /thoughts/{thoughtId} {
+      function boardExists(boardId) {
+        return boardId is string &&
+          boardId != '' &&
+          exists(/databases/$(database)/documents/boards/$(boardId));
+      }
+
+      function boardData(boardId) {
+        return get(/databases/$(database)/documents/boards/$(boardId)).data;
+      }
+
+      function isBoardMember(boardId) {
+        return request.auth != null &&
+          boardExists(boardId) &&
+          (
+            request.auth.uid == boardData(boardId).boardManagerId ||
+            request.auth.uid in boardData(boardId).memberIds ||
+            boardData(boardId).memberRoles[request.auth.uid] in ['member', 'supervisor', 'manager']
+          );
+      }
+
+      function isBoardManager(boardId) {
+        return request.auth != null &&
+          boardExists(boardId) &&
+          request.auth.uid == boardData(boardId).boardManagerId;
+      }
+
+      function isBoardSupervisor(boardId) {
+        return request.auth != null &&
+          boardExists(boardId) &&
+          boardData(boardId).memberRoles[request.auth.uid] == 'supervisor';
+      }
+
+      function taskExists(taskId) {
+        return taskId is string &&
+          taskId != '' &&
+          exists(/databases/$(database)/documents/tasks/$(taskId));
+      }
+
+      function taskData(taskId) {
+        return get(/databases/$(database)/documents/tasks/$(taskId)).data;
+      }
+
+      function hasTaskAccess(taskId) {
+        return request.auth != null &&
+          taskExists(taskId) &&
+          (
+            request.auth.uid == taskData(taskId).taskOwnerId ||
+            request.auth.uid == taskData(taskId).taskAssignedTo ||
+            (
+              taskData(taskId).taskBoardId is string &&
+              taskData(taskId).taskBoardId != '' &&
+              isBoardMember(taskData(taskId).taskBoardId)
+            )
+          );
+      }
+
+      function canManageThought(thoughtData) {
+        return request.auth != null &&
+          (
+            request.auth.uid == thoughtData.authorId ||
+            request.auth.uid == thoughtData.targetUserId ||
+            (
+              thoughtData.boardId is string &&
+              thoughtData.boardId != '' &&
+              (isBoardManager(thoughtData.boardId) || isBoardSupervisor(thoughtData.boardId))
+            ) ||
+            (
+              thoughtData.taskId is string &&
+              thoughtData.taskId != '' &&
+              hasTaskAccess(thoughtData.taskId)
+            )
+          );
+      }
+
+      function canReadThought(thoughtData) {
+        return request.auth != null &&
+          (
+            request.auth.uid == thoughtData.authorId ||
+            request.auth.uid == thoughtData.targetUserId ||
+            (
+              thoughtData.boardId is string &&
+              thoughtData.boardId != '' &&
+              isBoardMember(thoughtData.boardId)
+            ) ||
+            (
+              thoughtData.taskId is string &&
+              thoughtData.taskId != '' &&
+              hasTaskAccess(thoughtData.taskId)
+            )
+          ) &&
+          thoughtData.isDeleted == false;
+      }
+
+      function isValidThoughtCreate() {
+        let data = request.resource.data;
+        let boardId = data.boardId;
+        let taskId = data.taskId;
+        let metadata = data.get('metadata', {});
+        let isBoardRequestAccess =
+          data.type == 'board_request' &&
+          metadata.requestDirection == 'request_board_access';
+
+        return request.auth != null &&
+          data.authorId == request.auth.uid &&
+          data.isDeleted == false &&
+          (
+            !(boardId is string) ||
+            boardId == '' ||
+            isBoardMember(boardId) ||
+            (
+              isBoardRequestAccess &&
+              boardExists(boardId) &&
+              data.targetUserId == boardData(boardId).boardManagerId
+            )
+          ) &&
+          (
+            !(taskId is string) ||
+            taskId == '' ||
+            hasTaskAccess(taskId)
+          );
+      }
+
+      function keepsImmutableCoreFields() {
+        return request.resource.data.authorId == resource.data.authorId &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.type == resource.data.type &&
+          request.resource.data.scopeType == resource.data.scopeType &&
+          request.resource.data.boardId == resource.data.boardId &&
+          request.resource.data.taskId == resource.data.taskId;
+      }
+
+      allow read: if canReadThought(resource.data);
+      allow create: if isValidThoughtCreate();
+      allow update: if canManageThought(resource.data) && keepsImmutableCoreFields();
+      allow delete: if request.auth != null &&
+        (
+          request.auth.uid == resource.data.authorId ||
+          (
+            resource.data.boardId is string &&
+            resource.data.boardId != '' &&
+            isBoardManager(resource.data.boardId)
+          )
+        );
+    }
+
     // Deny everything else
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
-

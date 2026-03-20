@@ -69,7 +69,7 @@ class CloudinaryService {
         CloudinaryFile.fromBytesData(
           file.bytes!,
           identifier: file.name,
-          folder: 'task_submissions',
+          folder: 'task_uploads',
           resourceType: resourceType,
           publicId: publicId,
         ),

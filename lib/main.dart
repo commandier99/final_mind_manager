@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'firebase_options.dart';
 import 'shared/presentation/pages/splash_screen.dart';
 import 'shared/presentation/pages/main_screen.dart';
@@ -16,31 +15,16 @@ import 'shared/datasources/providers/navigation_provider.dart';
 import 'features/boards/datasources/providers/board_provider.dart';
 import 'features/boards/datasources/providers/board_stats_provider.dart';
 import 'shared/features/search/providers/search_provider.dart';
-import 'shared/features/memory/datasources/providers/memory_provider.dart';
-import 'shared/features/thoughts/datasources/providers/thought_provider.dart';
-import 'features/boards/datasources/providers/board_request_provider.dart';
 import 'shared/features/users/datasources/providers/activity_event_provider.dart';
 import 'features/tasks/datasources/providers/upload_progress_provider.dart';
-import 'features/notifications/datasources/providers/in_app_notif_provider.dart';
-import 'features/notifications/datasources/providers/push_notif_provider.dart';
-import 'features/suggestions/datasources/providers/suggestion_provider.dart';
-import 'shared/services/firebase_messaging_service.dart';
+import 'features/notifications/datasources/providers/notification_provider.dart';
+import 'features/thoughts/datasources/providers/thought_provider.dart';
 import 'shared/utilities/cloudinary_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize permission handler
-  await Permission.notification.isDenied.then((isDenied) {
-    if (isDenied) {
-      debugPrint('[main.dart] Notification permission is denied');
-    }
-  });
-
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Initialize Firebase Messaging
-  await FirebaseMessagingService().initialize();
 
   // Initialize Cloudinary for file uploads
   CloudinaryService().initialize();
@@ -63,15 +47,11 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BoardProvider()),
         ChangeNotifierProvider(create: (_) => BoardStatsProvider()),
         ChangeNotifierProvider(create: (_) => SearchProvider()),
-        ChangeNotifierProvider(create: (_) => MemoryProvider()),
-        ChangeNotifierProvider(create: (_) => ThoughtProvider()),
-        ChangeNotifierProvider(create: (_) => BoardRequestProvider()),
-        ChangeNotifierProvider(create: (_) => InAppNotificationProvider()),
-        ChangeNotifierProvider(create: (_) => PushNotificationProvider()),
-        ChangeNotifierProvider(create: (_) => SuggestionProvider()),
         ChangeNotifierProvider(create: (_) => ActivityEventProvider()),
         ChangeNotifierProvider(create: (_) => NavigationProvider()),
         ChangeNotifierProvider(create: (_) => UploadProgressProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => ThoughtProvider()),
         ChangeNotifierProxyProvider<UserProvider, AuthenticationProvider>(
           create: (context) => AuthenticationProvider(),
           update: (context, userProvider, authProvider) {
@@ -82,8 +62,6 @@ class MyApp extends StatelessWidget {
                   '[DEBUG] main.dart: onUserAuthenticated callback triggered for userId: $userId',
                 );
                 userProvider.loadUserData(userId);
-                // Register FCM token for user
-                FirebaseMessagingService().registerTokenForUser(userId);
                 // Reset NavigationProvider to home page on sign in
                 context.read<NavigationProvider>().selectFromBottomNav(0);
               };

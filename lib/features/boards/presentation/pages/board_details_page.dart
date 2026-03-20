@@ -39,19 +39,17 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
 
   static const String _tabDrafts = 'drafts';
   static const String _tabPublished = 'published';
-  static const String _tabStats = 'stats';
   static const String _tabSubmissions = 'submissions';
+  static const String _tabStats = 'stats';
   static const Set<String> _allowedTabs = {
     _tabDrafts,
     _tabPublished,
-    _tabStats,
     _tabSubmissions,
+    _tabStats,
   };
 
-  bool _isSearchExpanded = false;
   bool _isDetailsPanelExpanded = true;
   String _selectedTab = _tabPublished;
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -89,17 +87,7 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
 
   @override
   void dispose() {
-    _searchController.dispose();
     super.dispose();
-  }
-
-  void _toggleSearch() {
-    setState(() {
-      _isSearchExpanded = !_isSearchExpanded;
-      if (!_isSearchExpanded) {
-        _searchController.clear();
-      }
-    });
   }
 
   void _toggleDetailsPanel() {
@@ -143,19 +131,9 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
     final currentUserId = context.watch<UserProvider>().userId;
     final isManager = widget.board.isManager(currentUserId);
     final canDraftTasks = widget.board.canDraftTasks(currentUserId);
-    final canViewSubmissionsTab =
-        currentUserId != null &&
-        widget.board.canReviewSubmissions(currentUserId);
     final showDraftsTab = canDraftTasks && widget.board.boardType == 'team';
-    final showReviewTab =
-        canViewSubmissionsTab &&
-        widget.board.boardType == 'team' &&
-        widget.board.boardPurpose != 'category';
 
     if (!showDraftsTab && _selectedTab == _tabDrafts) {
-      _selectedTab = _tabPublished;
-    }
-    if (!showReviewTab && _selectedTab == _tabSubmissions) {
       _selectedTab = _tabPublished;
     }
 
@@ -165,63 +143,48 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
         showBackButton: true,
         onBackPressed: () => Navigator.pop(context),
         showNotificationButton: false,
-        isSearchExpanded: _isSearchExpanded,
-        searchController: _searchController,
-        onSearchPressed: _toggleSearch,
-        onSearchChanged: (_) {},
-        onSearchClear: () {
-          setState(() {
-            _searchController.clear();
-          });
-        },
         customActions: [
-          if (!_isSearchExpanded) ...[
-            IconButton(
-              icon: const Icon(Icons.search),
-              onPressed: _toggleSearch,
+          IconButton(
+            icon: Icon(
+              _isDetailsPanelExpanded ? Icons.expand_less : Icons.expand_more,
             ),
-            IconButton(
-              icon: Icon(
-                _isDetailsPanelExpanded ? Icons.expand_less : Icons.expand_more,
-              ),
-              tooltip: _isDetailsPanelExpanded
-                  ? 'Hide board details'
-                  : 'Show board details',
-              onPressed: _toggleDetailsPanel,
-            ),
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert),
-              onSelected: (value) {
-                if (value == 'edit') {
-                  showDialog(
-                    context: context,
-                    builder: (_) => EditBoardDialog(board: widget.board),
-                  );
-                } else if (value == 'duplicate') {
-                  _duplicateBoard();
-                } else if (value == 'delete') {
-                  BoardDeleteFlowDialog.show(context, board: widget.board);
-                }
-              },
-              itemBuilder: (context) => [
-                if (isManager)
-                  const PopupMenuItem<String>(
-                    value: 'edit',
-                    child: Text('Edit'),
-                  ),
-                if (isManager && widget.board.boardType != 'personal')
-                  const PopupMenuItem<String>(
-                    value: 'duplicate',
-                    child: Text('Duplicate'),
-                  ),
-                if (isManager)
-                  const PopupMenuItem<String>(
-                    value: 'delete',
-                    child: Text('Delete', style: TextStyle(color: Colors.red)),
-                  ),
-              ],
-            ),
-          ],
+            tooltip: _isDetailsPanelExpanded
+                ? 'Hide board details'
+                : 'Show board details',
+            onPressed: _toggleDetailsPanel,
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            onSelected: (value) {
+              if (value == 'edit') {
+                showDialog(
+                  context: context,
+                  builder: (_) => EditBoardDialog(board: widget.board),
+                );
+              } else if (value == 'duplicate') {
+                _duplicateBoard();
+              } else if (value == 'delete') {
+                BoardDeleteFlowDialog.show(context, board: widget.board);
+              }
+            },
+            itemBuilder: (context) => [
+              if (isManager)
+                const PopupMenuItem<String>(
+                  value: 'edit',
+                  child: Text('Edit'),
+                ),
+              if (isManager && widget.board.boardType != 'personal')
+                const PopupMenuItem<String>(
+                  value: 'duplicate',
+                  child: Text('Duplicate'),
+                ),
+              if (isManager)
+                const PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Text('Delete', style: TextStyle(color: Colors.red)),
+                ),
+            ],
+          ),
         ],
       ),
       drawer: AppSideMenu(
@@ -320,17 +283,15 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                             setState(() => _selectedTab = _tabPublished),
                       ),
                     ),
-                    if (showReviewTab) ...[
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: _buildViewTab(
-                          label: 'Submissions',
-                          selected: _selectedTab == _tabSubmissions,
-                          onTap: () =>
-                              setState(() => _selectedTab = _tabSubmissions),
-                        ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _buildViewTab(
+                        label: 'Submissions',
+                        selected: _selectedTab == _tabSubmissions,
+                        onTap: () =>
+                            setState(() => _selectedTab = _tabSubmissions),
                       ),
-                    ],
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: _buildViewTab(
@@ -348,7 +309,10 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                   board: widget.board,
                 )
               else if (_selectedTab == _tabSubmissions)
-                BoardSubmissionsSection(boardId: widget.board.boardId)
+                BoardSubmissionsSection(
+                  boardId: widget.board.boardId,
+                  board: widget.board,
+                )
               else
                 BoardTasksSection(
                   boardId: widget.board.boardId,

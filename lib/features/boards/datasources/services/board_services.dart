@@ -376,9 +376,25 @@ class BoardService {
     required String boardId,
     required String userId,
     String role = BoardRoles.member, // Assignable roles: member/supervisor
-    String? invitationRequestId,
+    String? invitationThoughtId,
   }) async {
     final boardRef = _boardCollection.doc(boardId);
+    final boardDoc = await boardRef.get();
+    if (!boardDoc.exists) {
+      throw Exception('Board not found.');
+    }
+
+    final data = boardDoc.data() as Map<String, dynamic>? ?? const {};
+    final board = Board.fromMap(data, boardDoc.id);
+    if (board.boardType.trim().toLowerCase() != 'team') {
+      throw Exception('Only Team boards can add members.');
+    }
+    if (board.boardIsDeleted) {
+      throw Exception('Cannot add members to an archived board.');
+    }
+    if (board.memberIds.contains(userId)) {
+      return;
+    }
 
     final normalizedRole = BoardRoles.normalize(role);
     if (!BoardRoles.isAssignable(normalizedRole)) {
@@ -390,11 +406,12 @@ class BoardService {
     final updateData = <String, dynamic>{
       'memberIds': FieldValue.arrayUnion([userId]),
       'memberRoles.$userId': normalizedRole,
+      'pendingInviteUserIds': FieldValue.arrayRemove([userId]),
       'boardLastModifiedAt': FieldValue.serverTimestamp(),
       'boardLastModifiedBy': _auth.currentUser?.uid ?? userId,
     };
-    if (invitationRequestId != null && invitationRequestId.trim().isNotEmpty) {
-      updateData['boardLastJoinRequestId'] = invitationRequestId.trim();
+    if (invitationThoughtId != null && invitationThoughtId.trim().isNotEmpty) {
+      updateData['boardLastThoughtId'] = invitationThoughtId.trim();
     }
 
     await boardRef.update(updateData);
@@ -416,6 +433,33 @@ class BoardService {
         debugPrint('[ERROR] Failed to log member joined event: $e');
       }
     }
+  }
+
+  Future<void> markPendingBoardInvite({
+    required String boardId,
+    required String userId,
+    String? invitationThoughtId,
+  }) async {
+    final updateData = <String, dynamic>{
+      'pendingInviteUserIds': FieldValue.arrayUnion([userId]),
+      'boardLastModifiedAt': FieldValue.serverTimestamp(),
+      'boardLastModifiedBy': _auth.currentUser?.uid ?? '',
+    };
+    if (invitationThoughtId != null && invitationThoughtId.trim().isNotEmpty) {
+      updateData['boardLastThoughtId'] = invitationThoughtId.trim();
+    }
+    await _boardCollection.doc(boardId).update(updateData);
+  }
+
+  Future<void> clearPendingBoardInvite({
+    required String boardId,
+    required String userId,
+  }) async {
+    await _boardCollection.doc(boardId).update({
+      'pendingInviteUserIds': FieldValue.arrayRemove([userId]),
+      'boardLastModifiedAt': FieldValue.serverTimestamp(),
+      'boardLastModifiedBy': _auth.currentUser?.uid ?? userId,
+    });
   }
 
   Future<void> removeMemberFromBoard({

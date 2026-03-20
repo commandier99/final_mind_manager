@@ -211,24 +211,6 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
                       icon: Icons.person_outline,
                       label: currentTask.taskAssignedToName,
                     ),
-                    if (currentTask.taskAssignmentStatus != null)
-                      _buildInfoChip(
-                        icon: Icons.how_to_reg_outlined,
-                        label:
-                            'Assignment ${_getAssignmentStatusLabel(currentTask.taskAssignmentStatus)}',
-                        textColor: _getAssignmentStatusColor(
-                          currentTask.taskAssignmentStatus,
-                        ),
-                      ),
-                    if (currentTask.taskRequiresApproval)
-                      _buildInfoChip(
-                        icon: Icons.verified_outlined,
-                        label:
-                            'Approval ${_getApprovalStatusLabel(currentTask.taskApprovalStatus)}',
-                        textColor: _getApprovalStatusColor(
-                          currentTask.taskApprovalStatus,
-                        ),
-                      ),
                   ],
                 ),
               ],

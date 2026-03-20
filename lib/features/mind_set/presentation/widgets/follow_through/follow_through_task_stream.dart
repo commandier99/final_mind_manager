@@ -10,6 +10,7 @@ import '../../../../../shared/modes/mind_set_mode_policy.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
 import '../../../datasources/services/mind_set_session_runtime_service.dart';
 import '../../../../../shared/features/query/task_query_controller.dart';
+import '../../utils/session_task_submission_helper.dart';
 
 class FollowThroughTaskStream extends StatefulWidget {
   final List<String> taskIds;
@@ -274,6 +275,10 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     }
 
     await _showPomodoroFocusDecision();
+  }
+
+  Future<void> _openSubmissionFlow(Task task) async {
+    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
   Future<void> _showPomodoroFocusDecision() async {
@@ -640,8 +645,13 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                               isDimmed: false,
                               onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,
-                              onToggleDone: canToggleDone
+                              onToggleDone:
+                                  canToggleDone && !task.taskRequiresSubmission
                                   ? (isDone) => _toggleDoneForTask(task, isDone)
+                                  : null,
+                              onSubmitThought:
+                                  canToggleDone && task.taskRequiresSubmission
+                                  ? () => _openSubmissionFlow(task)
                                   : null,
                             ),
                           ],
