@@ -1688,23 +1688,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
       if (_selectedBoardRequestMode == _boardRequestInvite &&
           targetUser != null &&
           targetUser.userId != currentUser.userId) {
-        notifications.addAll([
-          _buildNotification(
-            now: now,
-            recipientUserId: currentUser.userId,
-            title: 'Board Invite Sent',
-            message: 'You invited ${targetUser.userName} to join $boardTitle.',
-            type: 'thought_board_invite_sent',
-            thought: thought,
-            actorUserId: currentUser.userId,
-            actorUserName: actorName,
-            eventKey:
-                '$notificationSeed:${currentUser.userId}:thought_board_invite_sent',
-            metadata: {
-              'role': thought.metadata?['invitedRole'],
-              'requestDirection': _selectedBoardRequestMode,
-            },
-          ),
+        notifications.add(
           _buildNotification(
             now: now,
             recipientUserId: targetUser.userId,
@@ -1721,26 +1705,11 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
               'requestDirection': _selectedBoardRequestMode,
             },
           ),
-        ]);
+        );
       } else if (_selectedBoardRequestMode == _boardRequestAccess &&
           targetUser != null &&
           targetUser.userId != currentUser.userId) {
-        notifications.addAll([
-          _buildNotification(
-            now: now,
-            recipientUserId: currentUser.userId,
-            title: 'Board Access Request Sent',
-            message: 'You requested access to $boardTitle.',
-            type: 'thought_board_request_sent',
-            thought: thought,
-            actorUserId: currentUser.userId,
-            actorUserName: actorName,
-            eventKey:
-                '$notificationSeed:${currentUser.userId}:thought_board_request_sent',
-            metadata: {
-              'requestDirection': _selectedBoardRequestMode,
-            },
-          ),
+        notifications.add(
           _buildNotification(
             now: now,
             recipientUserId: targetUser.userId,
@@ -1756,29 +1725,14 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
               'requestDirection': _selectedBoardRequestMode,
             },
           ),
-        ]);
+        );
       }
     }
 
     if (thought.type == Thought.typeTaskAssignment && targetUser != null) {
       if (_selectedTaskAssignmentMode == _taskAssignmentManagerToMember &&
           targetUser.userId != currentUser.userId) {
-        notifications.addAll([
-          _buildNotification(
-            now: now,
-            recipientUserId: currentUser.userId,
-            title: 'Task Assignment Sent',
-            message: 'You assigned ${targetUser.userName} to $taskTitle.',
-            type: 'thought_task_assignment_sent',
-            thought: thought,
-            actorUserId: currentUser.userId,
-            actorUserName: actorName,
-            eventKey:
-                '$notificationSeed:${currentUser.userId}:thought_task_assignment_sent',
-            metadata: {
-              'assignmentDirection': _selectedTaskAssignmentMode,
-            },
-          ),
+        notifications.add(
           _buildNotification(
             now: now,
             recipientUserId: targetUser.userId,
@@ -1794,25 +1748,10 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
               'assignmentDirection': _selectedTaskAssignmentMode,
             },
           ),
-        ]);
+        );
       } else if (_selectedTaskAssignmentMode == _taskAssignmentMemberToManager &&
           targetUser.userId != currentUser.userId) {
-        notifications.addAll([
-          _buildNotification(
-            now: now,
-            recipientUserId: currentUser.userId,
-            title: 'Task Request Sent',
-            message: 'You requested assignment to $taskTitle.',
-            type: 'thought_task_request_sent',
-            thought: thought,
-            actorUserId: currentUser.userId,
-            actorUserName: actorName,
-            eventKey:
-                '$notificationSeed:${currentUser.userId}:thought_task_request_sent',
-            metadata: {
-              'assignmentDirection': _selectedTaskAssignmentMode,
-            },
-          ),
+        notifications.add(
           _buildNotification(
             now: now,
             recipientUserId: targetUser.userId,
@@ -1828,7 +1767,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
               'assignmentDirection': _selectedTaskAssignmentMode,
             },
           ),
-        ]);
+        );
       }
     }
 
@@ -1839,22 +1778,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
       final requestedDeadlineLabel = requestedDeadline == null
           ? 'the requested date'
           : _formatRequestedDate(requestedDeadline);
-      notifications.addAll([
-        _buildNotification(
-          now: now,
-          recipientUserId: currentUser.userId,
-          title: 'Deadline Extension Request Sent',
-          message: 'You requested an extension for $taskTitle until $requestedDeadlineLabel.',
-          type: 'thought_deadline_extension_request_sent',
-          thought: thought,
-          actorUserId: currentUser.userId,
-          actorUserName: actorName,
-          eventKey:
-              '$notificationSeed:${currentUser.userId}:thought_deadline_extension_request_sent',
-          metadata: {
-            'requestKind': _taskRequestDeadlineExtension,
-          },
-        ),
+      notifications.add(
         _buildNotification(
           now: now,
           recipientUserId: targetUser.userId,
@@ -1870,7 +1794,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
             'requestKind': _taskRequestDeadlineExtension,
           },
         ),
-      ]);
+      );
     }
 
     if (thought.type == Thought.typeSuggestion &&
@@ -1881,24 +1805,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
       final suggestionTargetLabel = isStepSuggestion
           ? (taskTitle.trim().isEmpty ? 'the selected task' : taskTitle)
           : boardTitle;
-      notifications.addAll([
-        _buildNotification(
-          now: now,
-          recipientUserId: currentUser.userId,
-          title: '$suggestionLabel Sent',
-          message: 'You sent a $suggestionLabel for $suggestionTargetLabel.',
-          type: isStepSuggestion
-              ? 'thought_step_suggestion_sent'
-              : 'thought_task_suggestion_sent',
-          thought: thought,
-          actorUserId: currentUser.userId,
-          actorUserName: actorName,
-          eventKey:
-              '$notificationSeed:${currentUser.userId}:${isStepSuggestion ? 'thought_step_suggestion_sent' : 'thought_task_suggestion_sent'}',
-          metadata: {
-            'suggestionTarget': _selectedSuggestionMode,
-          },
-        ),
+      notifications.add(
         _buildNotification(
           now: now,
           recipientUserId: targetUser.userId,
@@ -1916,28 +1823,13 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
             'suggestionTarget': _selectedSuggestionMode,
           },
         ),
-      ]);
+      );
     }
 
     if (thought.type == Thought.typeReminder &&
         targetUser != null &&
         targetUser.userId != currentUser.userId) {
-      notifications.addAll([
-        _buildNotification(
-          now: now,
-          recipientUserId: currentUser.userId,
-          title: 'Reminder Sent',
-          message: 'You sent a reminder for $taskTitle.',
-          type: 'thought_reminder_sent',
-          thought: thought,
-          actorUserId: currentUser.userId,
-          actorUserName: actorName,
-          eventKey:
-              '$notificationSeed:${currentUser.userId}:thought_reminder_sent',
-          metadata: const {
-            'reminderType': 'task',
-          },
-        ),
+      notifications.add(
         _buildNotification(
           now: now,
           recipientUserId: targetUser.userId,
@@ -1953,28 +1845,13 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
             'reminderType': 'task',
           },
         ),
-      ]);
+      );
     }
 
     if (thought.type == Thought.typeSubmissionFeedback &&
         targetUser != null &&
         targetUser.userId != currentUser.userId) {
-      notifications.addAll([
-        _buildNotification(
-          now: now,
-          recipientUserId: currentUser.userId,
-          title: 'Submission Sent',
-          message: 'You submitted work for $taskTitle.',
-          type: 'thought_submission_sent',
-          thought: thought,
-          actorUserId: currentUser.userId,
-          actorUserName: actorName,
-          eventKey:
-              '$notificationSeed:${currentUser.userId}:thought_submission_sent',
-          metadata: const {
-            'submissionType': 'task_submission',
-          },
-        ),
+      notifications.add(
         _buildNotification(
           now: now,
           recipientUserId: targetUser.userId,
@@ -1990,7 +1867,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
             'submissionType': 'task_submission',
           },
         ),
-      ]);
+      );
     }
 
     if (notifications.isEmpty) return;

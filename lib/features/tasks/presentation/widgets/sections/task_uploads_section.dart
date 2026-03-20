@@ -542,29 +542,6 @@ class _TaskUploadsSectionState extends State<TaskUploadsSection> {
               'submissionRound': submissionRound,
             },
           ),
-          AppNotification(
-            notificationId: '',
-            recipientUserId: currentUser.userId,
-            title: 'Submission Sent',
-            message:
-                'You submitted ${selectedUploads.length} upload(s) for ${widget.task.taskTitle}.',
-            type: 'thought_submission_sent',
-            deliveryStatus: AppNotification.deliveryPending,
-            isRead: false,
-            isDeleted: false,
-            createdAt: now,
-            updatedAt: now,
-            actorUserId: currentUser.userId,
-            actorUserName: currentUser.userName,
-            boardId: widget.task.taskBoardId,
-            taskId: widget.task.taskId,
-            thoughtId: thoughtId,
-            eventKey: '$notificationSeed:${currentUser.userId}:thought_submission_sent',
-            metadata: {
-              'thoughtType': Thought.typeSubmissionFeedback,
-              'submissionRound': submissionRound,
-            },
-          ),
         ]);
       } catch (_) {}
 

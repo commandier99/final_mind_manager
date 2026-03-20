@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:uuid/uuid.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../../notifications/datasources/models/notification_model.dart';
 import '../../../../notifications/datasources/providers/notification_provider.dart';
 import '../../../../thoughts/datasources/models/thought_model.dart';
-import '../../../../thoughts/datasources/providers/thought_provider.dart';
 import '../../../../thoughts/datasources/services/thought_service.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
@@ -46,7 +44,6 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
   String _sortBy = 'created_desc';
   bool _showTaskSuggestions = false;
   final Set<String> _publishingTaskIds = <String>{};
-  final Uuid _uuid = const Uuid();
 
   @override
   void initState() {
@@ -357,18 +354,16 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     });
 
     try {
-      final pendingAssignmentTask = await _createPendingAssignmentThoughtIfNeeded(
-        task,
-      );
+      final assignmentAppliedTask = await _applyAssignmentOnPublish(task);
       await context.read<TaskProvider>().updateTask(
-        (pendingAssignmentTask ?? task).copyWith(taskBoardLane: lanePublished),
+        assignmentAppliedTask.copyWith(taskBoardLane: lanePublished),
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            pendingAssignmentTask != null
-                ? 'Task published and assignment request sent.'
+            assignmentAppliedTask.taskAssignedTo != 'None'
+                ? 'Task published and assigned.'
                 : 'Task moved to Published.',
           ),
         ),
@@ -390,13 +385,13 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     }
   }
 
-  Future<Task?> _createPendingAssignmentThoughtIfNeeded(Task task) async {
+  Future<Task> _applyAssignmentOnPublish(Task task) async {
     final proposedAssigneeId = (task.taskProposedAssigneeId ?? '').trim();
     final proposedAssigneeName = (task.taskProposedAssigneeName ?? '').trim();
     if (proposedAssigneeId.isEmpty ||
         proposedAssigneeId == task.taskOwnerId ||
         proposedAssigneeId == 'None') {
-      return null;
+      return task;
     }
 
     final currentUser = context.read<UserProvider>().currentUser;
@@ -404,63 +399,11 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       throw StateError('No signed-in user found.');
     }
 
-    final now = DateTime.now();
-    final notificationSeed = _uuid.v4();
-    final thought = Thought(
-      thoughtId: '',
-      type: Thought.typeTaskAssignment,
-      status: Thought.statusPending,
-      scopeType: Thought.scopeTask,
-      boardId: task.taskBoardId,
-      taskId: task.taskId,
-      authorId: currentUser.userId,
-      authorName: currentUser.userName.trim().isEmpty
-          ? 'Unknown'
-          : currentUser.userName.trim(),
-      targetUserId: proposedAssigneeId,
-      targetUserName: proposedAssigneeName.isEmpty
-          ? 'Unknown'
-          : proposedAssigneeName,
-      title: 'Task Assignment',
-      message: '${currentUser.userName} assigned you to ${task.taskTitle}.',
-      createdAt: now,
-      updatedAt: now,
-      metadata: {
-        'source': 'board_publish',
-        'boardTitle': widget.board.boardTitle,
-        'taskTitle': task.taskTitle,
-        'assignmentDirection': 'manager_to_member',
-        'assignmentAssigneeId': proposedAssigneeId,
-        'assignmentAssigneeName': proposedAssigneeName,
-        'notificationSeed': notificationSeed,
-      },
-    );
-
-    final thoughtProvider = context.read<ThoughtProvider>();
     final notificationProvider = context.read<NotificationProvider>();
-    final thoughtId = await thoughtProvider.createThought(thought);
+    final now = DateTime.now();
+    final notificationSeed = '${task.taskId}:${now.microsecondsSinceEpoch}';
 
     await notificationProvider.createNotifications([
-      AppNotification(
-        notificationId: '',
-        recipientUserId: currentUser.userId,
-        title: 'Task Assignment Sent',
-        message: 'You assigned ${proposedAssigneeName.isEmpty ? 'a member' : proposedAssigneeName} to ${task.taskTitle}.',
-        type: 'thought_task_assignment_sent',
-        deliveryStatus: AppNotification.deliveryPending,
-        isRead: false,
-        isDeleted: false,
-        createdAt: now,
-        updatedAt: now,
-        actorUserId: currentUser.userId,
-        actorUserName: currentUser.userName,
-        boardId: task.taskBoardId,
-        taskId: task.taskId,
-        thoughtId: thoughtId,
-        eventKey:
-            '$notificationSeed:${currentUser.userId}:thought_task_assignment_sent',
-        metadata: const {'assignmentDirection': 'manager_to_member'},
-      ),
       AppNotification(
         notificationId: '',
         recipientUserId: proposedAssigneeId,
@@ -476,7 +419,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         actorUserName: currentUser.userName,
         boardId: task.taskBoardId,
         taskId: task.taskId,
-        thoughtId: thoughtId,
+        thoughtId: null,
         eventKey:
             '$notificationSeed:$proposedAssigneeId:thought_task_assignment_received',
         metadata: const {'assignmentDirection': 'manager_to_member'},
@@ -484,9 +427,13 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     ]);
 
     return task.copyWith(
-      taskAssignedTo: 'None',
-      taskAssignedToName: 'None (Pending)',
-      taskAssignmentStatus: 'pending',
+      taskAssignedTo: proposedAssigneeId,
+      taskAssignedToName: proposedAssigneeName.isEmpty
+          ? 'Assigned Member'
+          : proposedAssigneeName,
+      taskAssignmentStatus: 'accepted',
+      taskProposedAssigneeId: null,
+      taskProposedAssigneeName: null,
     );
   }
 

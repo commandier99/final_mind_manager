@@ -403,9 +403,12 @@ class BoardService {
       );
     }
 
+    final currentRoles = Map<String, dynamic>.from(data['memberRoles'] ?? {});
+    currentRoles[userId] = normalizedRole;
+
     final updateData = <String, dynamic>{
       'memberIds': FieldValue.arrayUnion([userId]),
-      'memberRoles.$userId': normalizedRole,
+      'memberRoles': currentRoles,
       'pendingInviteUserIds': FieldValue.arrayRemove([userId]),
       'boardLastModifiedAt': FieldValue.serverTimestamp(),
       'boardLastModifiedBy': _auth.currentUser?.uid ?? userId,
@@ -416,22 +419,27 @@ class BoardService {
 
     await boardRef.update(updateData);
 
-    // Log user activity event
-    final user = _auth.currentUser;
-    if (user != null) {
-      try {
-        await _activityEventService.logEvent(
-          userId: user.uid,
-          userName: user.displayName ?? 'Unknown User',
-          activityType: 'member_joined',
-          userProfilePicture: user.photoURL,
-          boardId: boardId,
-          description: 'joined a board',
-          metadata: {'boardId': boardId},
-        );
-      } catch (e) {
-        debugPrint('[ERROR] Failed to log member joined event: $e');
-      }
+    // Log join activity for the member who was added (not the actor who performed the write).
+    try {
+      final addedUserDoc =
+          await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      final addedUserData = addedUserDoc.data() as Map<String, dynamic>? ?? const {};
+      final addedUserName = (addedUserData['userName'] as String?)?.trim();
+      final addedUserPhoto = addedUserData['userProfilePicture'] as String?;
+
+      await _activityEventService.logEvent(
+        userId: userId,
+        userName: (addedUserName == null || addedUserName.isEmpty)
+            ? 'Unknown User'
+            : addedUserName,
+        activityType: 'member_joined',
+        userProfilePicture: addedUserPhoto,
+        boardId: boardId,
+        description: 'joined a board',
+        metadata: {'boardId': boardId},
+      );
+    } catch (e) {
+      debugPrint('[ERROR] Failed to log member joined event: $e');
     }
   }
 
@@ -518,8 +526,7 @@ class BoardService {
       );
     }
 
-    // Remove member
-    final currentRoles = Map<String, String>.from(data['memberRoles'] ?? {});
+    final currentRoles = Map<String, dynamic>.from(data['memberRoles'] ?? {});
     currentRoles.remove(userId);
 
     await boardRef.update({

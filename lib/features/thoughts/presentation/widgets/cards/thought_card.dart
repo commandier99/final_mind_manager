@@ -228,6 +228,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
           ),
         ];
       case Thought.typeBoardRequest:
+        if (!_canActOnBoardRequest(thought)) return const [];
         return [
           _buildActionButton(
             label: 'Accept',
@@ -240,6 +241,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
           ),
         ];
       case Thought.typeTaskAssignment:
+        if (!_canActOnTaskAssignment(thought)) return const [];
         return [
           _buildActionButton(
             label: 'Accept',
@@ -252,6 +254,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
           ),
         ];
       case Thought.typeTaskRequest:
+        if (!_canActOnTaskRequest(thought)) return const [];
         return [
           _buildActionButton(
             label: 'Accept',
@@ -944,6 +947,36 @@ class _ThoughtCardState extends State<ThoughtCard> {
     return board?.isManager(currentUserId) == true;
   }
 
+  bool _canActOnBoardRequest(Thought thought) {
+    final currentUserId = context.read<UserProvider>().userId ?? '';
+    if (currentUserId.isEmpty) return false;
+    final targetUserId = (thought.targetUserId ?? '').trim();
+    if (targetUserId.isNotEmpty) {
+      return currentUserId == targetUserId;
+    }
+    if (thought.boardId.trim().isEmpty) return false;
+    final board = context.read<BoardProvider>().getBoardById(thought.boardId);
+    return board?.isManager(currentUserId) == true;
+  }
+
+  bool _canActOnTaskAssignment(Thought thought) {
+    final currentUserId = context.read<UserProvider>().userId ?? '';
+    if (currentUserId.isEmpty) return false;
+    final targetUserId = (thought.targetUserId ?? '').trim();
+    if (targetUserId.isNotEmpty) return currentUserId == targetUserId;
+    return false;
+  }
+
+  bool _canActOnTaskRequest(Thought thought) {
+    final currentUserId = context.read<UserProvider>().userId ?? '';
+    if (currentUserId.isEmpty) return false;
+    final targetUserId = (thought.targetUserId ?? '').trim();
+    if (targetUserId.isNotEmpty) return currentUserId == targetUserId;
+    if (thought.boardId.trim().isEmpty) return false;
+    final board = context.read<BoardProvider>().getBoardById(thought.boardId);
+    return board?.isManager(currentUserId) == true;
+  }
+
   bool _canAccessSubmissionUploads(Thought thought, String submissionState) {
     final currentUserId = context.read<UserProvider>().userId ?? '';
     if (currentUserId.isEmpty) return false;
@@ -1008,6 +1041,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
       );
       final now = DateTime.now();
       String submissionState = 'approved';
+      String thoughtStatus = Thought.statusAccepted;
       Task updatedTask = task.copyWith(
         taskLatestSubmissionThoughtId: widget.thought.thoughtId,
       );
@@ -1015,6 +1049,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
       switch (review.verdict) {
         case _SubmissionVerdict.success:
           submissionState = 'approved';
+          thoughtStatus = Thought.statusAccepted;
           updatedTask = updatedTask.copyWith(
             taskIsDone: true,
             taskIsDoneAt: now,
@@ -1026,10 +1061,13 @@ class _ThoughtCardState extends State<ThoughtCard> {
           break;
         case _SubmissionVerdict.failure:
           submissionState = 'rejected';
+          thoughtStatus = Thought.statusDeclined;
           updatedTask = updatedTask.copyWith(
-            taskIsDone: true,
-            taskIsDoneAt: now,
-            taskStatus: Task.statusCompleted,
+            taskIsDone: false,
+            taskIsDoneAt: null,
+            taskStatus: _restoredTaskStatus(
+              metadata['previousTaskStatus']?.toString(),
+            ),
             taskOutcome: Task.outcomeFailed,
             taskFailed: true,
             taskApprovalStatus: 'rejected',
@@ -1037,10 +1075,13 @@ class _ThoughtCardState extends State<ThoughtCard> {
           break;
         case _SubmissionVerdict.needsRevision:
           submissionState = 'changes_requested';
+          thoughtStatus = Thought.statusDeclined;
           updatedTask = updatedTask.copyWith(
             taskIsDone: false,
             taskIsDoneAt: null,
-            taskStatus: Task.statusPaused,
+            taskStatus: _restoredTaskStatus(
+              metadata['previousTaskStatus']?.toString(),
+            ),
             taskOutcome: Task.outcomeNone,
             taskFailed: false,
             taskApprovalStatus: 'changes_requested',
@@ -1051,7 +1092,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
       await taskProvider.updateTask(updatedTask);
       await thoughtProvider.updateThought(
         widget.thought.copyWith(
-          status: Thought.statusResolved,
+          status: thoughtStatus,
           updatedAt: now,
           actionedAt: now,
           actionedBy: currentUser.userId,
@@ -1225,22 +1266,22 @@ class _ThoughtCardState extends State<ThoughtCard> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SegmentedButton<_SubmissionVerdict>(
-                      segments: _SubmissionVerdict.values
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _SubmissionVerdict.values
                           .map(
-                            (value) => ButtonSegment<_SubmissionVerdict>(
-                              value: value,
+                            (value) => ChoiceChip(
                               label: Text(value.segmentLabel),
+                              selected: verdict == value,
+                              onSelected: (_) {
+                                setDialogState(() {
+                                  verdict = value;
+                                });
+                              },
                             ),
                           )
                           .toList(),
-                      selected: {verdict},
-                      onSelectionChanged: (selection) {
-                        if (selection.isEmpty) return;
-                        setDialogState(() {
-                          verdict = selection.first;
-                        });
-                      },
                     ),
                     const SizedBox(height: 12),
                     TextField(

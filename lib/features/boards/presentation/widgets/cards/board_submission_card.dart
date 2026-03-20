@@ -271,6 +271,7 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
       );
       final now = DateTime.now();
       String submissionState = 'approved';
+      String thoughtStatus = Thought.statusAccepted;
       Task updatedTask = task.copyWith(
         taskLatestSubmissionThoughtId: widget.thought.thoughtId,
       );
@@ -278,6 +279,7 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
       switch (review.verdict) {
         case _SubmissionVerdict.success:
           submissionState = 'approved';
+          thoughtStatus = Thought.statusAccepted;
           updatedTask = updatedTask.copyWith(
             taskIsDone: true,
             taskIsDoneAt: now,
@@ -289,10 +291,13 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
           break;
         case _SubmissionVerdict.failure:
           submissionState = 'rejected';
+          thoughtStatus = Thought.statusDeclined;
           updatedTask = updatedTask.copyWith(
-            taskIsDone: true,
-            taskIsDoneAt: now,
-            taskStatus: Task.statusCompleted,
+            taskIsDone: false,
+            taskIsDoneAt: null,
+            taskStatus: _restoredTaskStatus(
+              metadata['previousTaskStatus']?.toString(),
+            ),
             taskOutcome: Task.outcomeFailed,
             taskFailed: true,
             taskApprovalStatus: 'rejected',
@@ -300,10 +305,13 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
           break;
         case _SubmissionVerdict.needsRevision:
           submissionState = 'changes_requested';
+          thoughtStatus = Thought.statusDeclined;
           updatedTask = updatedTask.copyWith(
             taskIsDone: false,
             taskIsDoneAt: null,
-            taskStatus: Task.statusPaused,
+            taskStatus: _restoredTaskStatus(
+              metadata['previousTaskStatus']?.toString(),
+            ),
             taskOutcome: Task.outcomeNone,
             taskFailed: false,
             taskApprovalStatus: 'changes_requested',
@@ -314,7 +322,7 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
       await taskProvider.updateTask(updatedTask);
       await thoughtProvider.updateThought(
         widget.thought.copyWith(
-          status: Thought.statusResolved,
+          status: thoughtStatus,
           updatedAt: now,
           actionedAt: now,
           actionedBy: currentUser.userId,
@@ -490,22 +498,22 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    SegmentedButton<_SubmissionVerdict>(
-                      segments: _SubmissionVerdict.values
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _SubmissionVerdict.values
                           .map(
-                            (value) => ButtonSegment<_SubmissionVerdict>(
-                              value: value,
+                            (value) => ChoiceChip(
                               label: Text(value.segmentLabel),
+                              selected: verdict == value,
+                              onSelected: (_) {
+                                setDialogState(() {
+                                  verdict = value;
+                                });
+                              },
                             ),
                           )
                           .toList(),
-                      selected: {verdict},
-                      onSelectionChanged: (selection) {
-                        if (selection.isEmpty) return;
-                        setDialogState(() {
-                          verdict = selection.first;
-                        });
-                      },
                     ),
                     const SizedBox(height: 12),
                     TextField(

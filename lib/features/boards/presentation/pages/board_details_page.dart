@@ -127,11 +127,24 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final boardProvider = context.watch<BoardProvider>();
+    final liveBoard = boardProvider.getBoardById(widget.board.boardId);
+    if (liveBoard == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      });
+      return const Scaffold(body: SizedBox.shrink());
+    }
+
+    final board = liveBoard;
     final navigation = context.watch<NavigationProvider>();
     final currentUserId = context.watch<UserProvider>().userId;
-    final isManager = widget.board.isManager(currentUserId);
-    final canDraftTasks = widget.board.canDraftTasks(currentUserId);
-    final showDraftsTab = canDraftTasks && widget.board.boardType == 'team';
+    final isManager = board.isManager(currentUserId);
+    final canDraftTasks = board.canDraftTasks(currentUserId);
+    final showDraftsTab = canDraftTasks && board.boardType == 'team';
 
     if (!showDraftsTab && _selectedTab == _tabDrafts) {
       _selectedTab = _tabPublished;
@@ -159,12 +172,12 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
               if (value == 'edit') {
                 showDialog(
                   context: context,
-                  builder: (_) => EditBoardDialog(board: widget.board),
+                  builder: (_) => EditBoardDialog(board: board),
                 );
               } else if (value == 'duplicate') {
                 _duplicateBoard();
               } else if (value == 'delete') {
-                BoardDeleteFlowDialog.show(context, board: widget.board);
+                BoardDeleteFlowDialog.show(context, board: board);
               }
             },
             itemBuilder: (context) => [
@@ -173,7 +186,7 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                   value: 'edit',
                   child: Text('Edit'),
                 ),
-              if (isManager && widget.board.boardType != 'personal')
+              if (isManager && board.boardType != 'personal')
                 const PopupMenuItem<String>(
                   value: 'duplicate',
                   child: Text('Duplicate'),
@@ -194,9 +207,9 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          context.read<TaskProvider>().streamTasksByBoard(widget.board.boardId);
+          context.read<TaskProvider>().streamTasksByBoard(board.boardId);
           context.read<BoardStatsProvider>().streamStatsForBoard(
-            widget.board.boardId,
+            board.boardId,
           );
           await Future.delayed(const Duration(milliseconds: 300));
         },
@@ -213,7 +226,7 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeInOut,
                       child: _isDetailsPanelExpanded
-                          ? BoardDetailsSection(boardId: widget.board.boardId)
+                          ? BoardDetailsSection(boardId: board.boardId)
                           : const SizedBox.shrink(),
                     ),
                     GestureDetector(
@@ -305,18 +318,18 @@ class _BoardDetailsPageState extends State<BoardDetailsPage> {
               ),
               if (_selectedTab == _tabStats)
                 BoardStatsSection(
-                  boardId: widget.board.boardId,
-                  board: widget.board,
+                  boardId: board.boardId,
+                  board: board,
                 )
               else if (_selectedTab == _tabSubmissions)
                 BoardSubmissionsSection(
-                  boardId: widget.board.boardId,
-                  board: widget.board,
+                  boardId: board.boardId,
+                  board: board,
                 )
               else
                 BoardTasksSection(
-                  boardId: widget.board.boardId,
-                  board: widget.board,
+                  boardId: board.boardId,
+                  board: board,
                   selectedLane: _selectedTab,
                 ),
             ],

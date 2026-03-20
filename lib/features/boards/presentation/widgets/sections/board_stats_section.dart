@@ -163,10 +163,10 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                       ),
                       const SizedBox(height: 12),
                     ],
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
+                    _buildMetricGroup(
+                      context: context,
+                      title: 'Tasks',
+                      tiles: [
                         _buildMetricTile(
                           label: 'Total Tasks',
                           value: '$totalTasks',
@@ -197,6 +197,13 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                           icon: Icons.delete_outline,
                           color: Colors.red,
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildMetricGroup(
+                      context: context,
+                      title: 'Steps',
+                      tiles: [
                         _buildMetricTile(
                           label: 'Steps',
                           value: '$totalSteps',
@@ -215,6 +222,13 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                           icon: Icons.remove_done,
                           color: Colors.deepOrange,
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _buildMetricGroup(
+                      context: context,
+                      title: 'Board Health',
+                      tiles: [
                         _buildMetricTile(
                           label: 'Messages',
                           value: '${stats.boardMessageCount}',
@@ -226,6 +240,12 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
                           value: '$overloadedCount',
                           icon: Icons.balance_outlined,
                           color: Colors.deepOrange,
+                        ),
+                        _buildMetricTile(
+                          label: 'Active Tasks',
+                          value: '$activeTasks',
+                          icon: Icons.pending_actions_outlined,
+                          color: Colors.blueGrey,
                         ),
                       ],
                     ),
@@ -593,52 +613,94 @@ class _BoardStatsSectionState extends State<BoardStatsSection> {
     required IconData icon,
     required Color color,
   }) {
-    return SizedBox(
-      width: 160,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: Colors.white,
-          border: Border.all(color: color.withValues(alpha: 0.18)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 28,
-              height: 28,
-              decoration: BoxDecoration(
-                color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 16, color: color),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(8),
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    value,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: color,
-                    ),
+            child: Icon(icon, size: 16, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: color,
                   ),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Colors.grey[700],
-                      height: 1.1,
-                    ),
+                ),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey[700],
+                    height: 1.1,
                   ),
-                ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricGroup({
+    required BuildContext context,
+    required String title,
+    required List<Widget> tiles,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 0, 2, 8),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade800,
               ),
             ),
-          ],
-        ),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columnCount = constraints.maxWidth >= 560 ? 3 : 2;
+              return GridView.count(
+                crossAxisCount: columnCount,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 2.1,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: tiles,
+              );
+            },
+          ),
+        ],
       ),
     );
   }

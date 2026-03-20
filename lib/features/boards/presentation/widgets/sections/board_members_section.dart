@@ -389,6 +389,9 @@ class _BoardMembersSectionState extends State<BoardMembersSection> {
                 );
                 if (!mounted) return;
                 _showResult(result);
+                if (result.success && mounted && Navigator.of(this.context).canPop()) {
+                  Navigator.of(this.context).pop();
+                }
               },
               icon: const Icon(Icons.exit_to_app, size: 18),
               label: const Text('Leave Board'),

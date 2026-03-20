@@ -370,29 +370,6 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
         await notificationProvider.createNotifications([
           AppNotification(
             notificationId: '',
-            recipientUserId: currentUser.userId,
-            title: 'Board Invite Sent',
-            message:
-                'You invited ${user.userName} to join ${widget.board.boardTitle}.',
-            type: 'thought_board_invite_sent',
-            deliveryStatus: AppNotification.deliveryPending,
-            isRead: false,
-            isDeleted: false,
-            createdAt: now,
-            updatedAt: now,
-            actorUserId: currentUser.userId,
-            actorUserName: authorName,
-            thoughtId: thoughtId,
-            eventKey:
-                '$notificationSeed:${currentUser.userId}:thought_board_invite_sent',
-            metadata: {
-              'role': selectedRole,
-              'thoughtType': Thought.typeBoardRequest,
-              'requestDirection': 'invite_member',
-            },
-          ),
-          AppNotification(
-            notificationId: '',
             recipientUserId: user.userId,
             title: 'Board Invite Received',
             message:
