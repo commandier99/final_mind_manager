@@ -297,7 +297,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     }
   }
 
-  Future<void> _openSubmissionFlow(Task task) async {
+  Future<void> _toggleThoughtSubmit(Task task) async {
     await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
@@ -760,6 +760,10 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                       itemBuilder: (context, index) {
                         final task = displayTasks[index];
                         final isFocused = _isInProgressStatus(task.taskStatus);
+                        final usesThoughtSubmit = SessionTaskSubmissionHelper
+                            .shouldUseThoughtSubmit(context, task);
+                        final canMarkDone = SessionTaskSubmissionHelper
+                            .canMarkTaskDone(context, task);
                         final canFocus = modePolicy.canFocusTask(
                           isSessionActive: isActive,
                           hasFocusedTask: hasFocusedTask,
@@ -792,12 +796,14 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                               onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,
                               onToggleDone:
-                                  canToggleDone && !task.taskRequiresSubmission
+                                  canToggleDone &&
+                                      !usesThoughtSubmit &&
+                                      canMarkDone
                                   ? (isDone) => _toggleDoneForTask(task, isDone)
                                   : null,
                               onSubmitThought:
-                                  canToggleDone && task.taskRequiresSubmission
-                                  ? () => _openSubmissionFlow(task)
+                                  canToggleDone && usesThoughtSubmit
+                                  ? () => _toggleThoughtSubmit(task)
                                   : null,
                               onDelete: () => _deleteTask(task),
                             ),

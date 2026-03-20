@@ -96,6 +96,41 @@ class _TaskCardState extends State<TaskCard> {
     return _normalizeStatus(status) == 'IN_PROGRESS';
   }
 
+  Widget _buildThoughtSubmitToggle() {
+    return InkWell(
+      onTap: widget.onSubmitThought,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.amber.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.amber.shade300),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.rate_review_outlined,
+              size: 18,
+              color: Colors.amber.shade800,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Submit',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: Colors.amber.shade900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Color _getStatusColor(String status) {
     switch (_normalizeStatus(status)) {
       case 'OVERDUE':
@@ -544,6 +579,10 @@ class _TaskCardState extends State<TaskCard> {
                         // Main content row
                         Row(
                           children: [
+                            if (showSubmitThoughtAction) ...[
+                              _buildThoughtSubmitToggle(),
+                              const SizedBox(width: 8),
+                            ],
                             if (showCheckbox) ...[
                               Checkbox(
                                 value: widget.task.taskIsDone,
@@ -601,24 +640,6 @@ class _TaskCardState extends State<TaskCard> {
                                     ],
                                   ),
                                   const SizedBox(height: 3),
-                                  if (showSubmitThoughtAction) ...[
-                                    const SizedBox(height: 6),
-                                    OutlinedButton.icon(
-                                      onPressed: widget.onSubmitThought,
-                                      icon: const Icon(
-                                        Icons.rate_review_outlined,
-                                        size: 16,
-                                      ),
-                                      label: const Text('Submit Thought'),
-                                      style: OutlinedButton.styleFrom(
-                                        visualDensity: VisualDensity.compact,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 8,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
                                   // Compact badges row
                                   if (widget.task.taskDependencyIds.isNotEmpty)
                                     SingleChildScrollView(

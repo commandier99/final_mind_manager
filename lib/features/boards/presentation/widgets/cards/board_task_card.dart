@@ -149,6 +149,24 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
         _isConnectedRequiredTaskForCurrentUser(taskProvider);
   }
 
+  bool _isDeadlineMissed() {
+    if (widget.task.taskIsDone || widget.task.taskIsDeleted) return false;
+    if (widget.task.taskDeadlineMissed) return true;
+    final deadline = widget.task.taskDeadline;
+    if (deadline == null) return false;
+    return deadline.isBefore(DateTime.now());
+  }
+
+  bool _canRequestDeadlineExtension() {
+    final board = widget.board;
+    if (board == null) return false;
+    if (widget.showPublishButton) return false;
+    if (widget.task.taskIsDone || widget.task.taskIsDeleted) return false;
+    if (widget.task.taskBoardLane != Task.lanePublished) return false;
+    if (_isTaskUnassigned() || _hasPendingAssignment()) return false;
+    return widget.task.taskAssignedTo == _currentUserId;
+  }
+
   Future<void> _openApplyForTask() async {
     await CreateThoughtDialog.show(
       context,
@@ -164,6 +182,16 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     await CreateThoughtDialog.show(
       context,
       initialType: Thought.typeReminder,
+      initialBoardId: widget.task.taskBoardId,
+      initialTaskId: widget.task.taskId,
+      lockType: true,
+    );
+  }
+
+  Future<void> _openDeadlineExtensionRequest() async {
+    await CreateThoughtDialog.show(
+      context,
+      initialType: Thought.typeTaskRequest,
       initialBoardId: widget.task.taskBoardId,
       initialTaskId: widget.task.taskId,
       lockType: true,
@@ -298,10 +326,12 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     final priorityColor = _getPriorityColor(widget.task.taskPriorityLevel);
     final blockedDependencyTitles = _incompleteDependencyTitles(taskProvider);
     final isDependencyLocked = blockedDependencyTitles.isNotEmpty;
+    final isDeadlineMissed = _isDeadlineMissed();
     final isLocked = widget.isDisabled;
     final isSupervisorDraft = _isSupervisorDraft();
     final canApplyForTask = _canApplyForTask();
     final canSendReminder = _canSendReminder(taskProvider);
+    final canRequestDeadlineExtension = _canRequestDeadlineExtension();
     // Only allow delete for board manager or task owner
     final canDelete =
         !isLocked &&
@@ -661,12 +691,17 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                             Row(
                               children: [
                                 if (widget.showCheckbox) ...[
-                                  Checkbox(
-                                    value: widget.task.taskIsDone,
-                                    onChanged: isLocked
-                                        ? null
-                                        : (value) =>
-                                              widget.onToggleDone?.call(value),
+                                  Tooltip(
+                                    message: isDeadlineMissed
+                                        ? 'This task is missed. Request a deadline extension to continue.'
+                                        : '',
+                                    child: Checkbox(
+                                      value: widget.task.taskIsDone,
+                                      onChanged: isLocked || isDeadlineMissed
+                                          ? null
+                                          : (value) =>
+                                                widget.onToggleDone?.call(value),
+                                    ),
                                   ),
                                   const SizedBox(width: 8),
                                 ],
@@ -782,7 +817,9 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                   ),
                                 ),
                                 const SizedBox(width: 8),
-                                if (canApplyForTask || canSendReminder)
+                                if (canApplyForTask ||
+                                    canSendReminder ||
+                                    canRequestDeadlineExtension)
                                   Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -826,6 +863,33 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                                             ),
                                             child: const Icon(
                                               Icons.notifications_active_outlined,
+                                              size: 18,
+                                            ),
+                                          ),
+                                        ),
+                                      if ((canApplyForTask || canSendReminder) &&
+                                          canRequestDeadlineExtension)
+                                        const SizedBox(height: 6),
+                                      if (canRequestDeadlineExtension)
+                                        Tooltip(
+                                          message: isDeadlineMissed
+                                              ? 'Request Deadline Extension'
+                                              : 'Request Deadline Extension Early',
+                                          child: OutlinedButton(
+                                            onPressed:
+                                                _openDeadlineExtensionRequest,
+                                            style: OutlinedButton.styleFrom(
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              minimumSize: const Size(42, 36),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 10,
+                                                    vertical: 6,
+                                                  ),
+                                            ),
+                                            child: const Icon(
+                                              Icons.schedule_send_outlined,
                                               size: 18,
                                             ),
                                           ),

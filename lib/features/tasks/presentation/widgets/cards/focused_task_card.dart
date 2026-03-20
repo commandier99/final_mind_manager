@@ -31,6 +31,38 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
   bool _showSteps = false;
   Timer? _elapsedTicker;
 
+  Widget _buildThoughtSubmitToggle(Color priorityColor) {
+    return InkWell(
+      onTap: widget.onSubmitThought,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 52,
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        decoration: BoxDecoration(
+          color: priorityColor.withAlpha(26),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: priorityColor.withAlpha(160), width: 1.4),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.rate_review_outlined, color: priorityColor, size: 18),
+            const SizedBox(height: 2),
+            Text(
+              'Submit',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: priorityColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Color _getPriorityColor() {
     switch (widget.task.taskPriorityLevel.toLowerCase()) {
       case 'high':
@@ -135,15 +167,11 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: 34,
-                          height: 34,
+                          width: showSubmitThoughtAction ? 52 : 34,
+                          height: showSubmitThoughtAction ? 52 : 34,
                           child: Center(
                             child: showSubmitThoughtAction
-                                ? Icon(
-                                    Icons.rate_review_outlined,
-                                    color: priorityColor,
-                                    size: 22,
-                                  )
+                                ? _buildThoughtSubmitToggle(priorityColor)
                                 : Transform.scale(
                                     scale: 1.12,
                                     child: Checkbox(
@@ -198,25 +226,6 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                                   ),
                                 ],
                               ),
-                              if (showSubmitThoughtAction)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: OutlinedButton.icon(
-                                    onPressed: widget.onSubmitThought,
-                                    icon: const Icon(
-                                      Icons.rate_review_outlined,
-                                      size: 16,
-                                    ),
-                                    label: const Text('Submit Thought'),
-                                    style: OutlinedButton.styleFrom(
-                                      visualDensity: VisualDensity.compact,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 8,
-                                      ),
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
                         ),

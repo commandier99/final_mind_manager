@@ -229,9 +229,12 @@ class TaskProvider extends ChangeNotifier {
       await _taskService.addTask(newTask);
 
       // Track activity
-      await _userDailyActivityService.incrementToday(newTask.taskOwnerId, {
-        'tasksCreatedCount': 1,
-      });
+      final activeUserId = _activeUserId;
+      if (activeUserId != null && activeUserId.isNotEmpty) {
+        await _userDailyActivityService.incrementToday(activeUserId, {
+          'tasksCreatedCount': 1,
+        });
+      }
 
       // Update board stats
       if (newTask.taskBoardId.isNotEmpty) {
@@ -400,10 +403,12 @@ class TaskProvider extends ChangeNotifier {
         debugPrint(
           '[DEBUG] TaskProvider: Tracking deletion for user ${taskToDelete.taskOwnerId}',
         );
-        await _userDailyActivityService.incrementToday(
-          taskToDelete.taskOwnerId,
-          {'tasksDeletedCount': 1},
-        );
+        final activeUserId = _activeUserId;
+        if (activeUserId != null && activeUserId.isNotEmpty) {
+          await _userDailyActivityService.incrementToday(activeUserId, {
+            'tasksDeletedCount': 1,
+          });
+        }
       } else {
         debugPrint(
           '[WARNING] TaskProvider: Could not find task to track deletion activity',
@@ -455,14 +460,20 @@ class TaskProvider extends ChangeNotifier {
       // Track activity - if task was not done and is now done, increment completed count
       if (!wasAlreadyDone && effectiveNowDone) {
         // Task just became done
-        await _userDailyActivityService.incrementToday(task.taskOwnerId, {
-          'tasksCompletedCount': 1,
-        });
+        final activeUserId = _activeUserId;
+        if (activeUserId != null && activeUserId.isNotEmpty) {
+          await _userDailyActivityService.incrementToday(activeUserId, {
+            'tasksCompletedCount': 1,
+          });
+        }
       } else if (wasAlreadyDone && !effectiveNowDone) {
         // Task was undone
-        await _userDailyActivityService.incrementToday(task.taskOwnerId, {
-          'tasksCompletedCount': -1,
-        });
+        final activeUserId = _activeUserId;
+        if (activeUserId != null && activeUserId.isNotEmpty) {
+          await _userDailyActivityService.incrementToday(activeUserId, {
+            'tasksCompletedCount': -1,
+          });
+        }
       }
 
       // Update board stats
@@ -647,3 +658,4 @@ class TaskProvider extends ChangeNotifier {
 
 
 
+  String? get _activeUserId => FirebaseAuth.instance.currentUser?.uid;

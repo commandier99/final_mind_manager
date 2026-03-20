@@ -189,6 +189,12 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
 
             if (focusedTask != null) {
               final activeTask = focusedTask;
+              final usesThoughtSubmit = SessionTaskSubmissionHelper
+                  .shouldUseThoughtSubmit(context, activeTask);
+              final canMarkDone = SessionTaskSubmissionHelper.canMarkTaskDone(
+                context,
+                activeTask,
+              );
               _focusedTaskStartedAtById.putIfAbsent(
                 activeTask.taskId,
                 DateTime.now,
@@ -205,7 +211,8 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                 isPomodoroMode: modePolicy.isPomodoro,
                 onToggleDone:
                     modePolicy.doneAllowedOnTask(isFocused: true) &&
-                        !activeTask.taskRequiresSubmission
+                        !usesThoughtSubmit &&
+                        canMarkDone
                     ? (isDone) => _toggleTaskDone(
                         taskProvider,
                         activeTask,
@@ -214,8 +221,8 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                     : null,
                 onSubmitThought:
                     modePolicy.doneAllowedOnTask(isFocused: true) &&
-                        activeTask.taskRequiresSubmission
-                    ? () => _openSubmissionFlow(activeTask)
+                        usesThoughtSubmit
+                    ? () => _toggleThoughtSubmit(activeTask)
                     : null,
                 stepsContent: ChangeNotifierProvider<StepProvider>.value(
                   value: _focusedTaskStepProvider,
@@ -504,24 +511,43 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     final finishedTask = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Focus Session Complete'),
-        content: Text('Did you finish "${focusedTask!.taskTitle}"?'),
+        title: Text(
+          focusedTask!.taskRequiresSubmission
+              ? 'Focus Session Complete'
+              : 'Focus Session Complete',
+        ),
+        content: Text(
+          focusedTask.taskRequiresSubmission
+              ? 'Ready to submit a thought for "${focusedTask.taskTitle}"?'
+              : 'Did you finish "${focusedTask.taskTitle}"?',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not Yet'),
+            child: Text(
+              focusedTask.taskRequiresSubmission ? 'Not Yet' : 'Not Yet',
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes, Finished'),
+            child: Text(
+              focusedTask.taskRequiresSubmission
+                  ? 'Yes, Submit Thought'
+                  : 'Yes, Finished',
+            ),
           ),
         ],
       ),
     );
 
+    if (!mounted) return PomodoroTransition.startBreak;
+
     if (finishedTask == true) {
-      if (focusedTask.taskRequiresSubmission) {
-        await _openSubmissionFlow(focusedTask);
+      if (SessionTaskSubmissionHelper.shouldUseThoughtSubmit(
+        context,
+        focusedTask,
+      )) {
+        await _toggleThoughtSubmit(focusedTask);
         return PomodoroTransition.startBreak;
       }
       try {
@@ -617,7 +643,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     }
   }
 
-  Future<void> _openSubmissionFlow(Task task) async {
+  Future<void> _toggleThoughtSubmit(Task task) async {
     await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 

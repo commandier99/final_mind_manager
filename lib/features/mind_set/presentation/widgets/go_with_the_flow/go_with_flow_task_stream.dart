@@ -255,7 +255,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     return elapsed.isNegative ? Duration.zero : elapsed;
   }
 
-  Future<void> _openSubmissionFlow(Task task) async {
+  Future<void> _toggleThoughtSubmit(Task task) async {
     await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
@@ -867,6 +867,14 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                 final isFocused = _isInProgressStatus(
                                   task.taskStatus,
                                 );
+                                final usesThoughtSubmit =
+                                    SessionTaskSubmissionHelper
+                                        .shouldUseThoughtSubmit(context, task);
+                                final canMarkDone =
+                                    SessionTaskSubmissionHelper.canMarkTaskDone(
+                                      context,
+                                      task,
+                                    );
                                 final canFocus = modePolicy.canFocusTask(
                                   isSessionActive: isSessionActive,
                                   hasFocusedTask: hasFocusedTask,
@@ -905,14 +913,14 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                           : null,
                                       onToggleDone:
                                           canToggleDone &&
-                                              !task.taskRequiresSubmission
+                                              !usesThoughtSubmit &&
+                                              canMarkDone
                                           ? (isDone) =>
                                                 _toggleDoneForTask(task, isDone)
                                           : null,
                                       onSubmitThought:
-                                          canToggleDone &&
-                                              task.taskRequiresSubmission
-                                          ? () => _openSubmissionFlow(task)
+                                          canToggleDone && usesThoughtSubmit
+                                          ? () => _toggleThoughtSubmit(task)
                                           : null,
                                     ),
                                   ],

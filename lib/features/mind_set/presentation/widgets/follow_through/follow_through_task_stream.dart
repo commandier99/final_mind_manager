@@ -277,7 +277,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
     await _showPomodoroFocusDecision();
   }
 
-  Future<void> _openSubmissionFlow(Task task) async {
+  Future<void> _toggleThoughtSubmit(Task task) async {
     await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
   }
 
@@ -614,6 +614,10 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                       itemBuilder: (context, index) {
                         final task = displayTasks[index];
                         final isFocused = _isInProgressStatus(task.taskStatus);
+                        final usesThoughtSubmit = SessionTaskSubmissionHelper
+                            .shouldUseThoughtSubmit(context, task);
+                        final canMarkDone = SessionTaskSubmissionHelper
+                            .canMarkTaskDone(context, task);
                         final canFocusByMode = modePolicy.canFocusTask(
                           isSessionActive: isSessionActive,
                           hasFocusedTask: hasFocusedTask,
@@ -646,12 +650,14 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                               onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,
                               onToggleDone:
-                                  canToggleDone && !task.taskRequiresSubmission
+                                  canToggleDone &&
+                                      !usesThoughtSubmit &&
+                                      canMarkDone
                                   ? (isDone) => _toggleDoneForTask(task, isDone)
                                   : null,
                               onSubmitThought:
-                                  canToggleDone && task.taskRequiresSubmission
-                                  ? () => _openSubmissionFlow(task)
+                                  canToggleDone && usesThoughtSubmit
+                                  ? () => _toggleThoughtSubmit(task)
                                   : null,
                             ),
                           ],

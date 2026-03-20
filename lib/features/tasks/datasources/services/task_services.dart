@@ -355,6 +355,7 @@ class TaskService {
       debugPrint('âœ… Task ${task.taskId} done status toggled to $effectiveIsDone');
     } catch (e) {
       debugPrint('âš ï¸ Error toggling task done status: $e');
+      rethrow;
     }
   }
 
