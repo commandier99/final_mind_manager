@@ -100,6 +100,7 @@ class TaskDeadlineReminderService {
 
     if (difference.isNegative) {
       await _createDeadlineReminder(task: task, window: 'missed', now: now);
+      await _createDeadlineMissedSubmission(task: task, now: now);
       return;
     }
 
@@ -207,6 +208,161 @@ class TaskDeadlineReminderService {
     }
   }
 
+  Future<void> _createDeadlineMissedSubmission({
+    required Task task,
+    required DateTime now,
+  }) async {
+    final assigneeId = task.taskAssignedTo.trim();
+    if (assigneeId.isEmpty || assigneeId == 'None') return;
+
+    final reviewer = await _resolveReviewer(task);
+    final reviewerId = reviewer.userId.trim();
+    if (reviewerId.isEmpty || reviewerId == assigneeId) return;
+
+    final deadlineIso = task.taskDeadline?.toIso8601String() ?? 'none';
+    final eventKey =
+        'deadline_missed_submission:${task.taskId}:$deadlineIso:$assigneeId';
+
+    if (await _hasExistingDeadlineMissedSubmission(
+      taskId: task.taskId,
+      eventKey: eventKey,
+    )) {
+      return;
+    }
+
+    final boardTitle = (task.taskBoardTitle ?? '').trim();
+    final assigneeName = task.taskAssignedToName.trim().isEmpty
+        ? 'Unknown'
+        : task.taskAssignedToName.trim();
+    final title = 'Missed Deadline: ${task.taskTitle.trim().isEmpty ? 'Task' : task.taskTitle.trim()}';
+    final message =
+        '$assigneeName missed the deadline for "${task.taskTitle}". Review the task outcome or extend the deadline.';
+
+    final thought = Thought(
+      thoughtId: '',
+      type: Thought.typeSubmissionFeedback,
+      status: Thought.statusOpen,
+      scopeType: Thought.scopeTask,
+      boardId: task.taskBoardId,
+      taskId: task.taskId,
+      authorId: assigneeId,
+      authorName: assigneeName,
+      targetUserId: reviewerId,
+      targetUserName: reviewer.userName,
+      title: title,
+      message: message,
+      createdAt: now,
+      updatedAt: now,
+      metadata: {
+        'source': 'task_deadline_reminder_service',
+        'systemGenerated': true,
+        'submissionState': 'submitted',
+        'verdict': 'pending',
+        'eventKey': eventKey,
+        'deadlineMissed': true,
+        'boardTitle': boardTitle,
+        'taskTitle': task.taskTitle,
+        'currentDeadline': deadlineIso,
+        'managerUserId': reviewerId,
+        'managerUserName': reviewer.userName,
+        'submittedByUserId': assigneeId,
+        'submittedByUserName': assigneeName,
+        'submittedAt': now.toIso8601String(),
+        'selectedUploadIds': const <String>[],
+        'selectedUploads': const <Map<String, dynamic>>[],
+        'feedbackMessage': '',
+        'previousTaskStatus': task.taskStatus,
+      },
+    );
+
+    try {
+      final thoughtId = await _thoughtService.createThought(thought);
+
+      await _firestore.collection('tasks').doc(task.taskId).update({
+        'taskDeadlineMissed': true,
+        'taskReminderSentAt': Timestamp.now(),
+        'taskStatus': Task.statusSubmitted,
+        'taskApprovalStatus': 'pending',
+        'taskLatestSubmissionThoughtId': thoughtId,
+      });
+
+      await _notificationService.createNotification(
+        AppNotification(
+          notificationId: '',
+          recipientUserId: reviewerId,
+          title: 'Task Deadline Missed',
+          message:
+              '$assigneeName missed the deadline for ${task.taskTitle}. Review the task or extend the deadline.',
+          type: 'thought_submission_deadline_missed',
+          deliveryStatus: AppNotification.deliveryPending,
+          isRead: false,
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+          actorUserId: assigneeId,
+          actorUserName: assigneeName,
+          boardId: task.taskBoardId.isEmpty ? null : task.taskBoardId,
+          taskId: task.taskId,
+          thoughtId: thoughtId,
+          eventKey: eventKey,
+          metadata: {
+            'thoughtType': Thought.typeSubmissionFeedback,
+            'deadlineMissed': true,
+          },
+        ),
+      );
+    } catch (_) {
+      // Duplicate or transient failures should not break the reminder loop.
+    }
+  }
+
+  Future<_ReviewerInfo> _resolveReviewer(Task task) async {
+    if (task.taskBoardId.trim().isNotEmpty) {
+      try {
+        final boardDoc =
+            await _firestore.collection('boards').doc(task.taskBoardId).get();
+        final data = boardDoc.data();
+        if (data != null) {
+          final reviewerId = (data['boardManagerId'] as String? ?? '').trim();
+          final reviewerName =
+              (data['boardManagerName'] as String? ?? 'Unknown').trim();
+          return _ReviewerInfo(
+            userId: reviewerId,
+            userName: reviewerName.isEmpty ? 'Unknown' : reviewerName,
+          );
+        }
+      } catch (_) {}
+    }
+
+    final ownerName = task.taskOwnerName.trim().isEmpty
+        ? 'Unknown'
+        : task.taskOwnerName.trim();
+    return _ReviewerInfo(userId: task.taskOwnerId.trim(), userName: ownerName);
+  }
+
+  Future<bool> _hasExistingDeadlineMissedSubmission({
+    required String taskId,
+    required String eventKey,
+  }) async {
+    final existing = await _firestore
+        .collection('thoughts')
+        .where('type', isEqualTo: Thought.typeSubmissionFeedback)
+        .where('taskId', isEqualTo: taskId)
+        .where('isDeleted', isEqualTo: false)
+        .get();
+
+    for (final doc in existing.docs) {
+      final metadata = Map<String, dynamic>.from(
+        doc.data()['metadata'] as Map? ?? const <String, dynamic>{},
+      );
+      final existingEventKey = (metadata['eventKey']?.toString() ?? '').trim();
+      if (existingEventKey == eventKey) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   String _reminderTitle(String window) {
     switch (window) {
       case '1h':
@@ -236,4 +392,14 @@ class TaskDeadlineReminderService {
         return '"$taskTitle" from $boardLabel is due in 24 hours.';
     }
   }
+}
+
+class _ReviewerInfo {
+  const _ReviewerInfo({
+    required this.userId,
+    required this.userName,
+  });
+
+  final String userId;
+  final String userName;
 }

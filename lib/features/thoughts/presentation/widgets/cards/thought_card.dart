@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../../boards/datasources/providers/board_provider.dart';
@@ -48,6 +49,10 @@ class _ThoughtCardState extends State<ThoughtCard> {
     final submissionState =
         (metadata['submissionState']?.toString() ?? '').trim().toLowerCase();
     final feedbackMessage = (metadata['feedbackMessage']?.toString() ?? '').trim();
+    final canAccessUploads = _canAccessSubmissionUploads(
+      thought,
+      submissionState,
+    );
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -144,12 +149,31 @@ class _ThoughtCardState extends State<ThoughtCard> {
             ),
             if (selectedUploads.isNotEmpty) ...[
               const SizedBox(height: 8),
+              Text(
+                canAccessUploads
+                    ? 'Files'
+                    : 'Files are available after approval.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: selectedUploads
-                    .map((upload) => _metaPill(Icons.attach_file, upload['fileName'] ?? 'File'))
-                    .toList(),
+                children: selectedUploads.map((upload) {
+                  final fileName = upload['fileName'] ?? 'File';
+                  final fileUrl = upload['fileUrl'] ?? '';
+                  return OutlinedButton.icon(
+                    onPressed: canAccessUploads && fileUrl.isNotEmpty
+                        ? () => _openUpload(fileUrl)
+                        : null,
+                    icon: const Icon(Icons.download_outlined, size: 16),
+                    label: Text(fileName),
+                  );
+                }).toList(),
               ),
             ],
             if (feedbackMessage.isNotEmpty) ...[
@@ -257,12 +281,18 @@ class _ThoughtCardState extends State<ThoughtCard> {
         final submissionState =
             (metadata['submissionState']?.toString() ?? '').trim().toLowerCase();
         if (submissionState != 'submitted') return const [];
+        final deadlineMissed = metadata['deadlineMissed'] == true;
         return [
           _buildActionButton(
             label: 'Review',
             primary: true,
             onPressed: _reviewSubmission,
           ),
+          if (deadlineMissed)
+            _buildActionButton(
+              label: 'Extend Deadline',
+              onPressed: _extendSubmissionDeadline,
+            ),
         ];
       default:
         return const [];
@@ -914,6 +944,18 @@ class _ThoughtCardState extends State<ThoughtCard> {
     return board?.isManager(currentUserId) == true;
   }
 
+  bool _canAccessSubmissionUploads(Thought thought, String submissionState) {
+    final currentUserId = context.read<UserProvider>().userId ?? '';
+    if (currentUserId.isEmpty) return false;
+    final isOwnSubmission = thought.authorId == currentUserId;
+    if (thought.boardId.trim().isEmpty) {
+      return isOwnSubmission || submissionState == 'approved';
+    }
+    final board = context.read<BoardProvider>().getBoardById(thought.boardId);
+    final isManager = board?.isManager(currentUserId) == true;
+    return isManager || isOwnSubmission || submissionState == 'approved';
+  }
+
   List<Map<String, String>> _selectedUploads(Map<String, dynamic> metadata) {
     final raw = metadata['selectedUploads'];
     if (raw is! List) return const <Map<String, String>>[];
@@ -927,6 +969,12 @@ class _ThoughtCardState extends State<ThoughtCard> {
           },
         )
         .toList();
+  }
+
+  Future<void> _openUpload(String fileUrl) async {
+    final uri = Uri.tryParse(fileUrl);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   Future<void> _reviewSubmission() async {
@@ -1036,6 +1084,120 @@ class _ThoughtCardState extends State<ThoughtCard> {
       if (!mounted) return;
       messenger.showSnackBar(
         SnackBar(content: Text('Failed to review submission: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isActing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _extendSubmissionDeadline() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final thoughtProvider = context.read<ThoughtProvider>();
+    final taskProvider = context.read<TaskProvider>();
+    final notificationProvider = context.read<NotificationProvider>();
+    final currentUser = context.read<UserProvider>().currentUser;
+    if (currentUser == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No signed-in user found.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isActing = true;
+    });
+
+    try {
+      final metadata = Map<String, dynamic>.from(
+        widget.thought.metadata ?? const <String, dynamic>{},
+      );
+      final task = await _taskService.getTaskById(widget.thought.taskId);
+      if (task == null) {
+        throw StateError('Task not found.');
+      }
+
+      final currentDeadline = _metadataDateValue(metadata, 'currentDeadline') ?? task.taskDeadline;
+      final approvedDeadline = await _showDeadlineExtensionDialog(
+        currentDeadline: currentDeadline,
+      );
+      if (!mounted || approvedDeadline == null) {
+        return;
+      }
+
+      await taskProvider.updateTask(
+        task.copyWith(
+          taskDeadline: approvedDeadline,
+          taskDeadlineMissed: false,
+          taskExtensionCount: task.taskExtensionCount + 1,
+          taskStatus: _restoredTaskStatus(
+            metadata['previousTaskStatus']?.toString(),
+          ),
+          taskApprovalStatus: 'none',
+          taskLatestSubmissionThoughtId: null,
+        ),
+      );
+
+      await thoughtProvider.updateThought(
+        widget.thought.copyWith(
+          status: Thought.statusResolved,
+          updatedAt: DateTime.now(),
+          actionedAt: DateTime.now(),
+          actionedBy: currentUser.userId,
+          actionedByName: currentUser.userName,
+          metadata: {
+            ...metadata,
+            'submissionState': 'deadline_extended',
+            'feedbackMessage':
+                'Deadline extended to ${_formatDateTimeLabel(approvedDeadline)}.',
+            'approvedDeadline': approvedDeadline.toIso8601String(),
+            'reviewedByUserId': currentUser.userId,
+            'reviewedByUserName': currentUser.userName,
+            'reviewedAt': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
+
+      await notificationProvider.createNotification(
+        AppNotification(
+          notificationId: '',
+          recipientUserId: widget.thought.authorId,
+          title: 'Deadline Extended',
+          message:
+              '${currentUser.userName} extended the deadline for ${_metadataValue(metadata, 'taskTitle') ?? 'the task'} until ${_formatDateTimeLabel(approvedDeadline)}.',
+          type: 'thought_submission_deadline_extended',
+          deliveryStatus: AppNotification.deliveryPending,
+          isRead: false,
+          isDeleted: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          actorUserId: currentUser.userId,
+          actorUserName: currentUser.userName,
+          boardId: widget.thought.boardId.trim().isEmpty ? null : widget.thought.boardId,
+          taskId: widget.thought.taskId.trim().isEmpty ? null : widget.thought.taskId,
+          thoughtId: widget.thought.thoughtId,
+          metadata: {
+            'thoughtType': Thought.typeSubmissionFeedback,
+            'approvedDeadline': approvedDeadline.toIso8601String(),
+          },
+        ),
+      );
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Deadline extended to ${_formatDateTimeLabel(approvedDeadline)}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to extend deadline: $e')),
       );
     } finally {
       if (mounted) {
@@ -1335,6 +1497,124 @@ class _ThoughtCardState extends State<ThoughtCard> {
     );
   }
 
+  Future<DateTime?> _showDeadlineExtensionDialog({
+    required DateTime? currentDeadline,
+  }) async {
+    final initialDeadline =
+        currentDeadline?.add(const Duration(days: 1)) ??
+        DateTime.now().add(const Duration(days: 1));
+    var selectedDeadline = initialDeadline;
+
+    return showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> pickDate() async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDeadline,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked == null) return;
+              setDialogState(() {
+                selectedDeadline = DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  selectedDeadline.hour,
+                  selectedDeadline.minute,
+                );
+              });
+            }
+
+            Future<void> pickTime() async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay.fromDateTime(selectedDeadline),
+              );
+              if (picked == null) return;
+              setDialogState(() {
+                selectedDeadline = DateTime(
+                  selectedDeadline.year,
+                  selectedDeadline.month,
+                  selectedDeadline.day,
+                  picked.hour,
+                  picked.minute,
+                );
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Extend Deadline'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (currentDeadline != null)
+                      Text(
+                        'Current deadline: ${_formatDateTimeLabel(currentDeadline)}',
+                      ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'New deadline',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: pickDate,
+                            icon: const Icon(Icons.event_outlined),
+                            label: Text(
+                              _formatDateTimeLabel(selectedDeadline).split(' ').first,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: pickTime,
+                            icon: const Icon(Icons.schedule_outlined),
+                            label: Text(
+                              TimeOfDay.fromDateTime(selectedDeadline).format(context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(selectedDeadline),
+                  child: const Text('Extend'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _restoredTaskStatus(String? rawStatus) {
+    final normalized = Task.normalizeTaskStatus(rawStatus ?? Task.statusInProgress);
+    if (normalized == Task.statusCompleted || normalized == Task.statusSubmitted) {
+      return Task.statusInProgress;
+    }
+    return normalized;
+  }
+
   Future<void> _createBoardRequestResponseNotifications({
     required NotificationProvider notificationProvider,
     required String currentUserId,
@@ -1612,9 +1892,9 @@ extension on _SubmissionVerdict {
   String get label {
     switch (this) {
       case _SubmissionVerdict.success:
-        return 'success';
+        return 'approved';
       case _SubmissionVerdict.failure:
-        return 'failure';
+        return 'rejected';
       case _SubmissionVerdict.needsRevision:
         return 'needs revisions';
     }
@@ -1623,11 +1903,11 @@ extension on _SubmissionVerdict {
   String get segmentLabel {
     switch (this) {
       case _SubmissionVerdict.success:
-        return 'Success';
+        return 'Approve';
       case _SubmissionVerdict.failure:
-        return 'Failure';
+        return 'Reject';
       case _SubmissionVerdict.needsRevision:
-        return 'Needs Revisions';
+        return 'Needs Revision';
     }
   }
 }

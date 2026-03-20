@@ -63,6 +63,46 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
     );
   }
 
+  Widget _buildDoneToggle(Color priorityColor) {
+    final isEnabled = widget.onToggleDone != null;
+    return InkWell(
+      onTap: isEnabled ? () => widget.onToggleDone?.call(!widget.task.taskIsDone) : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 52,
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        decoration: BoxDecoration(
+          color: isEnabled ? priorityColor.withAlpha(26) : Colors.grey.withAlpha(18),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isEnabled ? priorityColor.withAlpha(160) : Colors.grey.withAlpha(120),
+            width: 1.4,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.rate_review_outlined,
+              color: isEnabled ? priorityColor : Colors.grey,
+              size: 18,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Submit',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: isEnabled ? priorityColor : Colors.grey,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Color _getPriorityColor() {
     switch (widget.task.taskPriorityLevel.toLowerCase()) {
       case 'high':
@@ -123,7 +163,10 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
     final canPause = widget.onPause != null && !widget.isPomodoroMode;
     final showSubmitThoughtAction =
         widget.onSubmitThought != null &&
-        widget.task.taskRequiresSubmission &&
+        !widget.task.taskIsDone;
+    final showDoneToggle =
+        !showSubmitThoughtAction &&
+        widget.onToggleDone != null &&
         !widget.task.taskIsDone;
     final scheme = Theme.of(context).colorScheme;
 
@@ -167,11 +210,19 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         SizedBox(
-                          width: showSubmitThoughtAction ? 52 : 34,
-                          height: showSubmitThoughtAction ? 52 : 34,
+                          width:
+                              (showSubmitThoughtAction || showDoneToggle)
+                              ? 52
+                              : 34,
+                          height:
+                              (showSubmitThoughtAction || showDoneToggle)
+                              ? 52
+                              : 34,
                           child: Center(
                             child: showSubmitThoughtAction
                                 ? _buildThoughtSubmitToggle(priorityColor)
+                                : showDoneToggle
+                                ? _buildDoneToggle(priorityColor)
                                 : Transform.scale(
                                     scale: 1.12,
                                     child: Checkbox(

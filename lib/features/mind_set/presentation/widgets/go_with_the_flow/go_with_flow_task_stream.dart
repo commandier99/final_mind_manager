@@ -291,7 +291,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
           (task) =>
               !plannedTaskIds.contains(task.taskId) &&
               task.taskId != completedTask.taskId &&
-              !task.taskIsDone,
+              !SessionTaskSubmissionHelper.isSessionTaskComplete(task),
         )
         .toList();
 
@@ -373,7 +373,9 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
     final duration = now.difference(startedAt);
     final tasksTotal = sessionTasks.length;
-    final tasksDone = sessionTasks.where((task) => task.taskIsDone).length;
+    final tasksDone = sessionTasks
+        .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
+        .length;
     final completionRate = tasksTotal == 0
         ? 100
         : ((tasksDone / tasksTotal) * 100).round();
@@ -706,6 +708,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                       modePolicy.isEatTheFrog &&
                                       frogTask != null &&
                                       frogTask.taskId == completedTask.taskId,
+                                  useThoughtSubmissionToggleForDone: true,
                                   onToggleDone: null,
                                 ),
                               ),
@@ -747,6 +750,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                           modePolicy.isEatTheFrog &&
                                           frogTask != null &&
                                           frogTask.taskId == focusedTask.taskId,
+                                      useThoughtSubmissionToggleForDone: true,
                                       onPause:
                                           modePolicy.canPauseTask(
                                             isSessionActive: isSessionActive,
@@ -806,6 +810,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                     modePolicy.isEatTheFrog &&
                                     frogTask != null &&
                                     frogTask.taskId == task.taskId,
+                                useThoughtSubmissionToggleForDone: true,
                                 onToggleDone: null,
                               ),
                             ),
@@ -905,6 +910,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
                                       useStatusColor: true,
                                       isPomodoroMode: modePolicy.isPomodoro,
                                       showFrogBadge: isFrogTask,
+                                      useThoughtSubmissionToggleForDone: true,
                                       onFocus: canFocus
                                           ? () => _focusTask(task)
                                           : null,

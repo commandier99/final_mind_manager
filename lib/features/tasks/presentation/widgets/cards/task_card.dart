@@ -25,6 +25,7 @@ class TaskCard extends StatefulWidget {
   final bool isPomodoroMode;
   final bool isDimmed;
   final bool showFrogBadge;
+  final bool useThoughtSubmissionToggleForDone;
 
   const TaskCard({
     super.key,
@@ -43,6 +44,7 @@ class TaskCard extends StatefulWidget {
     this.isPomodoroMode = false,
     this.isDimmed = false,
     this.showFrogBadge = false,
+    this.useThoughtSubmissionToggleForDone = false,
   });
 
   @override
@@ -123,6 +125,44 @@ class _TaskCardState extends State<TaskCard> {
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
                 color: Colors.amber.shade900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDoneToggle() {
+    final isEnabled = widget.onToggleDone != null;
+    return InkWell(
+      onTap: isEnabled ? () => widget.onToggleDone?.call(!widget.task.taskIsDone) : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 42, minHeight: 42),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isEnabled ? Colors.green.shade50 : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isEnabled ? Colors.green.shade300 : Colors.grey.shade300,
+          ),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.rate_review_outlined,
+              size: 18,
+              color: isEnabled ? Colors.green.shade800 : Colors.grey.shade500,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Submit',
+              style: TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w700,
+                color: isEnabled ? Colors.green.shade900 : Colors.grey.shade600,
               ),
             ),
           ],
@@ -250,12 +290,16 @@ class _TaskCardState extends State<TaskCard> {
     final showFocusAction = widget.showFocusAction && !isCompleted;
     final showSubmitThoughtAction =
         widget.onSubmitThought != null &&
-        widget.task.taskRequiresSubmission &&
         !isCompleted;
 
     final showCheckbox =
         (!widget.showCheckboxWhenFocusedOnly || (isFocused && !isCompleted)) &&
         !showSubmitThoughtAction;
+    final showDoneToggle =
+        showCheckbox &&
+        widget.useThoughtSubmissionToggleForDone &&
+        widget.onToggleDone != null &&
+        !isCompleted;
     final statusColor = widget.useStatusColor
         ? _getStatusColor(widget.task.taskStatus)
         : Theme.of(context).colorScheme.onSurfaceVariant;
@@ -583,7 +627,10 @@ class _TaskCardState extends State<TaskCard> {
                               _buildThoughtSubmitToggle(),
                               const SizedBox(width: 8),
                             ],
-                            if (showCheckbox) ...[
+                            if (showDoneToggle) ...[
+                              _buildDoneToggle(),
+                              const SizedBox(width: 8),
+                            ] else if (showCheckbox) ...[
                               Checkbox(
                                 value: widget.task.taskIsDone,
                                 onChanged:

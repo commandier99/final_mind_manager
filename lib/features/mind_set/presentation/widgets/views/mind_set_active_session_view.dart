@@ -116,7 +116,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                       .toList();
                   actualTasksCount = sessionTasks.length;
                   actualTasksDone = sessionTasks
-                      .where((t) => t.taskIsDone)
+                      .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
                       .length;
                 } else if (session.sessionType == 'follow_through') {
                   final sessionTasks = taskProvider.tasks
@@ -126,7 +126,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                       .toList();
                   actualTasksCount = sessionTasks.length;
                   actualTasksDone = sessionTasks
-                      .where((t) => t.taskIsDone)
+                      .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
                       .length;
                   _maybeAutoPromptFollowThroughSummary(
                     session,
@@ -138,7 +138,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
                 } else if (session.sessionType == 'go_with_flow') {
                   actualTasksCount = taskProvider.tasks.length;
                   actualTasksDone = taskProvider.tasks
-                      .where((t) => t.taskIsDone)
+                      .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
                       .length;
                 }
 
@@ -451,7 +451,9 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     await _pausePomodoroIfNeeded(session);
 
     final tasksTotal = sessionTasks.length;
-    final tasksDone = sessionTasks.where((task) => task.taskIsDone).length;
+    final tasksDone = sessionTasks
+        .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
+        .length;
 
     // 3) Persist completed session + completion event in one call
     await _sessionService.completeSession(
@@ -804,7 +806,11 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     final tasks = taskProvider.tasks;
     if (session.sessionType == 'go_with_flow') {
       return tasks
-          .where((task) => !task.taskIsDone && task.taskId != completedTaskId)
+          .where(
+            (task) =>
+                !SessionTaskSubmissionHelper.isSessionTaskComplete(task) &&
+                task.taskId != completedTaskId,
+          )
           .toList();
     }
 
@@ -812,7 +818,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
         .where(
           (task) =>
               session.sessionTaskIds.contains(task.taskId) &&
-              !task.taskIsDone &&
+              !SessionTaskSubmissionHelper.isSessionTaskComplete(task) &&
               task.taskId != completedTaskId,
         )
         .toList();
@@ -841,7 +847,9 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
     final duration = now.difference(startedAt);
     final tasksTotal = sessionTasks.length;
-    final tasksDone = sessionTasks.where((task) => task.taskIsDone).length;
+    final tasksDone = sessionTasks
+        .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
+        .length;
     final completionRate = tasksTotal == 0
         ? 100
         : ((tasksDone / tasksTotal) * 100).round();

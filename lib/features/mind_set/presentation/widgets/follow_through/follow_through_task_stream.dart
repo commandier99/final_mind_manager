@@ -249,7 +249,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
           (task) =>
               widget.taskIds.contains(task.taskId) &&
               task.taskId != completedTask.taskId &&
-              !task.taskIsDone,
+              !SessionTaskSubmissionHelper.isSessionTaskComplete(task),
         )
         .toList();
 
@@ -646,6 +646,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
                               useStatusColor: true,
                               isPomodoroMode: modePolicy.isPomodoro,
                               showFrogBadge: isFrogTask,
+                              useThoughtSubmissionToggleForDone: true,
                               isDimmed: false,
                               onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,

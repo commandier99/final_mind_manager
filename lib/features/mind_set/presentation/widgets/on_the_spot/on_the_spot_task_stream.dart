@@ -337,7 +337,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
           (task) =>
               widget.sessionTaskIds.contains(task.taskId) &&
               task.taskId != completedTask.taskId &&
-              !task.taskIsDone,
+              !SessionTaskSubmissionHelper.isSessionTaskComplete(task),
         )
         .toList();
 
@@ -444,7 +444,9 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     final startedAt = session.sessionStartedAt ?? session.sessionCreatedAt;
     final duration = now.difference(startedAt);
     final tasksTotal = sessionTasks.length;
-    final tasksDone = sessionTasks.where((task) => task.taskIsDone).length;
+    final tasksDone = sessionTasks
+        .where(SessionTaskSubmissionHelper.isSessionTaskComplete)
+        .length;
     final completionRate = tasksTotal == 0
         ? 100
         : ((tasksDone / tasksTotal) * 100).round();
@@ -793,6 +795,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
                               useStatusColor: true,
                               isPomodoroMode: modePolicy.isPomodoro,
                               showFrogBadge: isFrogTask,
+                              useThoughtSubmissionToggleForDone: true,
                               onFocus: canFocus ? () => _focusTask(task) : null,
                               onPause: canPause ? () => _pauseTask(task) : null,
                               onToggleDone:

@@ -44,6 +44,8 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
     final canAccessUploads =
         isManager || isOwnSubmission || submissionState == 'approved';
     final canReview = isManager && submissionState == 'submitted' && !_isActing;
+    final canExtendDeadline =
+        canReview && metadata['deadlineMissed'] == true;
     final feedbackMessage = (metadata['feedbackMessage']?.toString() ?? '').trim();
     final taskTitle = _metadataValue(metadata, 'taskTitle') ?? 'Task';
 
@@ -136,14 +138,19 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
           ],
           if (canReview) ...[
             const SizedBox(height: 12),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Expanded(
-                  child: FilledButton(
-                    onPressed: _reviewSubmission,
-                    child: const Text('Review Submission'),
-                  ),
+                FilledButton(
+                  onPressed: _reviewSubmission,
+                  child: const Text('Review Submission'),
                 ),
+                if (canExtendDeadline)
+                  OutlinedButton(
+                    onPressed: _extendDeadline,
+                    child: const Text('Extend Deadline'),
+                  ),
               ],
             ),
           ],
@@ -349,6 +356,123 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
     }
   }
 
+  Future<void> _extendDeadline() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final thoughtProvider = context.read<ThoughtProvider>();
+    final taskProvider = context.read<TaskProvider>();
+    final notificationProvider = context.read<NotificationProvider>();
+    final currentUser = context.read<UserProvider>().currentUser;
+    if (currentUser == null) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('No signed-in user found.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isActing = true;
+    });
+
+    try {
+      final metadata = Map<String, dynamic>.from(
+        widget.thought.metadata ?? const <String, dynamic>{},
+      );
+      final task = await _taskService.getTaskById(widget.thought.taskId);
+      if (task == null) {
+        throw StateError('Task not found.');
+      }
+
+      final currentDeadline = DateTime.tryParse(
+        (metadata['currentDeadline']?.toString() ?? '').trim(),
+      ) ??
+          task.taskDeadline;
+      final approvedDeadline = await _showDeadlineExtensionDialog(
+        currentDeadline: currentDeadline,
+      );
+      if (!mounted || approvedDeadline == null) {
+        return;
+      }
+
+      await taskProvider.updateTask(
+        task.copyWith(
+          taskDeadline: approvedDeadline,
+          taskDeadlineMissed: false,
+          taskExtensionCount: task.taskExtensionCount + 1,
+          taskStatus: _restoredTaskStatus(
+            metadata['previousTaskStatus']?.toString(),
+          ),
+          taskApprovalStatus: 'none',
+          taskLatestSubmissionThoughtId: null,
+        ),
+      );
+
+      await thoughtProvider.updateThought(
+        widget.thought.copyWith(
+          status: Thought.statusResolved,
+          updatedAt: DateTime.now(),
+          actionedAt: DateTime.now(),
+          actionedBy: currentUser.userId,
+          actionedByName: currentUser.userName,
+          metadata: {
+            ...metadata,
+            'submissionState': 'deadline_extended',
+            'feedbackMessage':
+                'Deadline extended to ${_formatDateTimeLabel(approvedDeadline)}.',
+            'approvedDeadline': approvedDeadline.toIso8601String(),
+            'reviewedByUserId': currentUser.userId,
+            'reviewedByUserName': currentUser.userName,
+            'reviewedAt': DateTime.now().toIso8601String(),
+          },
+        ),
+      );
+
+      await notificationProvider.createNotification(
+        AppNotification(
+          notificationId: '',
+          recipientUserId: widget.thought.authorId,
+          title: 'Deadline Extended',
+          message:
+              '${currentUser.userName} extended the deadline for ${_metadataValue(metadata, 'taskTitle') ?? 'the task'} until ${_formatDateTimeLabel(approvedDeadline)}.',
+          type: 'thought_submission_deadline_extended',
+          deliveryStatus: AppNotification.deliveryPending,
+          isRead: false,
+          isDeleted: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          actorUserId: currentUser.userId,
+          actorUserName: currentUser.userName,
+          boardId: widget.thought.boardId.trim().isEmpty ? null : widget.thought.boardId,
+          taskId: widget.thought.taskId.trim().isEmpty ? null : widget.thought.taskId,
+          thoughtId: widget.thought.thoughtId,
+          metadata: {
+            'thoughtType': Thought.typeSubmissionFeedback,
+            'approvedDeadline': approvedDeadline.toIso8601String(),
+          },
+        ),
+      );
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Deadline extended to ${_formatDateTimeLabel(approvedDeadline)}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to extend deadline: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isActing = false;
+        });
+      }
+    }
+  }
+
   Future<_SubmissionReviewResult?> _showSubmissionReviewDialog() async {
     final feedbackController = TextEditingController();
     var verdict = _SubmissionVerdict.success;
@@ -420,6 +544,129 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
     return result;
   }
 
+  Future<DateTime?> _showDeadlineExtensionDialog({
+    required DateTime? currentDeadline,
+  }) async {
+    final initialDeadline =
+        currentDeadline?.add(const Duration(days: 1)) ??
+        DateTime.now().add(const Duration(days: 1));
+    var selectedDeadline = initialDeadline;
+
+    return showDialog<DateTime>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> pickDate() async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDeadline,
+                firstDate: DateTime.now(),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked == null) return;
+              setDialogState(() {
+                selectedDeadline = DateTime(
+                  picked.year,
+                  picked.month,
+                  picked.day,
+                  selectedDeadline.hour,
+                  selectedDeadline.minute,
+                );
+              });
+            }
+
+            Future<void> pickTime() async {
+              final picked = await showTimePicker(
+                context: context,
+                initialTime: TimeOfDay.fromDateTime(selectedDeadline),
+              );
+              if (picked == null) return;
+              setDialogState(() {
+                selectedDeadline = DateTime(
+                  selectedDeadline.year,
+                  selectedDeadline.month,
+                  selectedDeadline.day,
+                  picked.hour,
+                  picked.minute,
+                );
+              });
+            }
+
+            return AlertDialog(
+              title: const Text('Extend Deadline'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (currentDeadline != null)
+                      Text(
+                        'Current deadline: ${_formatDateTimeLabel(currentDeadline)}',
+                      ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: pickDate,
+                            icon: const Icon(Icons.event_outlined),
+                            label: Text(
+                              _formatDateTimeLabel(selectedDeadline).split(' ').first,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: pickTime,
+                            icon: const Icon(Icons.schedule_outlined),
+                            label: Text(
+                              TimeOfDay.fromDateTime(selectedDeadline).format(context),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(selectedDeadline),
+                  child: const Text('Extend'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _formatDateTimeLabel(DateTime value) {
+    final month = value.month.toString().padLeft(2, '0');
+    final day = value.day.toString().padLeft(2, '0');
+    final year = value.year.toString();
+    final hour = value.hour % 12 == 0 ? 12 : value.hour % 12;
+    final minute = value.minute.toString().padLeft(2, '0');
+    final suffix = value.hour >= 12 ? 'PM' : 'AM';
+    return '$month/$day/$year $hour:$minute $suffix';
+  }
+
+  String _restoredTaskStatus(String? rawStatus) {
+    final normalized = Task.normalizeTaskStatus(rawStatus ?? Task.statusInProgress);
+    if (normalized == Task.statusCompleted || normalized == Task.statusSubmitted) {
+      return Task.statusInProgress;
+    }
+    return normalized;
+  }
+
   Future<void> _createSubmissionReviewNotification({
     required NotificationProvider notificationProvider,
     required UserModel reviewer,
@@ -483,15 +730,15 @@ enum _SubmissionVerdict { success, failure, needsRevision }
 
 extension on _SubmissionVerdict {
   String get label => switch (this) {
-    _SubmissionVerdict.success => 'successful',
-    _SubmissionVerdict.failure => 'failed',
+    _SubmissionVerdict.success => 'approved',
+    _SubmissionVerdict.failure => 'rejected',
     _SubmissionVerdict.needsRevision => 'needs revisions',
   };
 
   String get segmentLabel => switch (this) {
-    _SubmissionVerdict.success => 'Success',
-    _SubmissionVerdict.failure => 'Fail',
-    _SubmissionVerdict.needsRevision => 'Revise',
+    _SubmissionVerdict.success => 'Approve',
+    _SubmissionVerdict.failure => 'Reject',
+    _SubmissionVerdict.needsRevision => 'Needs Revision',
   };
 }
 
