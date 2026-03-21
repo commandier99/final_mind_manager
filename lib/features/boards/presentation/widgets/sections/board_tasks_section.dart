@@ -3,12 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../datasources/models/board_model.dart';
-import '../../../../notifications/datasources/models/notification_model.dart';
-import '../../../../notifications/datasources/providers/notification_provider.dart';
 import '../../../../thoughts/datasources/models/thought_model.dart';
 import '../../../../thoughts/datasources/services/thought_service.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/providers/task_provider.dart';
+import '../../../../tasks/presentation/utils/task_assignment_workflow_helper.dart';
 import '../../../../../shared/features/users/datasources/providers/user_provider.dart';
 import '../../controllers/board_tasks_query_controller.dart';
 import '../dialogs/add_task_to_board_dialog.dart';
@@ -90,12 +89,12 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
   void _showAddTaskDialog() {
     final user = FirebaseAuth.instance.currentUser;
-    final canDraftTasks = widget.board.canDraftTasks(user?.uid);
+    final canAddTasks = widget.board.isManager(user?.uid);
     if (user == null) return;
-    if (!canDraftTasks) {
+    if (!canAddTasks) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Only managers or supervisors can create draft tasks.'),
+          content: Text('Only managers can create draft tasks.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -136,10 +135,11 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
       builder: (context, taskProvider, _) {
         final currentUserId = FirebaseAuth.instance.currentUser?.uid;
         final isManager = widget.board.isManager(currentUserId);
+        final isSupervisor = widget.board.isSupervisor(currentUserId);
         final canDraftTasks = widget.board.canDraftTasks(currentUserId);
         final canCreateSuggestion = currentUserId != null &&
             currentUserId.isNotEmpty &&
-            widget.board.roleOf(currentUserId) == 'member';
+            (widget.board.roleOf(currentUserId) == 'member' || isSupervisor);
         final activeLane = canDraftTasks ? widget.selectedLane : lanePublished;
         final showSuggestionToggle = isManager && activeLane == laneDrafts;
 
@@ -257,7 +257,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                     _buildSuggestionToggle(),
                   ],
                   const SizedBox(width: 4),
-                  if (canDraftTasks)
+                  if (isManager)
                     InkWell(
                       onTap: _showAddTaskDialog,
                       borderRadius: BorderRadius.circular(4),
@@ -310,6 +310,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
                 _buildEmptyTasksState(
                   canDraftTasks: canDraftTasks,
                   activeLane: activeLane,
+                  canAddTasks: isManager,
                   showingSuggestions: showSuggestionToggle && _showTaskSuggestions,
                 ),
               if (sortedTasks.isNotEmpty)
@@ -359,11 +360,14 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
         assignmentAppliedTask.copyWith(taskBoardLane: lanePublished),
       );
       if (!mounted) return;
+      final hasPendingAssignment =
+          assignmentAppliedTask.taskAssignmentStatus == 'pending' &&
+          (assignmentAppliedTask.taskProposedAssigneeId ?? '').trim().isNotEmpty;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            assignmentAppliedTask.taskAssignedTo != 'None'
-                ? 'Task published and assigned.'
+            hasPendingAssignment
+                ? 'Task published. Assignment request sent to member.'
                 : 'Task moved to Published.',
           ),
         ),
@@ -398,48 +402,29 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
     if (currentUser == null) {
       throw StateError('No signed-in user found.');
     }
-
-    final notificationProvider = context.read<NotificationProvider>();
-    final now = DateTime.now();
-    final notificationSeed = '${task.taskId}:${now.microsecondsSinceEpoch}';
-
-    await notificationProvider.createNotifications([
-      AppNotification(
-        notificationId: '',
-        recipientUserId: proposedAssigneeId,
-        title: 'Task Assignment Received',
-        message: '${currentUser.userName} assigned you to ${task.taskTitle}.',
-        type: 'thought_task_assignment_received',
-        deliveryStatus: AppNotification.deliveryPending,
-        isRead: false,
-        isDeleted: false,
-        createdAt: now,
-        updatedAt: now,
-        actorUserId: currentUser.userId,
-        actorUserName: currentUser.userName,
-        boardId: task.taskBoardId,
-        taskId: task.taskId,
-        thoughtId: null,
-        eventKey:
-            '$notificationSeed:$proposedAssigneeId:thought_task_assignment_received',
-        metadata: const {'assignmentDirection': 'manager_to_member'},
-      ),
-    ]);
+    await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
+      context: context,
+      task: task,
+      assigneeId: proposedAssigneeId,
+      assigneeName: proposedAssigneeName,
+      actorUserId: currentUser.userId,
+      actorUserName: currentUser.userName,
+    );
 
     return task.copyWith(
-      taskAssignedTo: proposedAssigneeId,
-      taskAssignedToName: proposedAssigneeName.isEmpty
-          ? 'Assigned Member'
-          : proposedAssigneeName,
-      taskAssignmentStatus: 'accepted',
-      taskProposedAssigneeId: null,
-      taskProposedAssigneeName: null,
+      taskAssignedTo: 'None',
+      taskAssignedToName: 'None (Pending)',
+      taskAssignmentStatus: 'pending',
+      taskProposedAssigneeId: proposedAssigneeId,
+      taskProposedAssigneeName:
+          proposedAssigneeName.isEmpty ? 'Assigned Member' : proposedAssigneeName,
     );
   }
 
   Widget _buildEmptyTasksState({
     required bool canDraftTasks,
     required String activeLane,
+    required bool canAddTasks,
     bool showingSuggestions = false,
   }) {
     return Padding(
@@ -460,9 +445,11 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
             const SizedBox(height: 8),
             Center(
               child: Text(
-                showingSuggestions
-                    ? 'Press (+) to add a task, or switch off Suggestions.'
-                    : 'Press (+) to add a task!',
+                canAddTasks
+                    ? (showingSuggestions
+                        ? 'Press (+) to add a task, or switch off Suggestions.'
+                        : 'Press (+) to add a task!')
+                    : 'Use the lightbulb icon to create a suggestion.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey[600],

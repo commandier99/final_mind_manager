@@ -668,9 +668,9 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
   }
 
   String _restoredTaskStatus(String? rawStatus) {
-    final normalized = Task.normalizeTaskStatus(rawStatus ?? Task.statusInProgress);
+    final normalized = Task.normalizeTaskStatus(rawStatus ?? Task.statusPaused);
     if (normalized == Task.statusCompleted || normalized == Task.statusSubmitted) {
-      return Task.statusInProgress;
+      return Task.statusPaused;
     }
     return normalized;
   }

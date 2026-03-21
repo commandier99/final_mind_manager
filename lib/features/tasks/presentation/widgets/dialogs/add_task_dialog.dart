@@ -5,6 +5,7 @@ import '../../../datasources/providers/task_provider.dart'; // Import TaskProvid
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/models/task_stats_model.dart';
 import '../../../datasources/helpers/task_dependency_helper.dart';
+import '../../utils/task_assignment_workflow_helper.dart';
 import '../../../../boards/datasources/models/board_model.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
@@ -306,6 +307,12 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       String assignedToName = isTeamBoard
           ? (_assignedToUserName ?? 'Unassigned')
           : _currentUserName;
+      final hasProposedAssignee =
+          TaskAssignmentWorkflowHelper.requiresAcceptance(
+            boardType: selectedBoard.boardType,
+            boardManagerId: selectedBoard.boardManagerId,
+            assigneeId: assignedToId,
+          );
 
       if (isTeamBoard &&
           assignedToId != widget.userId &&
@@ -361,8 +368,10 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskOwnerId: widget.userId,
         taskOwnerName: _currentUserName,
         taskAssignedBy: widget.userId,
-        taskAssignedTo: assignedToId,
-        taskAssignedToName: assignedToName,
+        taskAssignedTo: hasProposedAssignee ? 'None' : assignedToId,
+        taskAssignedToName: hasProposedAssignee
+            ? 'None (Pending)'
+            : assignedToName,
         taskCreatedAt: DateTime.now(),
         taskTitle: taskTitle,
         taskDescription: _descriptionController.text.trim(),
@@ -388,9 +397,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskRepeatEndDate: _repeatEndDate,
         taskNextRepeatDate: null,
         taskRepeatTime: isRepeating ? repeatTimeStr : null,
-        taskAssignmentStatus: null,
-        taskProposedAssigneeId: null,
-        taskProposedAssigneeName: null,
+        taskAssignmentStatus: hasProposedAssignee ? 'pending' : null,
+        taskProposedAssigneeId: hasProposedAssignee ? assignedToId : null,
+        taskProposedAssigneeName: hasProposedAssignee ? assignedToName : null,
         taskBoardLane: selectedBoard.boardType == 'personal'
             ? _lanePublished
             : _laneDrafts,
@@ -400,6 +409,16 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       );
 
       await taskProvider.addTask(newTask);
+      if (hasProposedAssignee) {
+        await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
+          context: context,
+          task: newTask,
+          assigneeId: assignedToId,
+          assigneeName: assignedToName,
+          actorUserId: widget.userId,
+          actorUserName: _currentUserName,
+        );
+      }
 
       if (mounted) {
         Navigator.pop(context); // Close loading modal

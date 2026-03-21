@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../datasources/models/task_model.dart';
 import '../../../datasources/providers/task_provider.dart';
 import '../../../datasources/helpers/task_dependency_helper.dart';
+import '../../utils/task_assignment_workflow_helper.dart';
 import '../../../../boards/datasources/models/board_model.dart';
 import '../../../../boards/datasources/services/board_services.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
@@ -31,7 +32,6 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   late List<String> _repeatDays;
   late DateTime? _repeatEndDate;
   late TimeOfDay? _repeatTime;
-  late bool _taskAllowsSubmissions;
   late bool _taskRequiresSubmission;
   late bool _taskRequiresApproval;
   String? _assignedToUserId;
@@ -90,7 +90,6 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     } else {
       _repeatTime = null;
     }
-    _taskAllowsSubmissions = widget.task.taskAllowsSubmissions;
     _taskRequiresSubmission = widget.task.taskRequiresSubmission;
     _taskRequiresApproval = widget.task.taskRequiresApproval;
     if (widget.task.taskAssignedTo.isEmpty ||
@@ -208,12 +207,14 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         return;
       }
 
-      final isDraftTeamTask =
-          _boardType == 'team' && _taskBoardLane == _laneDrafts;
+      final managerId = (_boardDetails?.boardManagerId ?? widget.task.taskOwnerId)
+          .trim();
       final hasProposedAssignee =
-          isDraftTeamTask &&
-          _assignedToUserId != null &&
-          _assignedToUserId != 'None';
+          TaskAssignmentWorkflowHelper.requiresAcceptance(
+            boardType: _boardType,
+            boardManagerId: managerId,
+            assigneeId: _assignedToUserId,
+          );
 
       final updatedTask = widget.task.copyWith(
         taskTitle: _titleController.text.trim(),
@@ -261,14 +262,26 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
           _selectedDependencyIds,
           selfTaskId: widget.task.taskId,
         ),
-        taskAllowsSubmissions: _taskAllowsSubmissions,
-        taskRequiresSubmission:
-            _taskAllowsSubmissions && _taskRequiresSubmission,
-        taskRequiresApproval:
-            _taskAllowsSubmissions && _taskRequiresApproval,
+        taskAllowsSubmissions: true,
+        taskRequiresSubmission: _taskRequiresSubmission,
+        taskRequiresApproval: _taskRequiresApproval,
       );
 
       await taskProvider.updateTask(updatedTask);
+      if (hasProposedAssignee && _assignedToUserId != null) {
+        final actorUser = FirebaseAuth.instance.currentUser;
+        final actorName = (actorUser?.displayName ?? '').trim().isEmpty
+            ? widget.task.taskOwnerName
+            : actorUser!.displayName!.trim();
+        await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
+          context: context,
+          task: updatedTask,
+          assigneeId: _assignedToUserId!,
+          assigneeName: _assignedToUserName ?? 'Assigned Member',
+          actorUserId: actorUser?.uid ?? widget.task.taskOwnerId,
+          actorUserName: actorName,
+        );
+      }
 
       if (mounted) {
         Navigator.pop(context);
@@ -811,36 +824,20 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
           const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Allow Submissions'),
-            value: _taskAllowsSubmissions,
+            title: const Text('Submission Required'),
+            value: _taskRequiresSubmission,
             onChanged: (value) {
-              setState(() {
-                _taskAllowsSubmissions = value;
-                if (!value) {
-                  _taskRequiresSubmission = false;
-                  _taskRequiresApproval = false;
-                }
-              });
+              setState(() => _taskRequiresSubmission = value);
             },
           ),
-          if (_taskAllowsSubmissions) ...[
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Submission Required'),
-              value: _taskRequiresSubmission,
-              onChanged: (value) {
-                setState(() => _taskRequiresSubmission = value);
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Reviewer Approval Required'),
-              value: _taskRequiresApproval,
-              onChanged: (value) {
-                setState(() => _taskRequiresApproval = value);
-              },
-            ),
-          ],
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Reviewer Approval Required'),
+            value: _taskRequiresApproval,
+            onChanged: (value) {
+              setState(() => _taskRequiresApproval = value);
+            },
+          ),
         ],
       ),
     );

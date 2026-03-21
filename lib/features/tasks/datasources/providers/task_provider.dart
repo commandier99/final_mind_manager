@@ -342,6 +342,49 @@ class TaskProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> respondToTaskAssignment({
+    required String taskId,
+    required bool accepted,
+    required String assigneeId,
+    required String assigneeName,
+  }) async {
+    var existingIndex = -1;
+    Task? previousTask;
+
+    try {
+      existingIndex = _tasks.indexWhere((t) => t.taskId == taskId);
+      if (existingIndex != -1) {
+        previousTask = _tasks[existingIndex];
+        _tasks[existingIndex] = _tasks[existingIndex].copyWith(
+          taskAssignedTo: accepted ? assigneeId : 'None',
+          taskAssignedToName: accepted
+              ? (assigneeName.trim().isEmpty ? 'Unknown' : assigneeName.trim())
+              : 'Unassigned',
+          taskAssignmentStatus: accepted ? 'accepted' : 'declined',
+          taskProposedAssigneeId: null,
+          taskProposedAssigneeName: null,
+        );
+        notifyListeners();
+      }
+
+      await _taskService.respondToTaskAssignment(
+        taskId: taskId,
+        accepted: accepted,
+        assigneeId: assigneeId,
+        assigneeName: assigneeName,
+      );
+    } catch (e) {
+      if (existingIndex != -1 &&
+          previousTask != null &&
+          existingIndex < _tasks.length) {
+        _tasks[existingIndex] = previousTask;
+        notifyListeners();
+      }
+      debugPrint('[DEBUG] TaskProvider: Error responding to assignment: $e');
+      rethrow;
+    }
+  }
+
   Future<void> softDeleteTask(Task task) async {
     try {
       debugPrint(

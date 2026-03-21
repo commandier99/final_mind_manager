@@ -147,6 +147,23 @@ service cloud.firestore {
             .hasOnly([request.auth.uid]);
       }
 
+      function canDeclineBoardInvite() {
+        return request.auth != null &&
+          !(request.auth.uid in resource.data.memberIds) &&
+          request.auth.uid in resource.data.get('pendingInviteUserIds', []) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'pendingInviteUserIds',
+            'boardLastModifiedAt',
+            'boardLastModifiedBy'
+          ]) &&
+          resource.data.get('pendingInviteUserIds', []).size() ==
+            request.resource.data.get('pendingInviteUserIds', []).size() + 1 &&
+          resource.data.get('pendingInviteUserIds', [])
+            .hasAll(request.resource.data.get('pendingInviteUserIds', [])) &&
+          !(request.auth.uid in request.resource.data.get('pendingInviteUserIds', [])) &&
+          request.resource.data.boardLastModifiedBy == request.auth.uid;
+      }
+
       function canSelfLeaveBoard() {
         return request.auth != null &&
           request.auth.uid != resource.data.boardManagerId &&
@@ -175,6 +192,7 @@ service cloud.firestore {
       allow update: if request.auth != null &&
         (isBoardManager() ||
          canAcceptBoardInvite() ||
+         canDeclineBoardInvite() ||
          canSelfLeaveBoard() ||
          canSupervisorUpdateBoardStatsOnly());
 
@@ -249,6 +267,48 @@ service cloud.firestore {
           request.resource.data.taskApprovalStatus == 'pending';
       }
 
+      function isAssigneeAssignmentResponseUpdate() {
+        let wasPendingForUser =
+          resource.data.taskIsDone != true &&
+          resource.data.taskAssignmentStatus == 'pending' &&
+          (
+            resource.data.taskProposedAssigneeId == request.auth.uid ||
+            (
+              (
+                resource.data.taskProposedAssigneeId == null ||
+                resource.data.taskProposedAssigneeId == ''
+              ) &&
+              resource.data.taskAssignedTo == request.auth.uid
+            )
+          );
+
+        let onlyAssignmentFieldsChanged =
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'taskAssignedTo',
+            'taskAssignedToName',
+            'taskAssignmentStatus',
+            'taskProposedAssigneeId',
+            'taskProposedAssigneeName'
+          ]);
+
+        let acceptedShape =
+          request.resource.data.taskAssignedTo == request.auth.uid &&
+          request.resource.data.taskAssignmentStatus == 'accepted' &&
+          request.resource.data.taskProposedAssigneeId == null &&
+          request.resource.data.taskProposedAssigneeName == null;
+
+        let declinedShape =
+          request.resource.data.taskAssignedTo == 'None' &&
+          request.resource.data.taskAssignedToName == 'Unassigned' &&
+          request.resource.data.taskAssignmentStatus == 'declined' &&
+          request.resource.data.taskProposedAssigneeId == null &&
+          request.resource.data.taskProposedAssigneeName == null;
+
+        return wasPendingForUser &&
+          onlyAssignmentFieldsChanged &&
+          (acceptedShape || declinedShape);
+      }
+
       allow read: if request.auth != null &&
         (
           resource.data.taskOwnerId == request.auth.uid ||
@@ -265,9 +325,7 @@ service cloud.firestore {
         (request.resource.data.taskOwnerId == request.auth.uid ||
          (request.resource.data.taskBoardId != null &&
           request.resource.data.taskBoardId != '' &&
-          (isBoardManager(request.resource.data.taskBoardId) ||
-           (isBoardSupervisor(request.resource.data.taskBoardId) &&
-            request.resource.data.taskBoardLane == 'drafts'))));
+          isBoardManager(request.resource.data.taskBoardId)));
 
       allow update: if request.auth != null &&
         (
@@ -275,7 +333,8 @@ service cloud.firestore {
             // Assigned members can only update reminder fields and limited workflow fields.
             isAssigneeReminderUpdate() ||
             isAssigneeWorkflowStatusUpdate() ||
-            isAssigneeSubmissionUpdate()
+            isAssigneeSubmissionUpdate() ||
+            isAssigneeAssignmentResponseUpdate()
           ) ||
           (
             resource.data.taskIsDone != true &&
@@ -283,8 +342,7 @@ service cloud.firestore {
               (
                 resource.data.taskBoardId != null &&
                 resource.data.taskBoardId != '' &&
-                (isBoardManager(resource.data.taskBoardId) ||
-                 isBoardSupervisor(resource.data.taskBoardId))
+                isBoardManager(resource.data.taskBoardId)
               ) ||
               (
                 (resource.data.taskBoardId == null ||

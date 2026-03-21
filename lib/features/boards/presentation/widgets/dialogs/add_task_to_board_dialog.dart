@@ -5,6 +5,7 @@ import '../../../../tasks/datasources/providers/task_provider.dart';
 import '../../../../tasks/datasources/models/task_model.dart';
 import '../../../../tasks/datasources/models/task_stats_model.dart';
 import '../../../../tasks/datasources/helpers/task_dependency_helper.dart';
+import '../../../../tasks/presentation/utils/task_assignment_workflow_helper.dart';
 import '../../../datasources/models/board_model.dart';
 import '../../../../../shared/features/users/datasources/services/user_services.dart';
 import 'package:uuid/uuid.dart';
@@ -239,13 +240,11 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             '${_repeatTime!.hour.toString().padLeft(2, '0')}:${_repeatTime!.minute.toString().padLeft(2, '0')}';
       }
 
-      final isDraftTeamTask =
-          widget.board.boardType == 'team' &&
-          (widget.board.boardManagerId != widget.userId || _taskBoardLane == _laneDrafts);
-      final hasProposedAssignee =
-          isDraftTeamTask &&
-          _assignedToUserId != null &&
-          _assignedToUserId != 'None';
+      final hasProposedAssignee = TaskAssignmentWorkflowHelper.requiresAcceptance(
+        boardType: widget.board.boardType,
+        boardManagerId: widget.board.boardManagerId,
+        assigneeId: _assignedToUserId,
+      );
 
       final newTask = Task(
         taskId: const Uuid().v4(),
@@ -300,6 +299,16 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
 
       // Pass the selected member for assignment notification, not the task itself
       await taskProvider.addTask(newTask);
+      if (hasProposedAssignee && _assignedToUserId != null) {
+        await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
+          context: context,
+          task: newTask,
+          assigneeId: _assignedToUserId!,
+          assigneeName: _assignedToUserName ?? 'Assigned Member',
+          actorUserId: widget.userId,
+          actorUserName: _currentUserName,
+        );
+      }
       widget.onTaskCreated?.call(newTask.taskId);
 
       if (mounted) {

@@ -161,6 +161,29 @@ class TaskService {
     }
   }
 
+  Future<void> respondToTaskAssignment({
+    required String taskId,
+    required bool accepted,
+    required String assigneeId,
+    required String assigneeName,
+  }) async {
+    try {
+      await _assertTaskNotCompleted(taskId);
+      await _tasks.doc(taskId).update({
+        'taskAssignedTo': accepted ? assigneeId : 'None',
+        'taskAssignedToName': accepted
+            ? (assigneeName.trim().isEmpty ? 'Unknown' : assigneeName.trim())
+            : 'Unassigned',
+        'taskAssignmentStatus': accepted ? 'accepted' : 'declined',
+        'taskProposedAssigneeId': null,
+        'taskProposedAssigneeName': null,
+      });
+    } catch (e) {
+      debugPrint('⚠️ Error responding to task assignment: $e');
+      rethrow;
+    }
+  }
+
   Future<void> _logTaskWorkflowEvents({
     required Task? previousTask,
     required Task updatedTask,

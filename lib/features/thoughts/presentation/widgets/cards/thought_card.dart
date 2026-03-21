@@ -489,13 +489,14 @@ class _ThoughtCardState extends State<ThoughtCard> {
   }
 
   Future<void> _acceptTaskAssignment() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final notificationProvider = context.read<NotificationProvider>();
     final taskProvider = context.read<TaskProvider>();
     final thoughtProvider = context.read<ThoughtProvider>();
     final currentUser = context.read<UserProvider>().currentUser;
     if (currentUser == null) {
-      messenger.showSnackBar(
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('No signed-in user found.')),
       );
       return;
@@ -512,7 +513,8 @@ class _ThoughtCardState extends State<ThoughtCard> {
         ? metadata['assignmentAssigneeName'].toString().trim()
         : (widget.thought.targetUserName?.trim() ?? '');
     if (taskId.isEmpty || assigneeId.isEmpty) {
-      messenger.showSnackBar(
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('This assignment is missing task or member data.')),
       );
       return;
@@ -523,19 +525,11 @@ class _ThoughtCardState extends State<ThoughtCard> {
     });
 
     try {
-      final task = await _taskService.getTaskById(taskId);
-      if (task == null) {
-        throw StateError('Task not found.');
-      }
-
-      await taskProvider.updateTask(
-        task.copyWith(
-          taskAssignedTo: assigneeId,
-          taskAssignedToName: assigneeName.isEmpty ? 'Unknown' : assigneeName,
-          taskAssignmentStatus: 'accepted',
-          taskProposedAssigneeId: null,
-          taskProposedAssigneeName: null,
-        ),
+      await taskProvider.respondToTaskAssignment(
+        taskId: taskId,
+        accepted: true,
+        assigneeId: assigneeId,
+        assigneeName: assigneeName,
       );
 
       await thoughtProvider.updateThoughtStatus(
@@ -553,12 +547,12 @@ class _ThoughtCardState extends State<ThoughtCard> {
 
       if (!mounted) return;
       final assigneeLabel = assigneeName.isEmpty ? 'member' : assigneeName;
-      messenger.showSnackBar(
+      messenger?.showSnackBar(
         SnackBar(content: Text('Task assignment accepted for $assigneeLabel.')),
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger?.showSnackBar(
         SnackBar(content: Text('Failed to accept task assignment: $e')),
       );
     } finally {
@@ -571,13 +565,14 @@ class _ThoughtCardState extends State<ThoughtCard> {
   }
 
   Future<void> _declineTaskAssignment() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
     final notificationProvider = context.read<NotificationProvider>();
     final taskProvider = context.read<TaskProvider>();
     final thoughtProvider = context.read<ThoughtProvider>();
     final currentUser = context.read<UserProvider>().currentUser;
     if (currentUser == null) {
-      messenger.showSnackBar(
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
         const SnackBar(content: Text('No signed-in user found.')),
       );
       return;
@@ -590,18 +585,12 @@ class _ThoughtCardState extends State<ThoughtCard> {
     try {
       final taskId = widget.thought.taskId.trim();
       if (taskId.isNotEmpty) {
-        final task = await _taskService.getTaskById(taskId);
-        if (task != null) {
-          await taskProvider.updateTask(
-            task.copyWith(
-              taskAssignedTo: 'None',
-              taskAssignedToName: 'Unassigned',
-              taskAssignmentStatus: 'declined',
-              taskProposedAssigneeId: null,
-              taskProposedAssigneeName: null,
-            ),
-          );
-        }
+        await taskProvider.respondToTaskAssignment(
+          taskId: taskId,
+          accepted: false,
+          assigneeId: '',
+          assigneeName: '',
+        );
       }
 
       await thoughtProvider.updateThoughtStatus(
@@ -618,12 +607,12 @@ class _ThoughtCardState extends State<ThoughtCard> {
       );
 
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger?.showSnackBar(
         const SnackBar(content: Text('Task assignment declined.')),
       );
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
+      messenger?.showSnackBar(
         SnackBar(content: Text('Failed to decline task assignment: $e')),
       );
     } finally {
@@ -964,6 +953,10 @@ class _ThoughtCardState extends State<ThoughtCard> {
     if (currentUserId.isEmpty) return false;
     final targetUserId = (thought.targetUserId ?? '').trim();
     if (targetUserId.isNotEmpty) return currentUserId == targetUserId;
+    final metadata = thought.metadata ?? const <String, dynamic>{};
+    final assigneeId = (metadata['assignmentAssigneeId']?.toString() ?? '')
+        .trim();
+    if (assigneeId.isNotEmpty) return currentUserId == assigneeId;
     return false;
   }
 
@@ -1649,9 +1642,9 @@ class _ThoughtCardState extends State<ThoughtCard> {
   }
 
   String _restoredTaskStatus(String? rawStatus) {
-    final normalized = Task.normalizeTaskStatus(rawStatus ?? Task.statusInProgress);
+    final normalized = Task.normalizeTaskStatus(rawStatus ?? Task.statusPaused);
     if (normalized == Task.statusCompleted || normalized == Task.statusSubmitted) {
-      return Task.statusInProgress;
+      return Task.statusPaused;
     }
     return normalized;
   }
