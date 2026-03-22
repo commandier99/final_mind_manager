@@ -31,21 +31,33 @@ class ProfilePageController extends ChangeNotifier {
     required VoidCallback cancelEditMode,
     required Future<void> Function() saveProfileChanges,
   }) {
+    final shouldNotify =
+        _isEditingProfile != isEditingProfile ||
+        _isSavingProfile != isSavingProfile;
+
     _isEditingProfile = isEditingProfile;
     _isSavingProfile = isSavingProfile;
     _enterEditMode = enterEditMode;
     _cancelEditMode = cancelEditMode;
     _saveProfileChanges = saveProfileChanges;
-    notifyListeners();
+
+    if (shouldNotify) {
+      notifyListeners();
+    }
   }
 
   void unbind() {
+    final shouldNotify = _isEditingProfile || _isSavingProfile;
+
     _enterEditMode = null;
     _cancelEditMode = null;
     _saveProfileChanges = null;
     _isEditingProfile = false;
     _isSavingProfile = false;
-    notifyListeners();
+
+    if (shouldNotify) {
+      notifyListeners();
+    }
   }
 
   void enterEditMode() => _enterEditMode?.call();

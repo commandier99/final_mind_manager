@@ -178,9 +178,10 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      child: Padding(
+        child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Profile Picture
             CircleAvatar(
@@ -251,30 +252,38 @@ class _AddMemberToBoardPageState extends State<AddMemberToBoardPage> {
                 ],
               ),
             ),
+            const SizedBox(width: 8),
             // Add/Member Button
-            if (isAlreadyMember)
-              Chip(
-                label: const Text('Member'),
-                backgroundColor: Colors.grey.shade300,
-              )
-            else
-              ElevatedButton.icon(
-                icon: Icon(
-                  isSendingInvite
-                      ? Icons.hourglass_top
-                      : (hasPendingInvite
-                            ? Icons.check_circle_outline
-                            : Icons.mail_outline),
+            Flexible(
+              child: Align(
+                alignment: Alignment.topRight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: isAlreadyMember
+                      ? Chip(
+                          label: const Text('Member'),
+                          backgroundColor: Colors.grey.shade300,
+                        )
+                      : ElevatedButton.icon(
+                          icon: Icon(
+                            isSendingInvite
+                                ? Icons.hourglass_top
+                                : (hasPendingInvite
+                                      ? Icons.check_circle_outline
+                                      : Icons.mail_outline),
+                          ),
+                          label: Text(
+                            isSendingInvite
+                                ? 'Sending...'
+                                : (hasPendingInvite ? 'Sent' : 'Invite'),
+                          ),
+                          onPressed: isSendingInvite || hasPendingInvite
+                              ? null
+                              : () => _handleAddMember(user),
+                        ),
                 ),
-                label: Text(
-                  isSendingInvite
-                      ? 'Sending...'
-                      : (hasPendingInvite ? 'Sent' : 'Invite'),
-                ),
-                onPressed: isSendingInvite || hasPendingInvite
-                    ? null
-                    : () => _handleAddMember(user),
               ),
+            ),
           ],
         ),
       ),

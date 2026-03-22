@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -69,6 +71,8 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
   static const String _taskRequestDeadlineExtension = 'deadline_extension';
   static const String _suggestionTask = 'task';
   static const String _suggestionStep = 'step';
+  static const Object _taskPickerCancelled = Object();
+  static const Object _taskPickerClearSelection = Object();
 
   final _formKey = GlobalKey<FormState>();
   final Uuid _uuid = const Uuid();
@@ -140,7 +144,6 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
     final selectableBoards = _selectableBoardsFromContext(context);
     final suggestionOptions = _suggestionOptions;
     final hasSelectableBoards = selectableBoards.isNotEmpty;
-    final hasSelectableTasks = _taskOptions.isNotEmpty;
     final hasSelectableMembers = _availableMembers.isNotEmpty;
     if (_selectedType == Thought.typeSuggestion &&
         suggestionOptions.isNotEmpty &&
@@ -428,34 +431,40 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
                             _selectedSuggestionMode == _suggestionStep)) &&
                     _showsTaskSelector) ...[
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String?>(
-                    initialValue: _selectedTask?.taskId,
-                    hint: Text(
-                      hasSelectableTasks ? 'Select a task' : 'No tasks available',
-                    ),
+                  InputDecorator(
                     decoration: _fieldDecoration(
                       context,
                       label: _taskFieldLabel,
                     ),
-                    items: [
-                      if (!(_selectedType == Thought.typeSuggestion &&
-                          _selectedSuggestionMode == _suggestionStep))
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('No task'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _isSubmitting ? null : _showTaskPickerDialog,
+                          icon: const Icon(Icons.task_alt_outlined),
+                          label: Text(
+                            _selectedTask == null
+                                ? 'Select Task'
+                                : _taskOptionLabel(_selectedTask!),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ..._taskOptions.map(
-                        (task) => DropdownMenuItem<String?>(
-                          value: task.taskId,
-                          child: Text(_taskOptionLabel(task)),
-                        ),
-                      ),
-                    ],
-                    onChanged: _isSubmitting || !hasSelectableTasks
-                        ? null
-                        : (taskId) {
-                            _handleTaskSelection(taskId);
-                          },
+                        if (_selectedTask != null &&
+                            !(_selectedType == Thought.typeTaskAssignment &&
+                                _selectedTaskAssignmentMode ==
+                                    _taskAssignmentMemberToManager &&
+                                widget.initialTaskId != null &&
+                                widget.initialTaskId!.trim().isNotEmpty)) ...[
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: _isSubmitting
+                                ? null
+                                : () => _handleResolvedTaskSelection(null),
+                            child: const Text('Clear Task Selection'),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
                 if (_selectedType == Thought.typeTaskRequest) ...[
@@ -1351,6 +1360,10 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
 
   Future<void> _handleTaskSelection(String? taskId) async {
     final task = _findTaskById(taskId);
+    await _handleResolvedTaskSelection(task);
+  }
+
+  Future<void> _handleResolvedTaskSelection(Task? task) async {
     if (_selectedType != Thought.typeReminder) {
       final boards = context.read<BoardProvider>().boards;
       final board = task == null
@@ -1447,6 +1460,123 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
     });
   }
 
+  Future<void> _showTaskPickerDialog() async {
+    final selectedTask = await showDialog<Object?>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640, maxHeight: 520),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _taskPickerTitle,
+                          style: Theme.of(dialogContext).textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(
+                          dialogContext,
+                        ).pop(_taskPickerCancelled),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: StreamBuilder<List<Task>>(
+                    stream: _streamSelectableTasks(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting &&
+                          !snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+
+                      final tasks = snapshot.data ?? const <Task>[];
+                      if (tasks.isEmpty) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Text(
+                              _emptyTaskPickerMessage,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.grey.shade700),
+                            ),
+                          ),
+                        );
+                      }
+
+                      return ListView.separated(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: tasks.length,
+                        separatorBuilder: (_, _) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final task = tasks[index];
+                          final isSelected = _selectedTask?.taskId == task.taskId;
+                          final boardTitle = _taskBoardTitle(task);
+                          return ListTile(
+                            leading: Icon(
+                              isSelected
+                                  ? Icons.radio_button_checked
+                                  : Icons.radio_button_off,
+                              color: isSelected
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Colors.grey,
+                            ),
+                            title: Text(task.taskTitle),
+                            subtitle: Text(boardTitle),
+                            trailing: task.taskDeadline == null
+                                ? null
+                                : Text(_formatRequestedDate(task.taskDeadline!)),
+                            onTap: () => Navigator.of(dialogContext).pop(task),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+                if (!(_selectedType == Thought.typeSuggestion &&
+                    _selectedSuggestionMode == _suggestionStep))
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => Navigator.of(
+                          dialogContext,
+                        ).pop(_taskPickerClearSelection),
+                        child: const Text('No Task'),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (!mounted ||
+        selectedTask == null ||
+        identical(selectedTask, _taskPickerCancelled)) {
+      return;
+    }
+    if (identical(selectedTask, _taskPickerClearSelection)) {
+      await _handleResolvedTaskSelection(null);
+      return;
+    }
+    await _handleResolvedTaskSelection(selectedTask as Task);
+  }
+
   Board? _findBoardById(List<Board> boards, String? boardId) {
     if (boardId == null || boardId.isEmpty) return null;
     for (final board in boards) {
@@ -1481,12 +1611,115 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
   }
 
   String _taskOptionLabel(Task task) {
-    final boardTitle = (task.taskBoardTitle ?? '').trim().isNotEmpty
+    final boardTitle = _taskBoardTitle(task);
+    return '$boardTitle | ${task.taskTitle}';
+  }
+
+  String _taskBoardTitle(Task task) {
+    return (task.taskBoardTitle ?? '').trim().isNotEmpty
         ? task.taskBoardTitle!.trim()
         : (_findBoardById(context.read<BoardProvider>().boards, task.taskBoardId)
                   ?.boardTitle ??
               'Board');
-    return '$boardTitle | ${task.taskTitle}';
+  }
+
+  String get _taskPickerTitle {
+    if (_selectedType == Thought.typeTaskAssignment &&
+        _selectedTaskAssignmentMode == _taskAssignmentMemberToManager) {
+      return 'Select Task to Apply For';
+    }
+    return 'Select Task';
+  }
+
+  String get _emptyTaskPickerMessage {
+    if (_selectedType == Thought.typeTaskAssignment &&
+        _selectedTaskAssignmentMode == _taskAssignmentMemberToManager) {
+      return 'No unassigned tasks are available right now.';
+    }
+    return 'No tasks are available right now.';
+  }
+
+  Stream<List<Task>> _streamSelectableTasks() {
+    final boards = _taskSelectionBoards;
+    if (boards.isEmpty) {
+      return Stream<List<Task>>.value(const <Task>[]);
+    }
+
+    final controller = StreamController<List<Task>>();
+    final latestTasksByBoard = <String, List<Task>>{};
+    final subscriptions = <StreamSubscription<List<Task>>>[];
+
+    void emitCombinedTasks() {
+      final merged = latestTasksByBoard.values
+          .expand((tasks) => tasks)
+          .where(_taskMatchesCurrentSelectionRules)
+          .toList()
+        ..sort((a, b) {
+          final boardCompare = _taskBoardTitle(
+            a,
+          ).toLowerCase().compareTo(_taskBoardTitle(b).toLowerCase());
+          if (boardCompare != 0) return boardCompare;
+          return a.taskTitle.toLowerCase().compareTo(b.taskTitle.toLowerCase());
+        });
+      controller.add(merged);
+    }
+
+    for (final board in boards) {
+      final subscription = _taskService
+          .streamTasksByBoardId(board.boardId)
+          .listen((tasks) {
+            latestTasksByBoard[board.boardId] = tasks
+                .where((task) => !task.taskIsDeleted)
+                .toList();
+            emitCombinedTasks();
+          }, onError: (_) {
+            latestTasksByBoard[board.boardId] = const <Task>[];
+            emitCombinedTasks();
+          });
+      subscriptions.add(subscription);
+    }
+
+    controller.onCancel = () async {
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    };
+
+    return controller.stream;
+  }
+
+  List<Board> get _taskSelectionBoards {
+    final boardProvider = context.read<BoardProvider>();
+    final currentUserId = context.read<UserProvider>().userId;
+
+    if (_selectedType == Thought.typeSuggestion &&
+        _selectedSuggestionMode == _suggestionStep) {
+      return _selectableBoardsFromProvider(boardProvider)
+          .where((board) => board.canDraftTasks(currentUserId))
+          .toList();
+    }
+
+    if (_selectedType == Thought.typeReminder ||
+        _selectedType == Thought.typeTaskAssignment ||
+        _selectedType == Thought.typeTaskRequest) {
+      return _selectableBoardsFromProvider(boardProvider);
+    }
+
+    if (_selectedBoard != null) {
+      return [_selectedBoard!];
+    }
+
+    return const <Board>[];
+  }
+
+  bool _taskMatchesCurrentSelectionRules(Task task) {
+    if (task.taskIsDeleted) return false;
+
+    if (_selectedType == Thought.typeTaskAssignment) {
+      return _isUnassignedTask(task);
+    }
+
+    return true;
   }
 
   Future<void> _showThoughtTypePicker() async {
