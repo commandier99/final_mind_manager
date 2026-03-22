@@ -407,9 +407,11 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
           _selectedDependencyIds,
         ),
       );
+      final shouldSendAssignmentRequest =
+          hasProposedAssignee && newTask.taskBoardLane == _lanePublished;
 
       await taskProvider.addTask(newTask);
-      if (hasProposedAssignee) {
+      if (shouldSendAssignmentRequest) {
         await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
           context: context,
           task: newTask,

@@ -266,9 +266,23 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         taskRequiresSubmission: _taskRequiresSubmission,
         taskRequiresApproval: _taskRequiresApproval,
       );
+      final isPublishingNow =
+          widget.task.taskBoardLane != _lanePublished &&
+          updatedTask.taskBoardLane == _lanePublished;
+      final assigneeChanged =
+          (widget.task.taskProposedAssigneeId ?? '').trim() !=
+          (_assignedToUserId ?? '').trim();
+      final shouldSendAssignmentRequest =
+          hasProposedAssignee &&
+          _assignedToUserId != null &&
+          updatedTask.taskBoardLane == _lanePublished &&
+          (isPublishingNow ||
+              assigneeChanged ||
+              (widget.task.taskAssignmentStatus ?? '').trim().toLowerCase() !=
+                  'pending');
 
       await taskProvider.updateTask(updatedTask);
-      if (hasProposedAssignee && _assignedToUserId != null) {
+      if (shouldSendAssignmentRequest) {
         final actorUser = FirebaseAuth.instance.currentUser;
         final actorName = (actorUser?.displayName ?? '').trim().isEmpty
             ? widget.task.taskOwnerName
@@ -897,6 +911,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
                 const Center(child: CircularProgressIndicator())
               else if (_boardType == 'team' && _boardMembers.isNotEmpty)
                 DropdownButtonFormField<String?>(
+                  key: ValueKey(_assignedToUserId ?? 'none'),
                   initialValue: _assignedToUserId,
                   decoration: const InputDecoration(
                     labelText: 'Assigned To',

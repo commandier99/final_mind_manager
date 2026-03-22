@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'task_stats_model.dart';
 
+const Object _taskCopyWithUnset = Object();
+
 class Task {
   static const String statusToDo = 'To Do';
   static const String statusInProgress = 'In Progress';
@@ -394,9 +396,9 @@ class Task {
     DateTime? taskRepeatEndDate,
     DateTime? taskNextRepeatDate,
     String? taskRepeatTime,
-    String? taskAssignmentStatus,
-    String? taskProposedAssigneeId,
-    String? taskProposedAssigneeName,
+    Object? taskAssignmentStatus = _taskCopyWithUnset,
+    Object? taskProposedAssigneeId = _taskCopyWithUnset,
+    Object? taskProposedAssigneeName = _taskCopyWithUnset,
     String? taskBoardLane,
     List<String>? taskDependencyIds,
     String? taskRevisionOfTaskId,
@@ -444,11 +446,24 @@ class Task {
       taskRepeatEndDate: taskRepeatEndDate ?? this.taskRepeatEndDate,
       taskNextRepeatDate: taskNextRepeatDate ?? this.taskNextRepeatDate,
       taskRepeatTime: taskRepeatTime ?? this.taskRepeatTime,
-      taskAssignmentStatus: taskAssignmentStatus ?? this.taskAssignmentStatus,
-      taskProposedAssigneeId:
-          taskProposedAssigneeId ?? this.taskProposedAssigneeId,
-      taskProposedAssigneeName:
-          taskProposedAssigneeName ?? this.taskProposedAssigneeName,
+      taskAssignmentStatus: identical(
+            taskAssignmentStatus,
+            _taskCopyWithUnset,
+          )
+          ? this.taskAssignmentStatus
+          : taskAssignmentStatus as String?,
+      taskProposedAssigneeId: identical(
+            taskProposedAssigneeId,
+            _taskCopyWithUnset,
+          )
+          ? this.taskProposedAssigneeId
+          : taskProposedAssigneeId as String?,
+      taskProposedAssigneeName: identical(
+            taskProposedAssigneeName,
+            _taskCopyWithUnset,
+          )
+          ? this.taskProposedAssigneeName
+          : taskProposedAssigneeName as String?,
       taskBoardLane: normalizeTaskBoardLane(
         taskBoardLane ?? this.taskBoardLane,
       ),

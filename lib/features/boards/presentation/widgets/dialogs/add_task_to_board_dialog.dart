@@ -296,10 +296,12 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           _selectedDependencyIds,
         ),
       );
+      final shouldSendAssignmentRequest =
+          hasProposedAssignee && newTask.taskBoardLane == _lanePublished;
 
       // Pass the selected member for assignment notification, not the task itself
       await taskProvider.addTask(newTask);
-      if (hasProposedAssignee && _assignedToUserId != null) {
+      if (shouldSendAssignmentRequest && _assignedToUserId != null) {
         await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
           context: context,
           task: newTask,

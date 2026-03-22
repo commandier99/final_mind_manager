@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../../boards/datasources/models/board_model.dart';
+import '../../../../boards/datasources/models/board_roles.dart';
 import '../../../../boards/datasources/providers/board_provider.dart';
 import '../../../../notifications/datasources/models/notification_model.dart';
 import '../../../../notifications/datasources/providers/notification_provider.dart';
@@ -78,6 +79,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
 
   late String _selectedType;
   String _selectedBoardRequestMode = _boardRequestInvite;
+  String _selectedInvitedRole = BoardRoles.member;
   String _selectedTaskAssignmentMode = _taskAssignmentManagerToMember;
   String _selectedSuggestionMode = _suggestionTask;
   DateTime? _requestedDeadlineDate;
@@ -522,6 +524,26 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
                           },
                   ),
                 ],
+                if (_selectedType == Thought.typeBoardRequest &&
+                    _selectedBoardRequestMode == _boardRequestInvite) ...[
+                  const SizedBox(height: 12),
+                  _buildChoiceSection(
+                    context,
+                    label: 'Invited Role',
+                    selectedValue: _selectedInvitedRole,
+                    options: const [
+                      _ChoiceOption(BoardRoles.member, 'Member'),
+                      _ChoiceOption(BoardRoles.supervisor, 'Supervisor'),
+                    ],
+                    onSelected: _isSubmitting
+                        ? null
+                        : (value) {
+                            setState(() {
+                              _selectedInvitedRole = BoardRoles.normalize(value);
+                            });
+                          },
+                  ),
+                ],
                 const SizedBox(height: 12),
                 if (_usesAutomaticTitle)
                   InputDecorator(
@@ -768,6 +790,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
 
     final userProvider = context.read<UserProvider>();
     final thoughtProvider = context.read<ThoughtProvider>();
+    final boardProvider = context.read<BoardProvider>();
     final currentUser = userProvider.currentUser;
 
     if (currentUser == null) {
@@ -794,6 +817,11 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
       final resolvedTargetUser = _resolvedTargetUser(currentUser);
       final notificationSeed = _uuid.v4();
       final requestedDeadline = _resolvedRequestedDeadline();
+      final isBoardInvite =
+          _selectedType == Thought.typeBoardRequest &&
+          _selectedBoardRequestMode == _boardRequestInvite &&
+          _selectedBoard != null &&
+          resolvedTargetUser != null;
       final thought = Thought(
         thoughtId: '',
         type: _selectedType,
@@ -824,6 +852,9 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
             'suggestionTarget': _selectedSuggestionMode,
           if (_selectedType == Thought.typeBoardRequest)
             'requestDirection': _selectedBoardRequestMode,
+          if (_selectedType == Thought.typeBoardRequest &&
+              _selectedBoardRequestMode == _boardRequestInvite)
+            'invitedRole': _selectedInvitedRole,
           if (_selectedType == Thought.typeTaskAssignment) ...{
             'assignmentDirection': _selectedTaskAssignmentMode,
             'assignmentAssigneeId': _resolvedAssignmentAssigneeId(currentUser),
@@ -849,6 +880,13 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
 
       final thoughtId = await thoughtProvider.createThought(thought);
       try {
+        if (isBoardInvite) {
+          await boardProvider.markPendingBoardInvite(
+            boardId: _selectedBoard!.boardId,
+            userId: resolvedTargetUser.userId,
+            invitationThoughtId: thoughtId,
+          );
+        }
         await _createNotificationsForThought(
           thought: thought.copyWith(
             thoughtId: thoughtId,
@@ -864,7 +902,10 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
       } catch (e) {
         if (_selectedType == Thought.typeBoardRequest &&
             _selectedBoardRequestMode == _boardRequestInvite) {
-          await _rollbackThoughtIfPossible(
+          await _rollbackBoardInviteIfPossible(
+            boardProvider: boardProvider,
+            boardId: _selectedBoard?.boardId,
+            userId: resolvedTargetUser?.userId,
             thoughtProvider: thoughtProvider,
             thoughtId: thoughtId,
           );
@@ -890,10 +931,26 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
     }
   }
 
-  Future<void> _rollbackThoughtIfPossible({
+  Future<void> _rollbackBoardInviteIfPossible({
+    required BoardProvider? boardProvider,
+    required String? boardId,
+    required String? userId,
     required ThoughtProvider thoughtProvider,
     required String thoughtId,
   }) async {
+    if (boardProvider != null &&
+        (boardId ?? '').trim().isNotEmpty &&
+        (userId ?? '').trim().isNotEmpty) {
+      try {
+        await boardProvider.clearPendingBoardInvite(
+          boardId: boardId!.trim(),
+          userId: userId!.trim(),
+        );
+      } catch (_) {
+        // Best effort rollback. The original notification failure is still surfaced.
+      }
+    }
+
     try {
       await thoughtProvider.softDeleteThought(thoughtId);
     } catch (_) {
@@ -952,6 +1009,12 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
     }
     if (_selectedType == Thought.typeReminder && _selectedTask == null) {
       return 'Please choose a task for this reminder.';
+    }
+    if (_selectedType == Thought.typeBoardRequest &&
+        _selectedBoardRequestMode == _boardRequestInvite &&
+        _selectedBoard != null &&
+        _selectedBoard!.boardType.trim().toLowerCase() != 'team') {
+      return 'Only Team boards can invite members.';
     }
     if (_selectedType == Thought.typeTaskRequest && _resolvedRequestedDeadline() == null) {
       return 'Please choose the requested extended deadline.';
@@ -1036,7 +1099,7 @@ class _CreateThoughtDialogState extends State<CreateThoughtDialog> {
       case Thought.typeBoardRequest:
         return _selectedBoardRequestMode == _boardRequestAccess
             ? 'Request access sends the thought to the board manager, who can accept or decline.'
-            : 'Invite member sends the thought to the selected member.';
+            : 'Invite member sends the thought to the selected member and registers a pending board invite.';
       case Thought.typeTaskAssignment:
         return _selectedTaskAssignmentMode == _taskAssignmentMemberToManager
             ? 'Apply for Task sends your application for the selected unassigned task to the board manager.'

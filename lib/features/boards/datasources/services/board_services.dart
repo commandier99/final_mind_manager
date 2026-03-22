@@ -208,8 +208,8 @@ class BoardService {
 
     await boardRef.set(newBoard.toMap());
 
-    // Log activity event
-    await _activityEventService.logEvent(
+    // Activity logging should never block board creation.
+    await _logSafe(
       userId: user.uid,
       userName: user.displayName ?? 'Unknown User',
       activityType: 'board_created',
