@@ -152,13 +152,13 @@ class _TaskCardState extends State<TaskCard> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.rate_review_outlined,
+              Icons.check_circle_outline,
               size: 18,
               color: isEnabled ? Colors.green.shade800 : Colors.grey.shade500,
             ),
             const SizedBox(height: 2),
             Text(
-              'Submit',
+              'Done',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
@@ -631,12 +631,7 @@ class _TaskCardState extends State<TaskCard> {
                               _buildDoneToggle(),
                               const SizedBox(width: 8),
                             ] else if (showCheckbox) ...[
-                              Checkbox(
-                                value: widget.task.taskIsDone,
-                                onChanged:
-                                    (bool? newValue) =>
-                                        widget.onToggleDone?.call(newValue),
-                              ),
+                              _buildDoneToggle(),
                               const SizedBox(width: 8),
                             ],
                             Expanded(

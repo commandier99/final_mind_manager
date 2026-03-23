@@ -73,6 +73,10 @@ class Board {
   });
 
   bool get isDeleted => boardIsDeleted;
+  bool get isPersonalBoard => boardType.trim().toLowerCase() == 'personal';
+  bool get isTeamBoard => boardType.trim().toLowerCase() == 'team';
+  bool get isProjectBoard => boardPurpose.trim().toLowerCase() == 'project';
+  bool get isTeamProjectBoard => isTeamBoard && isProjectBoard;
 
   String roleOf(String? userId) {
     if (userId == null || userId.isEmpty) return BoardRoles.member;

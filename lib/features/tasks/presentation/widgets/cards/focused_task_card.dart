@@ -84,13 +84,13 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.rate_review_outlined,
+              Icons.check_circle_outline,
               color: isEnabled ? priorityColor : Colors.grey,
               size: 18,
             ),
             const SizedBox(height: 2),
             Text(
-              'Submit',
+              'Done',
               style: TextStyle(
                 fontSize: 9,
                 fontWeight: FontWeight.w700,
@@ -223,20 +223,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                                 ? _buildThoughtSubmitToggle(priorityColor)
                                 : showDoneToggle
                                 ? _buildDoneToggle(priorityColor)
-                                : Transform.scale(
-                                    scale: 1.12,
-                                    child: Checkbox(
-                                      value: widget.task.taskIsDone,
-                                      onChanged: widget.onToggleDone,
-                                      activeColor: priorityColor,
-                                      side: BorderSide(
-                                        color: priorityColor.withAlpha(170),
-                                        width: 1.8,
-                                      ),
-                                      materialTapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                  ),
+                                : _buildDoneToggle(priorityColor),
                           ),
                         ),
                         const SizedBox(width: 10),

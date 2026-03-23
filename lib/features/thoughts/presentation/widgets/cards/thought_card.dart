@@ -1072,9 +1072,7 @@ class _ThoughtCardState extends State<ThoughtCard> {
           updatedTask = updatedTask.copyWith(
             taskIsDone: false,
             taskIsDoneAt: null,
-            taskStatus: _restoredTaskStatus(
-              metadata['previousTaskStatus']?.toString(),
-            ),
+            taskStatus: Task.statusPaused,
             taskOutcome: Task.outcomeNone,
             taskFailed: false,
             taskApprovalStatus: 'changes_requested',

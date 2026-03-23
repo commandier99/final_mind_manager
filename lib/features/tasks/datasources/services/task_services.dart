@@ -25,6 +25,13 @@ class TaskService {
     return title == 'personal' || title == 'personal hq';
   }
 
+  bool _isTeamProjectBoardData(Map<String, dynamic> boardData) {
+    final type = (boardData['boardType'] as String? ?? '').trim().toLowerCase();
+    final purpose =
+        (boardData['boardPurpose'] as String? ?? '').trim().toLowerCase();
+    return type == 'team' && purpose == 'project';
+  }
+
   Future<Task> _normalizeTaskForBoardRules(Task task) async {
     final boardId = task.taskBoardId.trim();
     if (boardId.isEmpty) return task;
@@ -32,6 +39,13 @@ class TaskService {
     final boardDoc = await _firestore.collection('boards').doc(boardId).get();
     if (!boardDoc.exists) return task;
     final boardData = boardDoc.data() as Map<String, dynamic>;
+    if (_isTeamProjectBoardData(boardData)) {
+      return task.copyWith(
+        taskAllowsSubmissions: true,
+        taskRequiresSubmission: true,
+        taskRequiresApproval: true,
+      );
+    }
     if (!_isPersonalBoardData(boardData)) return task;
 
     final managerId = (boardData['boardManagerId'] as String? ?? '').trim();
@@ -44,6 +58,8 @@ class TaskService {
       taskAssignedToName: managerName,
       taskBoardLane: Task.lanePublished,
       taskAssignmentStatus: null,
+      taskAllowsSubmissions:
+          task.taskRequiresSubmission || task.taskRequiresApproval,
     );
   }
 

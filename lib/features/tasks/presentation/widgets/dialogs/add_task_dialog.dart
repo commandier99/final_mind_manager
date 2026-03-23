@@ -121,6 +121,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       final defaultBoard = _resolveDefaultBoard(_boards);
       _selectedBoard = defaultBoard;
       if (_selectedBoard?.boardType == 'team') {
+        _syncSubmissionSettingsForBoard();
         await _loadBoardMembers();
       } else {
         _boardMembers = {};
@@ -158,6 +159,15 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
       }
     }
     return boards.first;
+  }
+
+  bool get _isTeamProjectBoard => _selectedBoard?.isTeamProjectBoard ?? false;
+
+  void _syncSubmissionSettingsForBoard() {
+    if (_isTeamProjectBoard) {
+      _taskRequiresSubmission = true;
+      _taskRequiresApproval = true;
+    }
   }
 
   Future<void> _loadBoardMembers() async {
@@ -386,10 +396,15 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
         taskStats: TaskStats(), // Always initialize as empty
         taskPriorityLevel: _priorityLevel,
         taskStatus: Task.statusToDo,
-        taskAllowsSubmissions:
-            _taskRequiresSubmission || _taskRequiresApproval,
-        taskRequiresSubmission: _taskRequiresSubmission,
-        taskRequiresApproval: _taskRequiresApproval,
+        taskAllowsSubmissions: _isTeamProjectBoard
+            ? true
+            : (_taskRequiresSubmission || _taskRequiresApproval),
+        taskRequiresSubmission: _isTeamProjectBoard
+            ? true
+            : _taskRequiresSubmission,
+        taskRequiresApproval: _isTeamProjectBoard
+            ? true
+            : _taskRequiresApproval,
         taskIsRepeating: isRepeating,
         taskRepeatInterval: isRepeating && _repeatDays.isNotEmpty
             ? _repeatDays.join(',')
@@ -412,6 +427,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
 
       await taskProvider.addTask(newTask);
       if (shouldSendAssignmentRequest) {
+        if (!mounted) return;
         await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
           context: context,
           task: newTask,
@@ -761,6 +777,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
   }
 
   Widget _buildSubmissionOptionsSection() {
+    final isLocked = _isTeamProjectBoard;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -791,7 +808,9 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Control whether members can submit outputs and whether manager/supervisor review is required.',
+            isLocked
+                ? 'Team Project boards always require submissions and reviewer approval.'
+                : 'Control whether members can submit outputs and whether manager/supervisor review is required.',
             style: TextStyle(fontSize: 12, color: Colors.grey[700]),
           ),
           const SizedBox(height: 8),
@@ -799,7 +818,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Submission Required'),
             value: _taskRequiresSubmission,
-            onChanged: (value) {
+            onChanged: isLocked ? null : (value) {
               setState(() => _taskRequiresSubmission = value);
             },
           ),
@@ -807,7 +826,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Reviewer Approval Required'),
             value: _taskRequiresApproval,
-            onChanged: (value) {
+            onChanged: isLocked ? null : (value) {
               setState(() => _taskRequiresApproval = value);
             },
           ),
@@ -933,6 +952,7 @@ class _AddTaskDialogState extends State<AddTaskDialog> {
                     setState(() {
                       _selectedBoard = board;
                       _selectedDependencyIds.clear();
+                      _syncSubmissionSettingsForBoard();
                     });
                     if (board.boardType == 'team') {
                       await _loadBoardMembers();

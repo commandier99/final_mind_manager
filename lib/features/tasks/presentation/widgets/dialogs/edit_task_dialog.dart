@@ -54,6 +54,15 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
     'Sunday',
   ];
 
+  bool get _isTeamProjectBoard => _boardDetails?.isTeamProjectBoard ?? false;
+
+  void _syncSubmissionSettingsForBoard() {
+    if (_isTeamProjectBoard) {
+      _taskRequiresSubmission = true;
+      _taskRequiresApproval = true;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -158,6 +167,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
         _boardDetails = board;
         _boardType = board.boardType;
         if (_boardType == 'personal') _taskBoardLane = _lanePublished;
+        _syncSubmissionSettingsForBoard();
         _boardMembers = members;
         _loadingMembers = false;
       });
@@ -262,9 +272,15 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
           _selectedDependencyIds,
           selfTaskId: widget.task.taskId,
         ),
-        taskAllowsSubmissions: true,
-        taskRequiresSubmission: _taskRequiresSubmission,
-        taskRequiresApproval: _taskRequiresApproval,
+        taskAllowsSubmissions: _isTeamProjectBoard
+            ? true
+            : (_taskRequiresSubmission || _taskRequiresApproval),
+        taskRequiresSubmission: _isTeamProjectBoard
+            ? true
+            : _taskRequiresSubmission,
+        taskRequiresApproval: _isTeamProjectBoard
+            ? true
+            : _taskRequiresApproval,
       );
       final isPublishingNow =
           widget.task.taskBoardLane != _lanePublished &&
@@ -283,6 +299,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
 
       await taskProvider.updateTask(updatedTask);
       if (shouldSendAssignmentRequest) {
+        if (!mounted) return;
         final actorUser = FirebaseAuth.instance.currentUser;
         final actorName = (actorUser?.displayName ?? '').trim().isEmpty
             ? widget.task.taskOwnerName
@@ -807,6 +824,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
   }
 
   Widget _buildSubmissionOptionsSection() {
+    final isLocked = _isTeamProjectBoard;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -836,11 +854,18 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
             ],
           ),
           const SizedBox(height: 8),
+          Text(
+            isLocked
+                ? 'Team Project boards always require submissions and reviewer approval.'
+                : 'Control whether members can submit outputs and whether manager/supervisor review is required.',
+            style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 8),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Submission Required'),
             value: _taskRequiresSubmission,
-            onChanged: (value) {
+            onChanged: isLocked ? null : (value) {
               setState(() => _taskRequiresSubmission = value);
             },
           ),
@@ -848,7 +873,7 @@ class _EditTaskDialogState extends State<EditTaskDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Reviewer Approval Required'),
             value: _taskRequiresApproval,
-            onChanged: (value) {
+            onChanged: isLocked ? null : (value) {
               setState(() => _taskRequiresApproval = value);
             },
           ),

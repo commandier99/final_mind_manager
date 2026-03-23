@@ -66,10 +66,19 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   bool get _isCurrentUserSupervisor =>
       widget.board.isSupervisor(widget.userId) &&
       !widget.board.isManager(widget.userId);
+  bool get _isTeamProjectBoard => widget.board.isTeamProjectBoard;
+
+  void _syncSubmissionSettingsForBoard() {
+    if (_isTeamProjectBoard) {
+      _taskRequiresSubmission = true;
+      _taskRequiresApproval = true;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _syncSubmissionSettingsForBoard();
     if (widget.board.boardType == 'personal') {
       _taskBoardLane = _lanePublished;
     } else if (_isCurrentUserSupervisor) {
@@ -273,10 +282,15 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
         taskStats: TaskStats(),
         taskPriorityLevel: _priorityLevel,
         taskStatus: 'To Do',
-        taskAllowsSubmissions:
-            _taskRequiresSubmission || _taskRequiresApproval,
-        taskRequiresSubmission: _taskRequiresSubmission,
-        taskRequiresApproval: _taskRequiresApproval,
+        taskAllowsSubmissions: _isTeamProjectBoard
+            ? true
+            : (_taskRequiresSubmission || _taskRequiresApproval),
+        taskRequiresSubmission: _isTeamProjectBoard
+            ? true
+            : _taskRequiresSubmission,
+        taskRequiresApproval: _isTeamProjectBoard
+            ? true
+            : _taskRequiresApproval,
         taskIsRepeating: _isRepeating,
         taskRepeatInterval: _repeatDays.isNotEmpty
             ? _repeatDays.join(',')
@@ -302,6 +316,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
       // Pass the selected member for assignment notification, not the task itself
       await taskProvider.addTask(newTask);
       if (shouldSendAssignmentRequest && _assignedToUserId != null) {
+        if (!mounted) return;
         await TaskAssignmentWorkflowHelper.createAssignmentRequestIfNeeded(
           context: context,
           task: newTask,
@@ -821,6 +836,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
   }
 
   Widget _buildSubmissionOptionsSection() {
+    final isLocked = _isTeamProjectBoard;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -851,7 +867,9 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Control whether members can submit outputs and whether manager/supervisor review is required.',
+            isLocked
+                ? 'Team Project boards always require submissions and reviewer approval.'
+                : 'Control whether members can submit outputs and whether manager/supervisor review is required.',
             style: TextStyle(fontSize: 12, color: Colors.grey[700]),
           ),
           const SizedBox(height: 8),
@@ -859,7 +877,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Submission Required'),
             value: _taskRequiresSubmission,
-            onChanged: (value) {
+            onChanged: isLocked ? null : (value) {
               setState(() => _taskRequiresSubmission = value);
             },
           ),
@@ -867,7 +885,7 @@ class _AddTaskToBoardDialogState extends State<AddTaskToBoardDialog> {
             contentPadding: EdgeInsets.zero,
             title: const Text('Reviewer Approval Required'),
             value: _taskRequiresApproval,
-            onChanged: (value) {
+            onChanged: isLocked ? null : (value) {
               setState(() => _taskRequiresApproval = value);
             },
           ),
