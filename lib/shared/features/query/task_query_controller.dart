@@ -10,6 +10,7 @@ class TaskQueryController {
     Task.statusInProgress,
     Task.statusPaused,
     Task.statusSubmitted,
+    Task.statusRejected,
     Task.statusCompleted,
   ];
   static const List<String> deadlineFilters = [
@@ -29,6 +30,7 @@ class TaskQueryController {
     Task.statusInProgress: Task.statusInProgress,
     Task.statusPaused: Task.statusPaused,
     Task.statusSubmitted: Task.statusSubmitted,
+    Task.statusRejected: Task.statusRejected,
     Task.statusCompleted: Task.statusCompleted,
   };
 

@@ -256,6 +256,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       case 'COMPLETED':
       case 'DONE':
         return Colors.green;
+      case 'REJECTED':
+        return Colors.red.shade700;
       case 'OVERDUE':
         return Colors.red;
       default:
@@ -284,6 +286,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       case 'COMPLETED':
       case 'DONE':
         return 'Completed';
+      case 'REJECTED':
+        return 'Rejected';
       case 'OVERDUE':
         return 'Overdue';
       default:
@@ -308,6 +312,8 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
       case 'COMPLETED':
       case 'DONE':
         return Icons.check_circle;
+      case 'REJECTED':
+        return Icons.cancel;
       case 'OVERDUE':
         return Icons.error;
       default:
@@ -327,26 +333,36 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     final blockedDependencyTitles = _incompleteDependencyTitles(taskProvider);
     final isDependencyLocked = blockedDependencyTitles.isNotEmpty;
     final isDeadlineMissed = _isDeadlineMissed();
+    final isRejectedTask = widget.task.isRejected;
     final isTaskFailed = widget.task.taskFailed || widget.task.isRejected;
     final isLocked =
-        widget.isDisabled || (widget.task.isWorkDisabled && !isDeadlineMissed);
+        widget.isDisabled ||
+        (widget.task.isWorkDisabled && !isDeadlineMissed && !isRejectedTask);
     final taskDisabledReason = widget.task.workDisabledReason;
     final isSupervisorDraft = _isSupervisorDraft();
     final canApplyForTask = _canApplyForTask() && !isDeadlineMissed && !isTaskFailed;
     final canSendReminder = _canSendReminder(taskProvider) && !isDeadlineMissed && !isTaskFailed;
-    final canRequestDeadlineExtension = _canRequestDeadlineExtension();
-    // Only allow delete for board manager or task owner
+    final canRequestDeadlineExtension =
+        _canRequestDeadlineExtension() && !isRejectedTask;
+    final isManager =
+        widget.board != null &&
+        widget.currentUserId != null &&
+        widget.board!.boardManagerId == widget.currentUserId;
+    // Rejected tasks: only manager can delete and no other actions.
     final canDelete =
         !isLocked &&
         !widget.task.taskIsDone &&
         widget.board != null &&
         widget.currentUserId != null &&
-        (widget.board!.boardManagerId == widget.currentUserId ||
-            widget.task.taskOwnerId == widget.currentUserId);
+        (isRejectedTask
+            ? isManager
+            : (widget.board!.boardManagerId == widget.currentUserId ||
+                widget.task.taskOwnerId == widget.currentUserId));
 
     // Only allow edit for board manager/supervisor.
     final canEdit =
         !isLocked &&
+        !isRejectedTask &&
         !widget.task.taskIsDone &&
         widget.currentUserId != null &&
         (widget.task.taskOwnerId == widget.currentUserId ||
@@ -361,7 +377,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Opacity(
-        opacity: isLocked ? 0.5 : 1,
+        opacity: (isLocked || isRejectedTask) ? 0.5 : 1,
         child: IgnorePointer(
           ignoring: isLocked,
           child: Slidable(
@@ -507,6 +523,7 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
             child: Builder(
               builder: (context) => GestureDetector(
                 onTap: () {
+                  if (isRejectedTask) return;
                   Slidable.of(context)?.close();
                   context.read<NavigationProvider>().selectFromBottomNav(1);
                   Navigator.of(context).push(

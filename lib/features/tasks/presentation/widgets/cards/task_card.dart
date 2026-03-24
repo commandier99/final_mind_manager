@@ -187,6 +187,8 @@ class _TaskCardState extends State<TaskCard> {
         return Colors.orange;
       case 'SUBMITTED':
         return Colors.purple;
+      case 'REJECTED':
+        return Colors.red.shade700;
       case 'COMPLETED':
         return Colors.green;
       default:
@@ -247,6 +249,8 @@ class _TaskCardState extends State<TaskCard> {
         return Icons.pause_circle;
       case 'SUBMITTED':
         return Icons.upload_file;
+      case 'REJECTED':
+        return Icons.cancel;
       case 'COMPLETED':
         return Icons.check_circle;
       default:
@@ -313,24 +317,31 @@ class _TaskCardState extends State<TaskCard> {
 
     final cardBaseColor = Theme.of(context).cardColor;
     final borderColor = isFocused ? statusColor : Colors.grey.shade300;
+    final isRejectedTask = widget.task.isRejected;
 
     // Board tasks: manager/supervisor can edit. Personal tasks: owner can edit.
     bool canEditTask = widget.task.taskOwnerId == _currentUserId;
+    bool isBoardManager = false;
     if (widget.task.taskBoardId.isNotEmpty) {
       canEditTask = false;
       final boardProvider = context.read<BoardProvider>();
       final board = boardProvider.getBoardById(widget.task.taskBoardId);
+      isBoardManager = board?.isManager(_currentUserId) == true;
       if (board?.isManager(_currentUserId) == true ||
           board?.isSupervisor(_currentUserId) == true) {
         canEditTask = true;
       }
     }
-    if (widget.task.taskIsDone || isTaskDisabled) {
+    if (widget.task.taskIsDone || isTaskDisabled || isRejectedTask) {
       canEditTask = false;
     }
     final canDuplicateTask = canEditTask;
     final hasDeleteAction =
-        widget.onDelete != null && !widget.task.taskIsDone && !isTaskDisabled;
+        widget.onDelete != null &&
+        !widget.task.taskIsDone &&
+        (isRejectedTask
+            ? (widget.task.taskBoardId.isNotEmpty && isBoardManager)
+            : !isTaskDisabled);
     final hasSwipeActions = canEditTask || canDuplicateTask || hasDeleteAction;
     final actionCount =
         (canEditTask ? 1 : 0) +
@@ -480,6 +491,7 @@ class _TaskCardState extends State<TaskCard> {
               : null,
           child: GestureDetector(
             onTap: () {
+              if (isRejectedTask) return;
               context.read<NavigationProvider>().selectFromBottomNav(1);
               Navigator.push(
                 context,

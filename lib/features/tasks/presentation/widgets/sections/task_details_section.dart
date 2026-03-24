@@ -359,6 +359,8 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
         return Colors.orange.shade700;
       case 'submitted':
         return Colors.purple.shade700;
+      case 'rejected':
+        return Colors.red.shade700;
       case 'to do':
       default:
         return Colors.blueGrey.shade700;
@@ -375,6 +377,8 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
         return Icons.pause_circle_outline;
       case 'submitted':
         return Icons.upload_file_outlined;
+      case 'rejected':
+        return Icons.cancel_outlined;
       case 'to do':
       default:
         return Icons.radio_button_unchecked;

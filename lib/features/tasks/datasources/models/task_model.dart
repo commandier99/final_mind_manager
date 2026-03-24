@@ -9,6 +9,7 @@ class Task {
   static const String statusPaused = 'Paused';
   static const String statusSubmitted = 'Submitted';
   static const String statusCompleted = 'Completed';
+  static const String statusRejected = 'Rejected';
   static const String outcomeNone = 'none';
   static const String outcomeSuccessful = 'successful';
   static const String outcomeFailed = 'failed';
@@ -47,8 +48,8 @@ class Task {
 
   final TaskStats taskStats; // TaskStats model for task stats
 
-  // Status field - tracks task workflow state (core statuses only)
-  final String taskStatus; // e.g. 'To Do', 'In Progress', 'Paused', 'Completed'
+  // Status field - tracks task workflow state
+  final String taskStatus; // e.g. 'To Do', 'In Progress', 'Paused', 'Rejected', 'Completed'
 
   // Approval fields - optional, only used if task requires approval
   final bool
@@ -148,6 +149,8 @@ class Task {
       case 'DONE':
       case 'COMPLETED':
         return statusCompleted;
+      case 'REJECTED':
+        return statusRejected;
       // Legacy states map to In Progress
       case 'IN_REVIEW':
       case 'UNDER_REVISION':
@@ -229,7 +232,9 @@ class Task {
     return taskDeadlineMissed || DateTime.now().isAfter(taskDeadline!);
   }
 
-  bool get isRejected => normalizeTaskApprovalStatus(taskApprovalStatus) == 'rejected';
+  bool get isRejected =>
+      normalizeTaskApprovalStatus(taskApprovalStatus) == 'rejected' ||
+      normalizeTaskStatus(taskStatus) == statusRejected;
 
   bool get isWorkDisabled {
     return hasMissedDeadline ||
@@ -240,7 +245,7 @@ class Task {
 
   String? get workDisabledReason {
     if (taskFailed || effectiveTaskOutcome == outcomeFailed || isRejected) {
-      return 'Task failed after submission rejection.';
+      return 'Task rejected. Only the board manager can delete it.';
     }
     if (hasMissedDeadline) {
       return 'Deadline missed. Request a deadline extension to continue.';

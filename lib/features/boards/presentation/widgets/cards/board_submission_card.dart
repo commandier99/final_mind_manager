@@ -295,9 +295,7 @@ class _BoardSubmissionCardState extends State<BoardSubmissionCard> {
           updatedTask = updatedTask.copyWith(
             taskIsDone: false,
             taskIsDoneAt: null,
-            taskStatus: _restoredTaskStatus(
-              metadata['previousTaskStatus']?.toString(),
-            ),
+            taskStatus: Task.statusRejected,
             taskOutcome: Task.outcomeFailed,
             taskFailed: true,
             taskApprovalStatus: 'rejected',
