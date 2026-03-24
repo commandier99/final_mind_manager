@@ -16,6 +16,7 @@ import '../../../../tasks/presentation/widgets/cards/focused_task_card.dart';
 import '../../../../tasks/presentation/widgets/sections/task_steps_list.dart';
 import '../../../../steps/datasources/providers/step_provider.dart';
 import '../../utils/session_task_submission_helper.dart';
+import '../../../../../shared/services/app_sound_service.dart';
 
 class MindSetActiveSessionView extends StatefulWidget {
   final MindSetSession session;
@@ -495,6 +496,8 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   Future<PomodoroTransition> _handlePomodoroComplete(
     MindSetSession session,
   ) async {
+    await AppSoundService.instance.playAlert();
+    if (!mounted) return PomodoroTransition.startBreak;
     final taskProvider = context.read<TaskProvider>();
     Task? focusedTask;
     for (final task in taskProvider.tasks) {
@@ -561,6 +564,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
           ),
         );
         await _logSessionAction(type: 'complete', task: focusedTask);
+        await AppSoundService.instance.playSuccess();
       } on StateError catch (e) {
         if (!mounted) return PomodoroTransition.startBreak;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -572,12 +576,14 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
     } else {
       await taskProvider.updateTask(focusedTask.copyWith(taskStatus: 'Paused'));
       await _logSessionAction(type: 'pause', task: focusedTask);
+      await AppSoundService.instance.playTap();
     }
 
     return PomodoroTransition.startBreak;
   }
 
   Future<void> _handleBreakComplete(MindSetSession session) async {
+    await AppSoundService.instance.playAlert();
     if (session.sessionActiveTaskId == null) return;
     await _sessionService.updateSession(
       session.copyWith(sessionActiveTaskId: null),
@@ -605,6 +611,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
       reason: 'Worked in session but paused before completion.',
       elapsedDuration: _consumeElapsedForTask(focusedTask.taskId),
     );
+    await AppSoundService.instance.playTap();
     await _logSessionAction(type: 'pause', task: focusedTask);
   }
 
@@ -635,6 +642,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
       _focusedTaskStartedAtById.remove(focusedTask.taskId);
       await _handlePostCompletion(taskProvider, focusedTask);
       await _logSessionAction(type: 'complete', task: focusedTask);
+      await AppSoundService.instance.playSuccess();
     } on StateError catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -646,7 +654,13 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
   }
 
   Future<void> _toggleThoughtSubmit(Task task) async {
-    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
+    final submitted = await SessionTaskSubmissionHelper.openSubmissionFlow(
+      context,
+      task,
+    );
+    if (submitted) {
+      await AppSoundService.instance.playSuccess();
+    }
   }
 
   Future<void> _handlePostCompletion(
@@ -781,6 +795,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
 
     if (endFocusNow == true) {
       await _startBreakNow(session);
+      await AppSoundService.instance.playAlert();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -855,6 +870,7 @@ class _MindSetActiveSessionViewState extends State<MindSetActiveSessionView>
         : ((tasksDone / tasksTotal) * 100).round();
 
     await _endSession(session, taskProvider, sessionTasks);
+    await AppSoundService.instance.playSuccess();
 
     await showDialog<void>(
       // ignore: use_build_context_synchronously

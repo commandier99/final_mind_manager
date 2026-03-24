@@ -386,62 +386,6 @@ class _TaskDetailsSectionState extends State<TaskDetailsSection> {
     return "${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}";
   }
 
-  String _getAssignmentStatusLabel(String? status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending';
-      case 'accepted':
-        return 'Accepted';
-      case 'declined':
-        return 'Declined';
-      default:
-        return '';
-    }
-  }
-
-  Color _getAssignmentStatusColor(String? status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'accepted':
-        return Colors.green;
-      case 'declined':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  String _getApprovalStatusLabel(String status) {
-    switch (status) {
-      case 'pending':
-        return 'Pending';
-      case 'approved':
-        return 'Approved';
-      case 'rejected':
-        return 'Rejected';
-      case 'changes_requested':
-        return 'Changes Requested';
-      default:
-        return 'None';
-    }
-  }
-
-  Color _getApprovalStatusColor(String status) {
-    switch (status) {
-      case 'pending':
-        return Colors.orange;
-      case 'approved':
-        return Colors.green;
-      case 'rejected':
-        return Colors.red;
-      case 'changes_requested':
-        return Colors.deepOrange;
-      default:
-        return Colors.blueGrey;
-    }
-  }
-
   double _getProgress(Task task) {
     final done = task.taskStats.taskStepsDoneCount ?? 0;
     final total = task.taskStats.taskStepsCount ?? 0;

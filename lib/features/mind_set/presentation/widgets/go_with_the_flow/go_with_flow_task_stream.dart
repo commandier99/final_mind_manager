@@ -12,6 +12,7 @@ import '../../../datasources/services/mind_set_session_service.dart';
 import '/features/plans/datasources/models/plans_model.dart';
 import '/features/plans/datasources/providers/plan_provider.dart';
 import '../../../../../shared/features/query/task_query_controller.dart';
+import '../../../../../shared/services/app_sound_service.dart';
 import '../../utils/session_task_submission_helper.dart';
 
 class GoWithFlowTaskStream extends StatefulWidget {
@@ -145,6 +146,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
     await taskProvider.updateTask(task.copyWith(taskStatus: 'In Progress'));
     _focusStartedAtByTaskId[task.taskId] = DateTime.now();
     await _startPomodoroIfNeeded();
+    await AppSoundService.instance.playTap();
 
     if (previousFocused != null) {
       await _logSessionAction(
@@ -171,6 +173,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
       reason: 'Worked in session but paused before completion.',
       elapsedDuration: _consumeElapsedForTask(task.taskId),
     );
+    await AppSoundService.instance.playTap();
     await _logSessionAction(type: 'pause', task: task);
   }
 
@@ -231,6 +234,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
         }
         await _handlePostCompletion(task);
         await _logSessionAction(type: 'complete', task: task);
+        await AppSoundService.instance.playSuccess();
         return;
       }
       await persistToggle;
@@ -256,7 +260,13 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   }
 
   Future<void> _toggleThoughtSubmit(Task task) async {
-    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
+    final submitted = await SessionTaskSubmissionHelper.openSubmissionFlow(
+      context,
+      task,
+    );
+    if (submitted) {
+      await AppSoundService.instance.playSuccess();
+    }
   }
 
   String _formatElapsedDuration(Duration duration) {
@@ -347,6 +357,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
 
     if (endFocusNow == true) {
       await _startBreakNow();
+      await AppSoundService.instance.playAlert();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -387,6 +398,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
       tasksTotal: tasksTotal,
       tasksDone: tasksDone,
     );
+    await AppSoundService.instance.playSuccess();
 
     await showDialog<void>(
       // ignore: use_build_context_synchronously

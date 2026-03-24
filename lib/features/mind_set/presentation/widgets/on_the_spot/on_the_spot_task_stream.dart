@@ -15,6 +15,7 @@ import '../../../datasources/services/mind_set_session_runtime_service.dart';
 import '../../../datasources/services/mind_set_session_service.dart';
 import '../../../datasources/models/mind_set_session_model.dart';
 import '../../../../../shared/features/query/task_query_controller.dart';
+import '../../../../../shared/services/app_sound_service.dart';
 import '../../utils/session_task_submission_helper.dart';
 
 class OnTheSpotTaskStream extends StatefulWidget {
@@ -223,6 +224,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
     await taskProvider.updateTask(task.copyWith(taskStatus: 'In Progress'));
     _focusStartedAtByTaskId[task.taskId] = DateTime.now();
     await _startPomodoroIfNeeded();
+    await AppSoundService.instance.playTap();
     if (focusedTask == null) {
       await _logSessionAction(type: 'focus', task: task);
     }
@@ -245,6 +247,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       reason: 'Worked in session but paused before completion.',
       elapsedDuration: _consumeElapsedForTask(task.taskId),
     );
+    await AppSoundService.instance.playTap();
     await _logSessionAction(type: 'pause', task: task);
   }
 
@@ -287,6 +290,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
         _focusStartedAtByTaskId.remove(task.taskId);
         await _handlePostCompletion(task);
         await _logSessionAction(type: 'complete', task: task);
+        await AppSoundService.instance.playSuccess();
       }
       await persistToggle;
     } on StateError catch (e) {
@@ -298,7 +302,13 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   }
 
   Future<void> _toggleThoughtSubmit(Task task) async {
-    await SessionTaskSubmissionHelper.openSubmissionFlow(context, task);
+    final submitted = await SessionTaskSubmissionHelper.openSubmissionFlow(
+      context,
+      task,
+    );
+    if (submitted) {
+      await AppSoundService.instance.playSuccess();
+    }
   }
 
   Duration _consumeElapsedForTask(String taskId) {
@@ -418,6 +428,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
 
     if (endFocusNow == true) {
       await _startBreakNow();
+      await AppSoundService.instance.playAlert();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -458,6 +469,7 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       tasksTotal: tasksTotal,
       tasksDone: tasksDone,
     );
+    await AppSoundService.instance.playSuccess();
 
     await showDialog<void>(
       // ignore: use_build_context_synchronously

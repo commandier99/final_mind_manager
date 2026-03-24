@@ -423,7 +423,7 @@ class BoardService {
     try {
       final addedUserDoc =
           await FirebaseFirestore.instance.collection('users').doc(userId).get();
-      final addedUserData = addedUserDoc.data() as Map<String, dynamic>? ?? const {};
+      final addedUserData = addedUserDoc.data() ?? const <String, dynamic>{};
       final addedUserName = (addedUserData['userName'] as String?)?.trim();
       final addedUserPhoto = addedUserData['userProfilePicture'] as String?;
 

@@ -41,12 +41,12 @@ class SessionTaskSubmissionHelper {
     return task.taskIsDone || task.taskStatus == Task.statusSubmitted;
   }
 
-  static Future<void> openSubmissionFlow(
+  static Future<bool> openSubmissionFlow(
     BuildContext context,
     Task task,
   ) async {
     final currentUser = context.read<UserProvider>().currentUser;
-    if (currentUser == null) return;
+    if (currentUser == null) return false;
 
     final board = context.read<BoardProvider>().getBoardById(task.taskBoardId);
     final managerUserId = board?.boardManagerId ?? task.taskOwnerId;
@@ -57,11 +57,11 @@ class SessionTaskSubmissionHelper {
           content: Text('No valid reviewer was found for this submission.'),
         ),
       );
-      return;
+      return false;
     }
 
     final existingUploads = await _taskUploadService.streamTaskUploads(task.taskId).first;
-    if (!context.mounted) return;
+    if (!context.mounted) return false;
 
     final submitted = await showDialog<bool>(
       context: context,
@@ -73,11 +73,12 @@ class SessionTaskSubmissionHelper {
       ),
     );
 
-    if (!context.mounted || submitted != true) return;
+    if (!context.mounted || submitted != true) return false;
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Submission thought created for review.')),
     );
+    return true;
   }
 }
 

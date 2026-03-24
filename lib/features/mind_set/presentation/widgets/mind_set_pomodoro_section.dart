@@ -81,6 +81,7 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
   bool _isRunning = false;
   bool _isOnBreak = false;
   bool _isLongBreak = false;
+  bool _isCompletingInterval = false;
 
   @override
   void initState() {
@@ -109,6 +110,10 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
       if (!mounted) return;
       final remaining = _effectiveRemainingSeconds();
       if (remaining <= 0 && _isRunning) {
+        if (_isCompletingInterval) return;
+        setState(() {
+          _displayRemainingSeconds = 0;
+        });
         _handleIntervalComplete();
         return;
       }
@@ -154,6 +159,8 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
   }
 
   Future<void> _handleIntervalComplete() async {
+    if (_isCompletingInterval) return;
+    _isCompletingInterval = true;
     final stats = widget.session.sessionStats;
     final focusMinutes = stats.pomodoroFocusMinutes ?? 0;
     final breakMinutes = stats.pomodoroBreakMinutes ?? 5;
@@ -161,63 +168,67 @@ class _MindSetPomodoroSectionState extends State<MindSetPomodoroSection> {
     final targetCount = stats.pomodoroTargetCount ?? 4;
     final completedCount = stats.pomodoroCount ?? 0;
 
-    if (_isOnBreak) {
-      // Break ended - unlock tasks. Next focus starts when user focuses a task.
-      if (widget.onBreakComplete != null) {
-        await widget.onBreakComplete!();
-      }
+    try {
+      if (_isOnBreak) {
+        // Break ended - unlock tasks. Next focus starts when user focuses a task.
+        if (widget.onBreakComplete != null) {
+          await widget.onBreakComplete!();
+        }
 
-      final resetCount = _isLongBreak;
-      _isOnBreak = false;
-      _isLongBreak = false;
-      _isRunning = false;
-      _displayRemainingSeconds = focusMinutes * 60;
+        final resetCount = _isLongBreak;
+        _isOnBreak = false;
+        _isLongBreak = false;
+        _isRunning = false;
+        _displayRemainingSeconds = focusMinutes * 60;
 
-      await _sessionService.updateSession(
-        widget.session.copyWith(
-          sessionStats: stats.copyWith(
-            pomodoroIsRunning: false,
-            pomodoroIsOnBreak: false,
-            pomodoroIsLongBreak: false,
-            pomodoroRemainingSeconds: focusMinutes * 60,
-            pomodoroLastUpdatedAt: DateTime.now(),
-            pomodoroCount: resetCount ? 0 : completedCount,
+        await _sessionService.updateSession(
+          widget.session.copyWith(
+            sessionStats: stats.copyWith(
+              pomodoroIsRunning: false,
+              pomodoroIsOnBreak: false,
+              pomodoroIsLongBreak: false,
+              pomodoroRemainingSeconds: focusMinutes * 60,
+              pomodoroLastUpdatedAt: DateTime.now(),
+              pomodoroCount: resetCount ? 0 : completedCount,
+            ),
           ),
-        ),
-      );
-    } else {
-      // Focus session ended - choose whether to break now or continue immediately.
-      PomodoroTransition transition = PomodoroTransition.startBreak;
-      if (widget.onPomodoroComplete != null) {
-        transition = await widget.onPomodoroComplete!();
-      }
+        );
+      } else {
+        // Focus session ended - choose whether to break now or continue immediately.
+        PomodoroTransition transition = PomodoroTransition.startBreak;
+        if (widget.onPomodoroComplete != null) {
+          transition = await widget.onPomodoroComplete!();
+        }
 
-      final nextCompleted = completedCount + 1;
-      final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
-      final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;
-      final shouldBreakNow = transition == PomodoroTransition.startBreak;
+        final nextCompleted = completedCount + 1;
+        final isLongBreak = targetCount > 0 && nextCompleted % targetCount == 0;
+        final nextBreakMinutes = isLongBreak ? longBreakMinutes : breakMinutes;
+        final shouldBreakNow = transition == PomodoroTransition.startBreak;
 
-      _isRunning = true;
-      _isOnBreak = shouldBreakNow;
-      _isLongBreak = shouldBreakNow ? isLongBreak : false;
-      _displayRemainingSeconds = shouldBreakNow
-          ? nextBreakMinutes * 60
-          : focusMinutes * 60;
+        _isRunning = true;
+        _isOnBreak = shouldBreakNow;
+        _isLongBreak = shouldBreakNow ? isLongBreak : false;
+        _displayRemainingSeconds = shouldBreakNow
+            ? nextBreakMinutes * 60
+            : focusMinutes * 60;
 
-      await _sessionService.updateSession(
-        widget.session.copyWith(
-          sessionStats: stats.copyWith(
-            pomodoroCount: nextCompleted,
-            pomodoroIsRunning: true,
-            pomodoroIsOnBreak: shouldBreakNow,
-            pomodoroIsLongBreak: shouldBreakNow ? isLongBreak : false,
-            pomodoroRemainingSeconds: shouldBreakNow
-                ? nextBreakMinutes * 60
-                : focusMinutes * 60,
-            pomodoroLastUpdatedAt: DateTime.now(),
+        await _sessionService.updateSession(
+          widget.session.copyWith(
+            sessionStats: stats.copyWith(
+              pomodoroCount: nextCompleted,
+              pomodoroIsRunning: true,
+              pomodoroIsOnBreak: shouldBreakNow,
+              pomodoroIsLongBreak: shouldBreakNow ? isLongBreak : false,
+              pomodoroRemainingSeconds: shouldBreakNow
+                  ? nextBreakMinutes * 60
+                  : focusMinutes * 60,
+              pomodoroLastUpdatedAt: DateTime.now(),
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } finally {
+      _isCompletingInterval = false;
     }
 
     if (mounted) {

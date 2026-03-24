@@ -1,4 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+
+import '../../services/app_sound_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -8,6 +10,35 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  bool _soundsEnabled = true;
+  bool _loadingSounds = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSoundPreference();
+  }
+
+  Future<void> _loadSoundPreference() async {
+    final enabled = await AppSoundService.instance.isEnabled();
+    if (!mounted) return;
+    setState(() {
+      _soundsEnabled = enabled;
+      _loadingSounds = false;
+    });
+  }
+
+  Future<void> _toggleSounds(bool enabled) async {
+    await AppSoundService.instance.setEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _soundsEnabled = enabled;
+    });
+    if (enabled) {
+      await AppSoundService.instance.playTap();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListView(
@@ -58,6 +89,17 @@ class _SettingsPageState extends State<SettingsPage> {
               const SnackBar(content: Text('Language settings coming soon')),
             );
           },
+        ),
+        SwitchListTile(
+          secondary: const Icon(Icons.volume_up_outlined),
+          title: const Text('App Sounds'),
+          subtitle: Text(
+            _loadingSounds
+                ? 'Loading sound preference...'
+                : 'Play feedback sounds for session actions and completions',
+          ),
+          value: _soundsEnabled,
+          onChanged: _loadingSounds ? null : _toggleSounds,
         ),
         const Divider(),
         _buildSectionHeader('About'),

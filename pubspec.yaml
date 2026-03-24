@@ -51,6 +51,7 @@ dependencies:
   timeago: ^3.7.0
   firebase_messaging: ^16.1.1
   flutter_local_notifications: ^19.0.0
+  audioplayers: ^6.4.0
   async: ^2.13.0
   collection: ^1.19.1
 
@@ -64,6 +65,25 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/mind_manager_logo.png
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/mind_manager_logo.png
+    background_color: "#FFFFFF"
+    theme_color: "#FFFFFF"
+  windows:
+    generate: true
+    image_path: assets/mind_manager_logo.png
+    icon_size: 48
+  macos:
+    generate: true
+    image_path: assets/mind_manager_logo.png
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -81,6 +101,9 @@ flutter:
     - assets/mind_manager_logo.png
     - assets/innovare_logo.jpg
     - assets/google_logo.png
+    - assets/sounds/tap.wav
+    - assets/sounds/success.wav
+    - assets/sounds/alert.wav
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

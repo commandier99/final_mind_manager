@@ -356,6 +356,7 @@ class _BoardTasksSectionState extends State<BoardTasksSection> {
 
     try {
       final assignmentAppliedTask = await _applyAssignmentOnPublish(task);
+      if (!mounted) return;
       await context.read<TaskProvider>().updateTask(
         assignmentAppliedTask.copyWith(taskBoardLane: lanePublished),
       );

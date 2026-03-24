@@ -1,0 +1,74 @@
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam shadowing false
+skinparam actorStyle awesome
+
+actor Guest
+actor "Authenticated User" as User
+actor "Board Member" as Member
+actor "Board Supervisor" as Supervisor
+actor "Board Manager" as Manager
+actor "Firebase Auth" as Auth
+actor Cloudinary
+actor "Cloud Functions / FCM" as FCM
+
+rectangle "Mind Manager System" {
+  usecase "Register / Sign In" as UC1
+  usecase "Manage Profile" as UC2
+  usecase "View Dashboard" as UC3
+  usecase "Manage Personal Boards" as UC4
+  usecase "Create / Edit / Archive Boards" as UC5
+  usecase "Invite or Remove Board Members" as UC6
+  usecase "Request / Accept Board Access" as UC7
+  usecase "Create / Assign / Update Tasks" as UC8
+  usecase "Track Task Status" as UC9
+  usecase "Volunteer for Tasks" as UC10
+  usecase "Create and Manage Steps" as UC11
+  usecase "Upload Task Files" as UC12
+  usecase "Review Submissions" as UC13
+  usecase "Create and Manage Plans" as UC14
+  usecase "Run Mind:Set Sessions" as UC15
+  usecase "Create Thoughts / Requests / Feedback" as UC16
+  usecase "Receive Notifications" as UC17
+  usecase "Search Users, Boards, Tasks" as UC18
+  usecase "View Activity Logs and Stats" as UC19
+  usecase "Delete Account / User Data" as UC20
+}
+
+Guest --> UC1
+Auth --> UC1
+
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC14
+User --> UC15
+User --> UC16
+User --> UC17
+User --> UC18
+User --> UC20
+
+Member --> UC7
+Member --> UC8
+Member --> UC9
+Member --> UC10
+Member --> UC11
+Member --> UC12
+Member --> UC16
+Member --> UC19
+
+Supervisor --> UC13
+Supervisor --> UC19
+
+Manager --> UC5
+Manager --> UC6
+Manager --> UC7
+Manager --> UC8
+Manager --> UC13
+Manager --> UC19
+
+Cloudinary --> UC12
+FCM --> UC17
+
+@enduml
