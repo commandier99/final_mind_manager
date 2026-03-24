@@ -65,10 +65,14 @@ class _TaskUploadsSectionState extends State<TaskUploadsSection> {
     final isAssignee = currentUserId.isNotEmpty &&
         currentUserId == widget.task.taskAssignedTo;
     final isFocusedTask = _isFocusedTask(widget.task);
+    final isTaskDisabled = widget.task.isWorkDisabled;
+    final taskDisabledReason = widget.task.workDisabledReason;
     final canUpload = currentUser != null &&
+        !isTaskDisabled &&
         isFocusedTask &&
         (isAssignee || widget.canManageTask || currentUserId == widget.task.taskOwnerId);
-    final canSubmitThought = currentUser != null && isFocusedTask && isAssignee;
+    final canSubmitThought =
+        currentUser != null && !isTaskDisabled && isFocusedTask && isAssignee;
     final managerUserId = board?.boardManagerId ?? widget.task.taskOwnerId;
     final managerUserName = board?.boardManagerName ?? widget.task.taskOwnerName;
 
@@ -82,6 +86,13 @@ class _TaskUploadsSectionState extends State<TaskUploadsSection> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isTaskDisabled && taskDisabledReason != null) ...[
+                _buildInfoBanner(
+                  icon: Icons.lock_outline,
+                  message: taskDisabledReason,
+                ),
+                const SizedBox(height: 12),
+              ],
               if (!isFocusedTask) ...[
                 _buildInfoBanner(
                   icon: Icons.info_outline,

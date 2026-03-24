@@ -134,7 +134,7 @@ class _TaskCardState extends State<TaskCard> {
   }
 
   Widget _buildDoneToggle() {
-    final isEnabled = widget.onToggleDone != null;
+    final isEnabled = widget.onToggleDone != null && !widget.task.isWorkDisabled;
     return InkWell(
       onTap: isEnabled ? () => widget.onToggleDone?.call(!widget.task.taskIsDone) : null,
       borderRadius: BorderRadius.circular(12),
@@ -275,6 +275,12 @@ class _TaskCardState extends State<TaskCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isTaskDisabled = widget.task.isWorkDisabled;
+    final taskDisabledReason = widget.task.workDisabledReason;
+    final effectiveOnFocus = isTaskDisabled ? null : widget.onFocus;
+    final effectiveOnPause = isTaskDisabled ? null : widget.onPause;
+    final effectiveOnToggleDone = isTaskDisabled ? null : widget.onToggleDone;
+    final effectiveOnSubmitThought = isTaskDisabled ? null : widget.onSubmitThought;
     final done = widget.task.taskStats.taskStepsDoneCount ?? 0;
     final total = widget.task.taskStats.taskStepsCount ?? 0;
     final progress = widget.task.taskIsDone
@@ -287,9 +293,10 @@ class _TaskCardState extends State<TaskCard> {
     final isCompleted =
         widget.task.taskIsDone ||
         _normalizeStatus(widget.task.taskStatus) == 'COMPLETED';
-    final showFocusAction = widget.showFocusAction && !isCompleted;
+    final showFocusAction =
+        widget.showFocusAction && !isCompleted && !isTaskDisabled;
     final showSubmitThoughtAction =
-        widget.onSubmitThought != null &&
+        effectiveOnSubmitThought != null &&
         !isCompleted;
 
     final showCheckbox =
@@ -298,7 +305,7 @@ class _TaskCardState extends State<TaskCard> {
     final showDoneToggle =
         showCheckbox &&
         widget.useThoughtSubmissionToggleForDone &&
-        widget.onToggleDone != null &&
+        effectiveOnToggleDone != null &&
         !isCompleted;
     final statusColor = widget.useStatusColor
         ? _getStatusColor(widget.task.taskStatus)
@@ -318,11 +325,12 @@ class _TaskCardState extends State<TaskCard> {
         canEditTask = true;
       }
     }
-    if (widget.task.taskIsDone) {
+    if (widget.task.taskIsDone || isTaskDisabled) {
       canEditTask = false;
     }
     final canDuplicateTask = canEditTask;
-    final hasDeleteAction = widget.onDelete != null && !widget.task.taskIsDone;
+    final hasDeleteAction =
+        widget.onDelete != null && !widget.task.taskIsDone && !isTaskDisabled;
     final hasSwipeActions = canEditTask || canDuplicateTask || hasDeleteAction;
     final actionCount =
         (canEditTask ? 1 : 0) +
@@ -332,7 +340,7 @@ class _TaskCardState extends State<TaskCard> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
       child: Opacity(
-        opacity: widget.isDimmed ? 0.56 : 1,
+        opacity: (widget.isDimmed || isTaskDisabled) ? 0.56 : 1,
         child: Slidable(
           key: ValueKey(widget.task.taskId),
           endActionPane: hasSwipeActions
@@ -681,6 +689,31 @@ class _TaskCardState extends State<TaskCard> {
                                       ),
                                     ],
                                   ),
+                                  if (isTaskDisabled &&
+                                      taskDisabledReason != null &&
+                                      taskDisabledReason.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Icon(
+                                          Icons.lock_outline,
+                                          size: 12,
+                                          color: Colors.red.shade700,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            taskDisabledReason,
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
+                                              color: Colors.red.shade700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
                                   const SizedBox(height: 3),
                                   // Compact badges row
                                   if (widget.task.taskDependencyIds.isNotEmpty)
@@ -744,7 +777,7 @@ class _TaskCardState extends State<TaskCard> {
                               // In Pomodoro: switching focus is allowed, manual pause is not.
                               if (widget.isPomodoroMode)
                                 IconButton(
-                                  onPressed: widget.onFocus,
+                                  onPressed: effectiveOnFocus,
                                   tooltip: 'Focus task',
                                   icon: const Icon(Icons.adjust, size: 28),
                                   padding: const EdgeInsets.all(6),
@@ -756,8 +789,8 @@ class _TaskCardState extends State<TaskCard> {
                               else if (!widget.isPomodoroMode)
                                 IconButton(
                                   onPressed: isFocused
-                                      ? widget.onPause
-                                      : widget.onFocus,
+                                      ? effectiveOnPause
+                                      : effectiveOnFocus,
                                   icon: Icon(
                                     isFocused ? Icons.pause : Icons.adjust,
                                     size: 28,
@@ -799,10 +832,10 @@ class _TaskCardState extends State<TaskCard> {
                             padding: const EdgeInsets.only(top: 8),
                             child: OutlinedButton.icon(
                               onPressed: widget.isPomodoroMode
-                                  ? widget.onFocus
+                                  ? effectiveOnFocus
                                   : (isFocused
-                                        ? widget.onPause
-                                        : widget.onFocus),
+                                        ? effectiveOnPause
+                                        : effectiveOnFocus),
                               icon: Icon(
                                 widget.isPomodoroMode
                                     ? Icons.adjust

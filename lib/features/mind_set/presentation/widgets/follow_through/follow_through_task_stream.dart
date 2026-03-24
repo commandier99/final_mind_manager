@@ -79,7 +79,7 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
   }
 
   Future<void> _focusTask(Task task) async {
-    if (task.taskIsDone) return;
+    if (task.taskIsDone || task.isWorkDisabled) return;
     if (_isInProgressStatus(task.taskStatus)) return;
     final isPomodoro = MindSetModePolicy.fromMode(widget.mode).isPomodoro;
 
@@ -382,7 +382,9 @@ class _FollowThroughTaskStreamState extends State<FollowThroughTaskStream> {
       }
     }
 
-    final candidates = tasks.where((task) => !task.taskIsDone).toList();
+    final candidates = tasks
+        .where((task) => !task.taskIsDone && !task.isWorkDisabled)
+        .toList();
     if (candidates.isEmpty) return null;
 
     candidates.sort((a, b) {

@@ -151,7 +151,9 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
   }
 
   Future<void> _focusTask(Task task) async {
-    if (!widget.isSessionActive || task.taskIsDone) return;
+    if (!widget.isSessionActive || task.taskIsDone || task.isWorkDisabled) {
+      return;
+    }
     if (_isInProgressStatus(task.taskStatus)) return;
     final isPomodoro = MindSetModePolicy.fromMode(widget.mode).isPomodoro;
 
@@ -920,7 +922,9 @@ class _OnTheSpotTaskStreamState extends State<OnTheSpotTaskStream> {
       }
     }
 
-    final candidates = tasks.where((task) => !task.taskIsDone).toList();
+    final candidates = tasks
+        .where((task) => !task.taskIsDone && !task.isWorkDisabled)
+        .toList();
     if (candidates.isEmpty) return null;
 
     candidates.sort((a, b) {

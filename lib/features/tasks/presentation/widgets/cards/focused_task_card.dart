@@ -33,7 +33,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
 
   Widget _buildThoughtSubmitToggle(Color priorityColor) {
     return InkWell(
-      onTap: widget.onSubmitThought,
+      onTap: widget.task.isWorkDisabled ? null : widget.onSubmitThought,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         width: 52,
@@ -64,7 +64,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
   }
 
   Widget _buildDoneToggle(Color priorityColor) {
-    final isEnabled = widget.onToggleDone != null;
+    final isEnabled = widget.onToggleDone != null && !widget.task.isWorkDisabled;
     return InkWell(
       onTap: isEnabled ? () => widget.onToggleDone?.call(!widget.task.taskIsDone) : null,
       borderRadius: BorderRadius.circular(12),
@@ -159,14 +159,19 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
 
   @override
   Widget build(BuildContext context) {
+    final isTaskDisabled = widget.task.isWorkDisabled;
+    final taskDisabledReason = widget.task.workDisabledReason;
+    final effectiveOnPause = isTaskDisabled ? null : widget.onPause;
+    final effectiveOnToggleDone = isTaskDisabled ? null : widget.onToggleDone;
+    final effectiveOnSubmitThought = isTaskDisabled ? null : widget.onSubmitThought;
     final priorityColor = _getPriorityColor();
-    final canPause = widget.onPause != null && !widget.isPomodoroMode;
+    final canPause = effectiveOnPause != null && !widget.isPomodoroMode;
     final showSubmitThoughtAction =
-        widget.onSubmitThought != null &&
+        effectiveOnSubmitThought != null &&
         !widget.task.taskIsDone;
     final showDoneToggle =
         !showSubmitThoughtAction &&
-        widget.onToggleDone != null &&
+        effectiveOnToggleDone != null &&
         !widget.task.taskIsDone;
     final scheme = Theme.of(context).colorScheme;
 
@@ -271,7 +276,7 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                           Padding(
                             padding: const EdgeInsets.only(left: 8),
                             child: IconButton(
-                              onPressed: widget.onPause,
+                              onPressed: effectiveOnPause,
                               tooltip: 'Pause task',
                               style: IconButton.styleFrom(
                                 backgroundColor: scheme.surfaceContainerHighest,
@@ -284,6 +289,44 @@ class _FocusedTaskCardState extends State<FocusedTaskCard> {
                           ),
                       ],
                     ),
+                    if (isTaskDisabled &&
+                        taskDisabledReason != null &&
+                        taskDisabledReason.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.red.shade200),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.lock_outline,
+                              size: 14,
+                              color: Colors.red.shade700,
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                taskDisabledReason,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.red.shade700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (widget.stepsContent != null) ...[
                       InkWell(
                         borderRadius: BorderRadius.circular(10),

@@ -54,6 +54,13 @@ class _ThoughtsPageState extends State<ThoughtsPage> {
     return index >= 0 ? index : 0;
   }
 
+  Future<void> _refreshThoughts() async {
+    final userId = context.read<UserProvider>().userId;
+    if (userId == null || userId.isEmpty) return;
+    context.read<ThoughtProvider>().streamThoughtsForUser(userId);
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -147,13 +154,16 @@ class _ThoughtsPageState extends State<ThoughtsPage> {
                   child: TabBarView(
                     children: _tabs.map((tab) {
                       final thoughts = thoughtProvider.thoughtsByType(tab.type);
-                      return ThoughtListSection(
-                        thoughts: thoughts,
-                        emptyLabel: tab.emptyLabel,
-                        highlightedThoughtId:
-                            tab.type == selectedThoughtType
-                                ? selectedThoughtId
-                                : null,
+                      return RefreshIndicator(
+                        onRefresh: _refreshThoughts,
+                        child: ThoughtListSection(
+                          thoughts: thoughts,
+                          emptyLabel: tab.emptyLabel,
+                          highlightedThoughtId:
+                              tab.type == selectedThoughtType
+                                  ? selectedThoughtId
+                                  : null,
+                        ),
                       );
                     }).toList(),
                   ),
