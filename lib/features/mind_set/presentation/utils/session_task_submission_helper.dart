@@ -22,6 +22,7 @@ class SessionTaskSubmissionHelper {
   static final Uuid _uuid = const Uuid();
 
   static bool canMarkTaskDone(BuildContext context, Task task) {
+    if (task.isWorkDisabled) return false;
     final currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
     if (currentUserId.isEmpty) return false;
     if (task.taskOwnerId == currentUserId) return true;
@@ -33,6 +34,7 @@ class SessionTaskSubmissionHelper {
   }
 
   static bool shouldUseThoughtSubmit(BuildContext context, Task task) {
+    if (task.isWorkDisabled) return false;
     if (task.taskRequiresSubmission) return true;
     return task.taskAllowsSubmissions && !canMarkTaskDone(context, task);
   }

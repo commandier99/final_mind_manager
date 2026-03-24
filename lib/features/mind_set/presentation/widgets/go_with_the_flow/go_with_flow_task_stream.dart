@@ -82,7 +82,12 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
 
   void _pickRandomFlowTask(List<Task> tasks) {
     final eligible = tasks
-        .where((t) => !t.taskIsDone && !_isInProgressStatus(t.taskStatus))
+        .where(
+          (t) =>
+              !t.taskIsDone &&
+              !t.isWorkDisabled &&
+              !_isInProgressStatus(t.taskStatus),
+        )
         .toList();
 
     if (eligible.isEmpty) {
@@ -105,7 +110,7 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
   }
 
   Future<void> _focusTask(Task task) async {
-    if (task.taskIsDone) return;
+    if (task.taskIsDone || task.isWorkDisabled) return;
 
     final taskProvider = context.read<TaskProvider>();
     final dependencyBlocker = await taskProvider.getFirstIncompleteDependency(
@@ -454,7 +459,9 @@ class _GoWithFlowTaskStreamState extends State<GoWithFlowTaskStream> {
       }
     }
 
-    final candidates = tasks.where((task) => !task.taskIsDone).toList();
+    final candidates = tasks
+        .where((task) => !task.taskIsDone && !task.isWorkDisabled)
+        .toList();
     if (candidates.isEmpty) return null;
 
     candidates.sort((a, b) {

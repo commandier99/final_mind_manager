@@ -327,10 +327,13 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
     final blockedDependencyTitles = _incompleteDependencyTitles(taskProvider);
     final isDependencyLocked = blockedDependencyTitles.isNotEmpty;
     final isDeadlineMissed = _isDeadlineMissed();
-    final isLocked = widget.isDisabled;
+    final isTaskFailed = widget.task.taskFailed || widget.task.isRejected;
+    final isLocked =
+        widget.isDisabled || (widget.task.isWorkDisabled && !isDeadlineMissed);
+    final taskDisabledReason = widget.task.workDisabledReason;
     final isSupervisorDraft = _isSupervisorDraft();
-    final canApplyForTask = _canApplyForTask();
-    final canSendReminder = _canSendReminder(taskProvider);
+    final canApplyForTask = _canApplyForTask() && !isDeadlineMissed && !isTaskFailed;
+    final canSendReminder = _canSendReminder(taskProvider) && !isDeadlineMissed && !isTaskFailed;
     final canRequestDeadlineExtension = _canRequestDeadlineExtension();
     // Only allow delete for board manager or task owner
     final canDelete =
@@ -692,12 +695,10 @@ class _BoardTaskCardState extends State<BoardTaskCard> {
                               children: [
                                 if (widget.showCheckbox) ...[
                                   Tooltip(
-                                    message: isDeadlineMissed
-                                        ? 'This task is missed. Request a deadline extension to continue.'
-                                        : '',
+                                    message: taskDisabledReason ?? '',
                                     child: Checkbox(
                                       value: widget.task.taskIsDone,
-                                      onChanged: isLocked || isDeadlineMissed
+                                      onChanged: isLocked || widget.task.isWorkDisabled
                                           ? null
                                           : (value) =>
                                                 widget.onToggleDone?.call(value),

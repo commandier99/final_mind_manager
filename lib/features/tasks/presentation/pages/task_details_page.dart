@@ -131,6 +131,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
         ? (board?.isManager(currentUserId) == true ||
               board?.isSupervisor(currentUserId) == true)
         : currentUserId == widget.task.taskOwnerId;
+    final canEditEnabledTaskDetails = canEditTaskDetails && !widget.task.isWorkDisabled;
 
     return Scaffold(
       appBar: AppTopBar(
@@ -167,7 +168,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
             PopupMenuButton(
               icon: const Icon(Icons.more_vert),
               itemBuilder: (menuContext) => [
-                if (canEditTaskDetails)
+                if (canEditEnabledTaskDetails)
                   PopupMenuItem(
                     child: const Text('Edit'),
                     onTap: () {
@@ -182,7 +183,7 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                       });
                     },
                   ),
-                if (canEditTaskDetails)
+                if (canEditEnabledTaskDetails)
                   PopupMenuItem(
                     child: const Text('Duplicate'),
                     onTap: () {
@@ -228,7 +229,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
             }
 
             final canManageTask = _canManageTask(currentTask);
-            final showWorkTabs = canManageTask || !_isTaskUnassigned(currentTask);
+            final isTaskDisabled = currentTask.isWorkDisabled;
+            final disabledReason = currentTask.workDisabledReason;
+            final showWorkTabs =
+                !isTaskDisabled && (canManageTask || !_isTaskUnassigned(currentTask));
 
             return Column(
               children: [
@@ -365,7 +369,10 @@ class _TaskDetailsPageState extends State<TaskDetailsPage> {
                         border: Border.all(color: Colors.grey.shade300),
                       ),
                       child: Text(
-                        'Task details tabs will appear once the task is assigned.',
+                        isTaskDisabled
+                            ? (disabledReason ??
+                                'This task is currently disabled and cannot be worked on.')
+                            : 'Task details tabs will appear once the task is assigned.',
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade700,

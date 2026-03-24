@@ -469,6 +469,9 @@ class TaskProvider extends ChangeNotifier {
       debugPrint(
         '[DEBUG] TaskProvider: toggleTaskDone called for taskId = ${task.taskId}, new isDone = ${task.taskIsDone}',
       );
+      if (task.isWorkDisabled) {
+        throw StateError(task.workDisabledReason ?? 'This task is disabled.');
+      }
 
       // Since the task object passed in already has the NEW isDone value,
       // we determine what the old value was by inverting the current value

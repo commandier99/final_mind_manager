@@ -224,6 +224,30 @@ class Task {
     return DateTime.now().isBefore(taskDeadline!);
   }
 
+  bool get hasMissedDeadline {
+    if (taskIsDone || taskDeadline == null) return false;
+    return taskDeadlineMissed || DateTime.now().isAfter(taskDeadline!);
+  }
+
+  bool get isRejected => normalizeTaskApprovalStatus(taskApprovalStatus) == 'rejected';
+
+  bool get isWorkDisabled {
+    return hasMissedDeadline ||
+        taskFailed ||
+        effectiveTaskOutcome == outcomeFailed ||
+        isRejected;
+  }
+
+  String? get workDisabledReason {
+    if (taskFailed || effectiveTaskOutcome == outcomeFailed || isRejected) {
+      return 'Task failed after submission rejection.';
+    }
+    if (hasMissedDeadline) {
+      return 'Deadline missed. Request a deadline extension to continue.';
+    }
+    return null;
+  }
+
   // Factory to create Task from Firestore document
   factory Task.fromMap(Map<String, dynamic> data, String documentId) {
     final taskBoardId = data['taskBoardId'] as String? ?? '';
